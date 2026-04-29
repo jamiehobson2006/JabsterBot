@@ -1,158 +1,165 @@
+const { Client, GatewayIntentBits, Collection, Partials } = require('discord.js');
+const fs = require('fs');
 require('dotenv').config();
 
-const {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ChannelType,
-  Client,
-  EmbedBuilder,
-  GatewayIntentBits,
-  PermissionsBitField,
-} = require('discord.js');
-
-const Database = require('better-sqlite3');
-const db = new Database('./database.db');
-
-// ✅ Performance + stability
-db.pragma('journal_mode = WAL');
+const { all, run } = require('./database');
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
   ],
+  partials: [
+    Partials.Message,
+    Partials.Channel,
+    Partials.User
+  ]
 });
 
-// ✅ FIXED DATABASE FUNCTIONS (SYNC)
-function run(sql, params = []) {
-  return db.prepare(sql).run(params);
-}
+// ========================
+// 📦 COMMANDS
+// ========================
+client.commands = new Collection();
 
-function get(sql, params = []) {
-  return db.prepare(sql).get(params);
-}
+function loadCommands() {
+  const commandsPath = './commands';
 
-function all(sql, params = []) {
-  return db.prepare(sql).all(params);
-}
+  if (!fs.existsSync(commandsPath)) return;
 
-const legacyGuildId = process.env.GUILD_ID || 'legacy';
+  const folders = fs.readdirSync(commandsPath);
 
-async function initDatabase() {
-  run(`CREATE TABLE IF NOT EXISTS warns (
-    guildId TEXT NOT NULL,
-    userId TEXT NOT NULL,
-    count INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (guildId, userId)
-  )`);
+  for (const folder of folders) {
+    const folderPath = `${commandsPath}/${folder}`;
+    const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.js'));
 
-  run(`CREATE TABLE IF NOT EXISTS mutes (
-    guildId TEXT NOT NULL,
-    userId TEXT NOT NULL,
-    endTime INTEGER NOT NULL,
-    PRIMARY KEY (guildId, userId)
-  )`);
+    for (const file of files) {
+      try {
+        delete require.cache[require.resolve(`../${folderPath}/${file}`)];
 
-  run(`CREATE TABLE IF NOT EXISTS cases (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    guildId TEXT NOT NULL,
-    userId TEXT NOT NULL,
-    moderatorId TEXT NOT NULL,
-    action TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    timestamp INTEGER NOT NULL
-  )`);
-}
+        const command = require(`../${folderPath}/${file}`);
 
-// ---------------- BASIC COMMANDS (TEST CORE WORKING FIRST) ----------------
+        if (!command.data || !command.execute) {
+          console.log(`⚠️ Skipped ${file}`);
+          continue;
+        }
 
-client.once('ready', () => {
-  console.log(`Logged in as ${client.user.tag}`);
-});
+        client.commands.set(command.data.name, command);
 
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-
-  try {
-    if (interaction.commandName === 'ping') {
-      await interaction.reply(`Pong! ${client.ws.ping}ms`);
-    }
-
-    if (interaction.commandName === 'game') {
-      await interaction.reply({
-        content: 'Play Endless Summer Simulator:\nhttps://www.roblox.com/games/130906696817438/Endless-Summer-Simulator',
-      });
-    }
-
-    if (interaction.commandName === 'warn') {
-      if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ModerateMembers)) {
-        return interaction.reply({ content: 'No permission.', ephemeral: true });
+      } catch (err) {
+        console.error(`❌ Failed loading ${file}:`, err);
       }
-
-      const user = interaction.options.getUser('user');
-      const reason = interaction.options.getString('reason') || 'No reason provided';
-
-      run(
-        `INSERT INTO warns (guildId, userId, count)
-         VALUES (?, ?, 1)
-         ON CONFLICT(guildId, userId)
-         DO UPDATE SET count = count + 1`,
-        [interaction.guild.id, user.id]
-      );
-
-      const result = run(
-        `INSERT INTO cases (guildId, userId, moderatorId, action, reason, timestamp)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [interaction.guild.id, user.id, interaction.user.id, 'WARN', reason, Date.now()]
-      );
-
-      await interaction.reply(`Warned ${user.tag} | Case #${result.lastInsertRowid}`);
-    }
-
-    if (interaction.commandName === 'modlogs') {
-      const rows = all(
-        `SELECT * FROM cases WHERE guildId = ? ORDER BY id DESC LIMIT 10`,
-        [interaction.guild.id]
-      );
-
-      if (!rows.length) {
-        return interaction.reply({ content: 'No logs found.', ephemeral: true });
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle('Mod Logs')
-        .setColor('Blurple');
-
-      for (const row of rows) {
-        embed.addFields({
-          name: `Case #${row.id} | ${row.action}`,
-          value: `User: <@${row.userId}>\nModerator: <@${row.moderatorId}>\nReason: ${row.reason}`,
-        });
-      }
-
-      await interaction.reply({ embeds: [embed], ephemeral: true });
-    }
-
-  } catch (err) {
-    console.error(err);
-    if (interaction.replied) {
-      await interaction.followUp({ content: 'Error occurred.', ephemeral: true });
-    } else {
-      await interaction.reply({ content: 'Error occurred.', ephemeral: true });
     }
   }
-});
 
-// ---------------- START ----------------
-
-async function main() {
-  if (!process.env.TOKEN) {
-    throw new Error('Missing TOKEN');
-  }
-
-  initDatabase();
-  await client.login(process.env.TOKEN);
+  console.log(`✅ Loaded ${client.commands.size} commands`);
 }
 
-main();
+// ========================
+// 📂 EVENTS
+// ========================
+function loadEvents() {
+  const eventsPath = './events';
+
+  if (!fs.existsSync(eventsPath)) return;
+
+  const files = fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'));
+
+  for (const file of files) {
+    try {
+      delete require.cache[require.resolve(`../${eventsPath}/${file}`)];
+
+      const event = require(`../${eventsPath}/${file}`);
+
+      if (!event.name || !event.execute) continue;
+
+      if (event.once) {
+        client.once(event.name, (...args) => event.execute(...args, client));
+      } else {
+        client.on(event.name, (...args) => event.execute(...args, client));
+      }
+
+    } catch (err) {
+      console.error(`❌ Failed loading event ${file}:`, err);
+    }
+  }
+
+  console.log(`✅ Loaded ${files.length} events`);
+}
+
+// ========================
+// 🔊 AUTO UNMUTE SYSTEM
+// ========================
+function startMuteLoop() {
+  setInterval(async () => {
+    try {
+      const now = Date.now();
+
+      const expired = all(
+        `SELECT * FROM mutes WHERE endTime <= ? LIMIT 50`,
+        [now]
+      );
+
+      if (!expired.length) return;
+
+      for (const mute of expired) {
+        const guild = client.guilds.cache.get(mute.guildId);
+        if (!guild) continue;
+
+        const member = await guild.members.fetch(mute.userId).catch(() => null);
+        const role = guild.roles.cache.find(r => r.name === 'Muted');
+
+        if (member && role && member.roles.cache.has(role.id)) {
+          await member.roles.remove(role).catch(() => {});
+        }
+
+        run(
+          `DELETE FROM mutes WHERE guildId=? AND userId=?`,
+          [mute.guildId, mute.userId]
+        );
+      }
+
+      console.log(`🔊 Processed ${expired.length} expired mutes`);
+
+    } catch (err) {
+      console.error('❌ Auto-unmute error:', err);
+    }
+  }, 15000);
+}
+
+// ========================
+// 🚀 READY
+// ========================
+client.once('clientReady', async () => {
+  console.log(`🚀 Logged in as ${client.user.tag}`);
+
+  // ⏳ your preferred delay
+  await new Promise(res => setTimeout(res, 3000));
+
+  console.log('✅ Systems initialized');
+
+  startMuteLoop();
+});
+
+// ========================
+// ❌ GLOBAL ERROR HANDLING
+// ========================
+process.on('unhandledRejection', err => {
+  console.error('❌ Unhandled Promise Rejection:', err);
+});
+
+process.on('uncaughtException', err => {
+  console.error('❌ Uncaught Exception:', err);
+});
+
+// ========================
+// 🔧 INIT
+// ========================
+loadCommands();
+loadEvents();
+
+// ========================
+// 🔑 LOGIN
+// ========================
+client.login(process.env.TOKEN);
