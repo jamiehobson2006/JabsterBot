@@ -21,10 +21,7 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
+      // ❌ NO DEFER HERE (handled globally)
 
       // 🔐 Permission check
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageGuild)) {
@@ -35,24 +32,34 @@ module.exports = {
 
       const channel = interaction.options.getChannel('channel', true);
 
-      // 🚫 Ensure same guild
+      // 🚫 Safety checks
+      if (!channel || channel.type !== ChannelType.GuildText) {
+        return interaction.editReply({
+          content: '❌ Please select a valid text channel.'
+        });
+      }
+
       if (channel.guildId !== interaction.guild.id) {
         return interaction.editReply({
           content: '❌ That channel is not in this server.'
         });
       }
 
-      // 🛡 Bot permissions
+      // 🛡 Bot permission check
       const perms = channel.permissionsFor(interaction.guild.members.me);
 
-      if (!perms?.has([
+      const requiredPerms = [
         PermissionsBitField.Flags.ViewChannel,
         PermissionsBitField.Flags.SendMessages,
         PermissionsBitField.Flags.EmbedLinks,
         PermissionsBitField.Flags.ReadMessageHistory
-      ])) {
+      ];
+
+      if (!perms || !perms.has(requiredPerms)) {
         return interaction.editReply({
-          content: '❌ I need **View Channel, Send Messages, Embed Links, and Read Message History** permissions in that channel.'
+          content:
+            '❌ Missing permissions in that channel:\n' +
+            '• View Channel\n• Send Messages\n• Embed Links\n• Read Message History'
         });
       }
 
@@ -65,19 +72,34 @@ module.exports = {
         [interaction.guild.id, channel.id]
       );
 
-      // 🎨 Response embed
+      // 🧪 Send test log
+      try {
+        await channel.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x5865F2)
+              .setTitle('📜 Mod Logs Enabled')
+              .setDescription('This channel is now set for moderation logs.')
+              .setFooter({ text: `Configured by ${interaction.user.tag}` })
+              .setTimestamp()
+          ]
+        });
+      } catch {}
+
+      // 🎨 Response
       const embed = new EmbedBuilder()
-        .setTitle('📜 Mod Logs Configured')
         .setColor(0x57F287)
-        .setDescription(`Mod logs will now be sent to ${channel}`)
+        .setTitle('Mod Logs Updated')
+        .setDescription(`Logs will now be sent to ${channel}`)
         .addFields({
           name: 'Channel ID',
-          value: `\`${channel.id}\``
+          value: `\`${channel.id}\``,
+          inline: true
         })
         .setFooter({ text: `Configured by ${interaction.user.tag}` })
         .setTimestamp();
 
-      await interaction.editReply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
 
     } catch (err) {
       console.error('SetModLogs Error:', err);

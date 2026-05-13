@@ -57,7 +57,7 @@ function transaction(fn) {
 }
 
 // ========================
-// 🧠 META (VERSIONING)
+// 🧠 META
 // ========================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS meta (
@@ -66,10 +66,10 @@ CREATE TABLE IF NOT EXISTS meta (
 )
 `).run();
 
-run(`INSERT OR IGNORE INTO meta (key, value) VALUES ('version', '1')`);
+run(`INSERT OR IGNORE INTO meta (key, value) VALUES ('version', '2')`);
 
 // ========================
-// 📄 CASES (UPGRADED)
+// 📄 CASES
 // ========================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS cases (
@@ -77,10 +77,7 @@ CREATE TABLE IF NOT EXISTS cases (
   guildId TEXT NOT NULL,
   userId TEXT NOT NULL,
   moderatorId TEXT NOT NULL,
-  action TEXT NOT NULL CHECK(action IN (
-    'BAN','KICK','MUTE','UNMUTE','WARN','CLEARWARNS',
-    'LOCK','UNLOCK','ROLE_ADD','ROLE_REMOVE'
-  )),
+  action TEXT NOT NULL,
   reason TEXT,
   duration INTEGER,
   createdAt INTEGER
@@ -90,7 +87,7 @@ CREATE TABLE IF NOT EXISTS cases (
 db.prepare(`CREATE INDEX IF NOT EXISTS idx_cases_lookup ON cases(guildId, userId)`).run();
 
 // ========================
-// ⚠️ WARNS (REAL SYSTEM)
+// ⚠️ WARNS (FIXED SYSTEM)
 // ========================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS warns (
@@ -129,15 +126,18 @@ CREATE TABLE IF NOT EXISTS tickets (
   userId TEXT NOT NULL,
   channelId TEXT UNIQUE,
   type TEXT,
-  status TEXT CHECK(status IN ('OPEN','CLOSED','DELETED')) DEFAULT 'OPEN',
+  status TEXT DEFAULT 'OPEN',
   claimedBy TEXT,
+  reason TEXT,
   createdAt INTEGER,
   closedAt INTEGER,
-  deletedAt INTEGER
+  deletedAt INTEGER,
+  lastActivity INTEGER
 )
 `).run();
 
 db.prepare(`CREATE INDEX IF NOT EXISTS idx_tickets_lookup ON tickets(guildId, userId, status)`).run();
+db.prepare(`CREATE INDEX IF NOT EXISTS idx_tickets_channel ON tickets(channelId)`).run();
 
 // ========================
 // ⚙️ GUILD SETTINGS
@@ -165,7 +165,7 @@ CREATE TABLE IF NOT EXISTS suggestions (
   messageId TEXT UNIQUE,
   userId TEXT,
   content TEXT,
-  status TEXT CHECK(status IN ('PENDING','ACCEPTED','DENIED')) DEFAULT 'PENDING',
+  status TEXT DEFAULT 'PENDING',
   moderatorId TEXT,
   reason TEXT,
   timestamp INTEGER
@@ -230,7 +230,7 @@ CREATE TABLE IF NOT EXISTS badges (
 `).run();
 
 // ========================
-// 📜 AUDIT LOGS (NEW 🔥)
+// 📜 AUDIT LOGS
 // ========================
 db.prepare(`
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -259,7 +259,7 @@ setInterval(() => {
       now - 7 * 86400000
     ]);
 
-    // 🔇 Expired mutes cleanup (optional)
+    // 🔇 Expired mutes
     run(`DELETE FROM mutes WHERE endTime < ?`, [now]);
 
   } catch (err) {

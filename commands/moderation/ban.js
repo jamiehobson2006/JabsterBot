@@ -23,18 +23,13 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
+      const user = interaction.options.getUser('user', true);
+      const reason = interaction.options.getString('reason') || 'No reason provided';
 
       // 🔐 Permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.BanMembers)) {
         return interaction.editReply({ content: '❌ You lack permission to ban members.' });
       }
-
-      const user = interaction.options.getUser('user', true);
-      const reason = interaction.options.getString('reason') || 'No reason provided';
 
       // ❌ Basic checks
       if (user.id === interaction.user.id) {
@@ -49,9 +44,9 @@ module.exports = {
         return interaction.editReply({ content: '❌ You cannot ban the server owner.' });
       }
 
-      // ❌ Already banned check
-      const bans = await interaction.guild.bans.fetch();
-      if (bans.has(user.id)) {
+      // ⚡ FAST ban check (no full fetch)
+      const existingBan = await interaction.guild.bans.fetch(user.id).catch(() => null);
+      if (existingBan) {
         return interaction.editReply({ content: '❌ This user is already banned.' });
       }
 
@@ -89,18 +84,22 @@ module.exports = {
           new EmbedBuilder()
             .setColor(0xED4245)
             .setTitle('Confirm Ban')
-            .setDescription(`Are you sure you want to ban **${user.tag}**?`)
+            .setDescription(`Are you sure you want to ban **${user.tag}**?\n\n📄 Reason: ${reason}`)
         ],
         components: [row]
       });
 
-      // 🔒 Filtered collector (better)
+      let handled = false; // 🔒 anti-double click
+
       const collector = msg.createMessageComponentCollector({
         time: 15000,
         filter: i => i.user.id === interaction.user.id
       });
 
       collector.on('collect', async (i) => {
+        if (handled) return;
+        handled = true;
+
         await i.update({ components: [] });
 
         if (i.customId === `cancel_ban_${interaction.id}`) {
@@ -117,7 +116,7 @@ module.exports = {
               });
             }
 
-            // 📩 DM
+            // 📩 DM (fail silently)
             try {
               await user.send({
                 embeds: [
@@ -147,7 +146,11 @@ module.exports = {
               .setColor(0xED4245)
               .setTitle('User Banned')
               .setDescription(`🔨 **${user.tag}** has been banned`)
-              .addFields({ name: 'Case', value: `#${caseId}`, inline: true });
+              .addFields(
+                { name: 'Reason', value: reason },
+                { name: 'Case', value: `#${caseId}`, inline: true }
+              )
+              .setTimestamp();
 
             await interaction.editReply({ embeds: [embed] });
 
@@ -170,7 +173,7 @@ module.exports = {
       });
 
       collector.on('end', async (collected) => {
-        if (!collected.size) {
+        if (!collected.size && !handled) {
           try {
             await interaction.editReply({
               content: '⌛ Ban timed out.',
@@ -190,7 +193,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ Error executing ban command.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

@@ -1,5 +1,6 @@
 const { Client, GatewayIntentBits, Collection, Partials } = require('discord.js');
 const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const { all, run } = require('./database');
@@ -24,21 +25,23 @@ const client = new Client({
 client.commands = new Collection();
 
 function loadCommands() {
-  const commandsPath = './commands';
+  const commandsPath = path.join(__dirname, 'commands');
 
   if (!fs.existsSync(commandsPath)) return;
 
   const folders = fs.readdirSync(commandsPath);
 
   for (const folder of folders) {
-    const folderPath = `${commandsPath}/${folder}`;
+    const folderPath = path.join(commandsPath, folder);
     const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.js'));
 
     for (const file of files) {
       try {
-        delete require.cache[require.resolve(`../${folderPath}/${file}`)];
+        const filePath = path.join(folderPath, file);
 
-        const command = require(`../${folderPath}/${file}`);
+        delete require.cache[require.resolve(filePath)];
+
+        const command = require(filePath);
 
         if (!command.data || !command.execute) {
           console.log(`⚠️ Skipped ${file}`);
@@ -60,7 +63,7 @@ function loadCommands() {
 // 📂 EVENTS
 // ========================
 function loadEvents() {
-  const eventsPath = './events';
+  const eventsPath = path.join(__dirname, 'events');
 
   if (!fs.existsSync(eventsPath)) return;
 
@@ -68,9 +71,11 @@ function loadEvents() {
 
   for (const file of files) {
     try {
-      delete require.cache[require.resolve(`../${eventsPath}/${file}`)];
+      const filePath = path.join(eventsPath, file);
 
-      const event = require(`../${eventsPath}/${file}`);
+      delete require.cache[require.resolve(filePath)];
+
+      const event = require(filePath);
 
       if (!event.name || !event.execute) continue;
 
@@ -134,7 +139,6 @@ function startMuteLoop() {
 client.once('clientReady', async () => {
   console.log(`🚀 Logged in as ${client.user.tag}`);
 
-  // ⏳ your preferred delay
   await new Promise(res => setTimeout(res, 3000));
 
   console.log('✅ Systems initialized');

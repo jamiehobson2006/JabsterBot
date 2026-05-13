@@ -1,7 +1,8 @@
 const {
   PermissionsBitField,
   EmbedBuilder,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  ChannelType
 } = require('discord.js');
 
 const { sendLog, createLogEmbed } = require('../../utils/logger');
@@ -13,12 +14,8 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply();
-      }
 
-      // 🔐 Permission
+      // 🔐 User permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageChannels)) {
         return interaction.editReply({
           content: '❌ You need **Manage Channels** permission.'
@@ -26,11 +23,19 @@ module.exports = {
       }
 
       const channel = interaction.channel;
+      const botMember = interaction.guild.members.me;
 
-      // 🚫 Safety
-      if (!channel || !channel.isTextBased()) {
+      // ❌ Bot permission
+      if (!botMember.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
         return interaction.editReply({
-          content: '❌ This command can only be used in text channels.'
+          content: '❌ I do not have permission to manage channels.'
+        });
+      }
+
+      // 🚫 Only allow normal text channels
+      if (!channel || channel.type !== ChannelType.GuildText) {
+        return interaction.editReply({
+          content: '❌ This command can only be used in standard text channels.'
         });
       }
 
@@ -38,16 +43,20 @@ module.exports = {
 
       const overwrite = channel.permissionOverwrites.cache.get(everyone.id);
 
-      // 🧠 Check state
-      if (!overwrite || overwrite.allow.has(PermissionsBitField.Flags.SendMessages)) {
+      // 🧠 Check if actually locked
+      const isLocked = overwrite?.deny?.has(PermissionsBitField.Flags.SendMessages);
+
+      if (!isLocked) {
         return interaction.editReply({
-          content: '❌ This channel is already unlocked.'
+          content: '⚠️ This channel is already unlocked.'
         });
       }
 
       // 🔓 Remove deny
       await channel.permissionOverwrites.edit(everyone, {
         SendMessages: null
+      }).catch(() => {
+        throw new Error('Failed to unlock channel');
       });
 
       // 🎨 Embed
@@ -60,7 +69,7 @@ module.exports = {
 
       const reply = await interaction.editReply({ embeds: [embed] });
 
-      // 🧹 Auto delete after 5 seconds
+      // 🧹 Auto delete after 5s
       setTimeout(() => {
         reply.delete().catch(() => {});
       }, 5000);
@@ -80,7 +89,7 @@ module.exports = {
 
       if (interaction.deferred || interaction.replied) {
         return interaction.editReply({
-          content: '❌ Failed to unlock channel.'
+          content: '❌ Failed to unlock channel. Check my permissions.'
         });
       } else {
         return interaction.reply({

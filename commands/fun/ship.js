@@ -5,11 +5,10 @@ const {
 
 // 💘 Deterministic + ORDER-INDEPENDENT
 function getCompatibility(id1, id2) {
-  const [a, b] = [id1, id2].sort(); // 🔥 ensures same result both ways
+  const [a, b] = [id1, id2].sort();
   const combined = a + b;
 
   let hash = 0;
-
   for (let i = 0; i < combined.length; i++) {
     hash = combined.charCodeAt(i) + ((hash << 5) - hash);
   }
@@ -17,7 +16,7 @@ function getCompatibility(id1, id2) {
   return Math.abs(hash % 101);
 }
 
-// 🎯 Reaction tiers
+// 🎯 Tier system
 function getTier(percent) {
   if (percent >= 90) return { text: '💞 Soulmates!', color: 0xED4245 };
   if (percent >= 75) return { text: '💖 Perfect Match!', color: 0xFF73FA };
@@ -27,30 +26,28 @@ function getTier(percent) {
   return { text: '🚫 Disaster.', color: 0x2C2F33 };
 }
 
+// 📊 Progress bar (🔥 BIG upgrade)
+function createBar(percent) {
+  const total = 10;
+  const filled = Math.round((percent / 100) * total);
+  const empty = total - filled;
+
+  return '🟥'.repeat(filled) + '⬛'.repeat(empty);
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ship')
     .setDescription('Check compatibility between two users')
     .addUserOption(option =>
-      option
-        .setName('user1')
-        .setDescription('First user')
-        .setRequired(true)
+      option.setName('user1').setDescription('First user').setRequired(true)
     )
     .addUserOption(option =>
-      option
-        .setName('user2')
-        .setDescription('Second user')
-        .setRequired(true)
+      option.setName('user2').setDescription('Second user').setRequired(true)
     ),
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply();
-      }
-
       const user1 = interaction.options.getUser('user1', true);
       const user2 = interaction.options.getUser('user2', true);
 
@@ -71,6 +68,11 @@ module.exports = {
       // 💘 Compatibility
       const percent = getCompatibility(user1.id, user2.id);
       const tier = getTier(percent);
+      const bar = createBar(percent);
+
+      // ⚡ Small suspense effect (feels premium)
+      await interaction.editReply({ content: '💘 Calculating compatibility...' });
+      await new Promise(res => setTimeout(res, 900));
 
       const embed = new EmbedBuilder()
         .setColor(tier.color)
@@ -78,12 +80,17 @@ module.exports = {
         .setDescription(
           `${user1} ❤️ ${user2}\n\n` +
           `💖 **Compatibility:** \`${percent}%\`\n` +
+          `${bar}\n\n` +
           `💬 **Status:** ${tier.text}`
         )
+        .setThumbnail(user1.displayAvatarURL({ dynamic: true }))
         .setFooter({ text: 'Love is unpredictable... or is it?' })
         .setTimestamp();
 
-      return interaction.editReply({ embeds: [embed] });
+      return interaction.editReply({
+        content: null,
+        embeds: [embed]
+      });
 
     } catch (err) {
       console.error('Ship Command Error:', err);
@@ -95,7 +102,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ Shipping failed.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

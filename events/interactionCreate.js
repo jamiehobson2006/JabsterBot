@@ -16,7 +16,6 @@ module.exports = {
     // ========================
     if (interaction.isButton()) {
       try {
-
         const { customId } = interaction;
 
         // ========================
@@ -85,25 +84,23 @@ module.exports = {
         }
 
         // ========================
-        // 🎟 TICKET BUTTONS (FIXES YOUR BUG)
+        // 🎟 TICKET BUTTONS (IGNORE HERE)
         // ========================
+        // ⚠️ Your ticket system is handled in another file
         if (customId.startsWith('ticket_')) {
-
-          await interaction.reply({
-            content: `🎟 Ticket type: **${customId.replace('ticket_', '')}**\n(You haven't implemented creation yet)`,
-            ephemeral: true
-          });
-
-          // 👉 THIS is where your ticket system should go
-          // create channel, set perms, send embed, etc.
-
-          return;
+          return; // let your ticket handler handle it
         }
+
+        // ========================
+        // 📜 OTHER BUTTONS (MODLOG ETC)
+        // ========================
+        // ⚠️ DO NOT block them
+        return;
 
       } catch (err) {
         console.error('BUTTON ERROR:', err);
 
-        if (!interaction.replied) {
+        if (!interaction.replied && !interaction.deferred) {
           return interaction.reply({
             content: '❌ Error handling button.',
             ephemeral: true
@@ -121,7 +118,9 @@ module.exports = {
     if (!command) return;
 
     try {
-      // ⏱ Cooldown
+      // ========================
+      // ⏱ COOLDOWN
+      // ========================
       const cooldown = checkCooldown(
         interaction.guild.id,
         interaction.user.id,
@@ -130,17 +129,36 @@ module.exports = {
       );
 
       if (cooldown > 0) {
-        return interaction.reply({
-          content: `⏳ Slow down! Try again in **${Math.ceil(cooldown / 1000)}s**.`,
-          ephemeral: true
+        if (interaction.deferred || interaction.replied) {
+          return interaction.editReply({
+            content: `⏳ Slow down! Try again in **${Math.ceil(cooldown / 1000)}s**.`
+          });
+        } else {
+          return interaction.reply({
+            content: `⏳ Slow down! Try again in **${Math.ceil(cooldown / 1000)}s**.`,
+            ephemeral: true
+          });
+        }
+      }
+
+      // ========================
+      // 🎯 SMART DEFER
+      // ========================
+      const ephemeralCommands = [
+        'ban', 'kick', 'mute', 'warn', 'clearwarns',
+        'modlogremove', 'editcase', 'setmodlogs',
+        'suggestchannel', 'settranscriptchannel'
+      ];
+
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({
+          ephemeral: ephemeralCommands.includes(interaction.commandName)
         });
       }
 
-      // ✅ Safe defer
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply();
-      }
-
+      // ========================
+      // 🚀 EXECUTE
+      // ========================
       await command.execute(interaction, client);
 
     } catch (error) {

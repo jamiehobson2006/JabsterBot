@@ -38,12 +38,8 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
 
-      // 🔐 Permission
+      // 🔐 User permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageChannels)) {
         return interaction.editReply({
           content: '❌ You need **Manage Channels** permission.'
@@ -51,18 +47,35 @@ module.exports = {
       }
 
       const channel = interaction.channel;
+      const botMember = interaction.guild.members.me;
 
-      // 🚫 Safety check
-      if (!channel || !channel.isTextBased()) {
+      // ❌ Bot permission
+      if (!botMember.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
         return interaction.editReply({
-          content: '❌ This command can only be used in text channels.'
+          content: '❌ I do not have permission to manage channels.'
+        });
+      }
+
+      // 🚫 Only allow proper text channels
+      if (!channel || channel.type !== ChannelType.GuildText) {
+        return interaction.editReply({
+          content: '❌ This command can only be used in standard text channels.'
         });
       }
 
       const seconds = interaction.options.getInteger('seconds', true);
 
+      // ⚠️ No change check
+      if (channel.rateLimitPerUser === seconds) {
+        return interaction.editReply({
+          content: `⚠️ Slowmode is already set to **${formatTime(seconds)}**.`
+        });
+      }
+
       // 🔧 Apply slowmode
-      await channel.setRateLimitPerUser(seconds);
+      await channel.setRateLimitPerUser(seconds).catch(() => {
+        throw new Error('Failed to set slowmode');
+      });
 
       const formatted = formatTime(seconds);
 
@@ -85,7 +98,9 @@ module.exports = {
         action: 'SLOWMODE',
         user: { id: 'CHANNEL', tag: channel.name },
         moderator: interaction.user,
-        reason: `Set to ${formatted} (${seconds}s)`
+        reason: seconds === 0
+          ? 'Disabled slowmode'
+          : `Set to ${formatted} (${seconds}s)`
       });
 
       await sendLog(interaction.client, interaction.guild.id, log);
@@ -95,7 +110,7 @@ module.exports = {
 
       if (interaction.deferred || interaction.replied) {
         return interaction.editReply({
-          content: '❌ Failed to set slowmode.'
+          content: '❌ Failed to set slowmode. Check my permissions.'
         });
       } else {
         return interaction.reply({

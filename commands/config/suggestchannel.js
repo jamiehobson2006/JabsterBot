@@ -15,55 +15,60 @@ module.exports = {
       option
         .setName('channel')
         .setDescription('The channel where suggestions will be sent')
-        .addChannelTypes(ChannelType.GuildText)
+        .addChannelTypes(
+          ChannelType.GuildText,
+          ChannelType.GuildAnnouncement // ✅ upgrade (news channels too)
+        )
         .setRequired(true)
     ),
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
+      const channel = interaction.options.getChannel('channel', true);
+      const botMember = interaction.guild.members.me;
 
-      // 🔐 Permission check
+      // ========================
+      // 🔐 PERMISSION CHECK
+      // ========================
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageGuild)) {
         return interaction.editReply({
           content: '❌ You need **Manage Server** permission.'
         });
       }
 
-      const channel = interaction.options.getChannel('channel', true);
-      const botMember = interaction.guild.members.me;
-
       // ========================
       // 🛡 CHANNEL VALIDATION
       // ========================
-
-      if (channel.type !== ChannelType.GuildText) {
+      if (![ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(channel.type)) {
         return interaction.editReply({
-          content: '❌ You must select a **text channel**.'
+          content: '❌ Please select a valid **text channel**.'
         });
       }
 
-      // Check bot permissions (IMPORTANT for suggestions)
+      // ========================
+      // 🤖 BOT PERMISSIONS CHECK
+      // ========================
       const perms = channel.permissionsFor(botMember);
 
-      if (!perms.has([
+      const requiredPerms = [
         PermissionsBitField.Flags.ViewChannel,
         PermissionsBitField.Flags.SendMessages,
-        PermissionsBitField.Flags.EmbedLinks
-      ])) {
+        PermissionsBitField.Flags.EmbedLinks,
+        PermissionsBitField.Flags.AddReactions // 🔥 needed for voting
+      ];
+
+      const missing = requiredPerms.filter(p => !perms?.has(p));
+
+      if (missing.length) {
         return interaction.editReply({
-          content: '❌ I don’t have permission to send messages in that channel.'
+          content: `❌ Missing permissions in ${channel}:\n• ${missing.map(p => `\`${p}\``).join('\n• ')}`
         });
       }
 
       // ========================
-      // 💾 SAVE (AWAITED)
+      // 💾 SAVE
       // ========================
-
-      await run(
+      run(
         `INSERT INTO guild_settings (guildId, suggestionChannelId)
          VALUES (?, ?)
          ON CONFLICT(guildId)
@@ -74,12 +79,16 @@ module.exports = {
       // ========================
       // 🎨 RESPONSE
       // ========================
-
       const embed = new EmbedBuilder()
         .setColor(0x57F287)
-        .setTitle('Suggestion Channel Updated')
-        .setDescription(`Suggestions will now be sent in ${channel}.`)
-        .setFooter({ text: `Set by ${interaction.user.tag}` })
+        .setTitle('💡 Suggestion Channel Set')
+        .setDescription(`Suggestions will now be sent in ${channel}`)
+        .addFields({
+          name: 'Channel ID',
+          value: `\`${channel.id}\``,
+          inline: true
+        })
+        .setFooter({ text: `Configured by ${interaction.user.tag}` })
         .setTimestamp();
 
       return interaction.editReply({ embeds: [embed] });
@@ -94,7 +103,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ Failed to set suggestion channel.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

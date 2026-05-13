@@ -5,7 +5,15 @@ function escapeHtml(str = '') {
     .replace(/>/g, '&gt;');
 }
 
-// 🧠 Replace mentions with readable names
+// 🔗 Auto link URLs
+function linkify(text) {
+  return text.replace(
+    /(https?:\/\/[^\s]+)/g,
+    '<a href="$1" target="_blank">$1</a>'
+  );
+}
+
+// 🧠 Mentions → readable
 function formatMentions(content, msg) {
   let text = content;
 
@@ -25,7 +33,6 @@ module.exports = async function generateTranscript(channel) {
   let messages = [];
   let lastId;
 
-  // 🔁 Fetch all messages
   while (true) {
     const fetched = await channel.messages.fetch({
       limit: 100,
@@ -59,7 +66,7 @@ module.exports = async function generateTranscript(channel) {
 
       .message {
         display: flex;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
       }
 
       .avatar {
@@ -89,6 +96,14 @@ module.exports = async function generateTranscript(channel) {
         white-space: pre-wrap;
       }
 
+      .reply {
+        border-left: 2px solid #5865F2;
+        padding-left: 8px;
+        margin-bottom: 4px;
+        color: #b5bac1;
+        font-size: 13px;
+      }
+
       .embed {
         background: #1e1f22;
         border-left: 4px solid #5865F2;
@@ -113,6 +128,10 @@ module.exports = async function generateTranscript(channel) {
         background: #3f4147;
         margin: 10px 0;
       }
+
+      a {
+        color: #00a8fc;
+      }
     </style>
   </head>
   <body>
@@ -123,11 +142,12 @@ module.exports = async function generateTranscript(channel) {
   let lastAuthor = null;
 
   for (const msg of messages) {
-
     const avatar = msg.author.displayAvatarURL({ extension: 'png' });
     const time = new Date(msg.createdTimestamp).toLocaleString();
 
-    const content = formatMentions(msg.content || '', msg);
+    let content = formatMentions(msg.content || '', msg);
+    content = escapeHtml(content);
+    content = linkify(content);
 
     const showAvatar = lastAuthor !== msg.author.id;
     lastAuthor = msg.author.id;
@@ -136,39 +156,49 @@ module.exports = async function generateTranscript(channel) {
     <div class="message">
       ${showAvatar ? `<img class="avatar" src="${avatar}" />` : `<div style="width:50px"></div>`}
       <div class="content">
+
         ${showAvatar ? `<span class="author">${escapeHtml(msg.author.tag)}</span>` : ''}
         ${showAvatar ? `<span class="time">${time}</span>` : ''}
 
-        <div class="text">${escapeHtml(content)}</div>
+        ${
+          msg.reference
+            ? `<div class="reply">Replying to a message</div>`
+            : ''
+        }
+
+        <div class="text">${content || '<i>(no text)</i>'}</div>
     `;
 
-    // 📦 EMBEDS
-    if (msg.embeds.length) {
-      for (const e of msg.embeds) {
-        html += `
-          <div class="embed">
-            ${e.title ? `<div><strong>${escapeHtml(e.title)}</strong></div>` : ''}
-            ${e.description ? `<div>${escapeHtml(e.description)}</div>` : ''}
-          </div>
-        `;
-      }
+    // 📦 EMBEDS (improved)
+    for (const e of msg.embeds) {
+      html += `
+        <div class="embed">
+          ${e.title ? `<div><strong>${escapeHtml(e.title)}</strong></div>` : ''}
+          ${e.description ? `<div>${escapeHtml(e.description)}</div>` : ''}
+          ${
+            e.fields?.length
+              ? e.fields.map(f =>
+                  `<div><strong>${escapeHtml(f.name)}:</strong> ${escapeHtml(f.value)}</div>`
+                ).join('')
+              : ''
+          }
+        </div>
+      `;
     }
 
     // 📎 ATTACHMENTS
-    if (msg.attachments.size) {
-      for (const att of msg.attachments.values()) {
-        const isImage = att.contentType?.startsWith('image');
+    for (const att of msg.attachments.values()) {
+      const isImage = att.contentType?.startsWith('image');
 
-        html += `
-          <div class="attachment">
-            ${
-              isImage
-                ? `<img src="${att.url}" />`
-                : `<a href="${att.url}" target="_blank">${att.name}</a>`
-            }
-          </div>
-        `;
-      }
+      html += `
+        <div class="attachment">
+          ${
+            isImage
+              ? `<img src="${att.url}" />`
+              : `<a href="${att.url}" target="_blank">${att.name}</a>`
+          }
+        </div>
+      `;
     }
 
     html += `

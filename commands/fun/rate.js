@@ -13,6 +13,13 @@ function getReaction(score) {
   return '🚮 Terrible';
 }
 
+// 🎨 Color logic
+function getColor(score) {
+  if (score >= 75) return 0x57F287; // green
+  if (score >= 40) return 0xF1C40F; // yellow
+  return 0xED4245; // red
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('rate')
@@ -27,37 +34,34 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply();
-      }
-
       const thing = interaction.options.getString('thing', true);
 
-      const score = Math.floor(Math.random() * 101);
-      const reaction = getReaction(score);
+      // ⚡ Optional "thinking" effect (feels nicer)
+      await interaction.editReply({ content: '🤔 Calculating rating...' });
 
-      // 🎨 Color based on score
-      let color = 0x5865F2; // default
-      if (score >= 75) color = 0x57F287;
-      else if (score >= 40) color = 0xF1C40F;
-      else color = 0xED4245;
+      await new Promise(res => setTimeout(res, 800));
+
+      // 🎲 Slightly weighted randomness (feels less fake)
+      const score = Math.floor(
+        Math.random() * 60 + // base range
+        Math.random() * 40   // adds variation
+      );
+
+      const reaction = getReaction(score);
+      const color = getColor(score);
 
       const embed = new EmbedBuilder()
         .setColor(color)
         .setTitle('⭐ Rating Machine')
+        .setDescription(`**${thing}**`)
         .addFields(
           {
-            name: 'Item',
-            value: thing
-          },
-          {
-            name: 'Score',
+            name: '📊 Score',
             value: `\`${score}/100\``,
             inline: true
           },
           {
-            name: 'Verdict',
+            name: '🏆 Verdict',
             value: reaction,
             inline: true
           }
@@ -65,7 +69,10 @@ module.exports = {
         .setFooter({ text: 'Totally accurate rating system...' })
         .setTimestamp();
 
-      return interaction.editReply({ embeds: [embed] });
+      return interaction.editReply({
+        content: null,
+        embeds: [embed]
+      });
 
     } catch (err) {
       console.error('Rate Command Error:', err);
@@ -77,7 +84,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ Failed to rate.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

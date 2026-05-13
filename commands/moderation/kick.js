@@ -23,10 +23,6 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
 
       // 🔐 Permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.KickMembers)) {
@@ -39,46 +35,42 @@ module.exports = {
       const reason = interaction.options.getString('reason') || 'No reason provided';
 
       // 🚫 Basic checks
-      if (user.id === interaction.user.id) {
+      if (user.id === interaction.user.id)
         return interaction.editReply({ content: '❌ You cannot kick yourself.' });
-      }
 
-      if (user.id === interaction.client.user.id) {
+      if (user.id === interaction.client.user.id)
         return interaction.editReply({ content: '❌ You cannot kick the bot.' });
-      }
 
-      if (user.id === interaction.guild.ownerId) {
+      if (user.id === interaction.guild.ownerId)
         return interaction.editReply({ content: '❌ You cannot kick the server owner.' });
-      }
 
       let member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-      if (!member) {
+      if (!member)
         return interaction.editReply({ content: '❌ User is not in this server.' });
-      }
 
-      // 🔼 Role hierarchy
-      if (member.roles.highest.position >= interaction.member.roles.highest.position) {
+      if (member.roles.highest.position >= interaction.member.roles.highest.position)
         return interaction.editReply({
           content: '❌ You cannot kick this user (role hierarchy).'
         });
-      }
 
-      if (!member.kickable) {
+      if (!member.kickable)
         return interaction.editReply({
           content: '❌ I cannot kick this user.'
         });
-      }
 
-      // 🎯 Confirmation buttons
+      // 🎯 Buttons
+      const confirmId = `confirm_kick_${interaction.id}`;
+      const cancelId = `cancel_kick_${interaction.id}`;
+
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`confirm_kick_${interaction.id}`)
+          .setCustomId(confirmId)
           .setLabel('Confirm Kick')
           .setStyle(ButtonStyle.Danger),
 
         new ButtonBuilder()
-          .setCustomId(`cancel_kick_${interaction.id}`)
+          .setCustomId(cancelId)
           .setLabel('Cancel')
           .setStyle(ButtonStyle.Secondary)
       );
@@ -89,40 +81,44 @@ module.exports = {
             .setColor(0xED4245)
             .setTitle('Confirm Kick')
             .setDescription(`Are you sure you want to kick **${user.tag}**?`)
+            .addFields({ name: 'Reason', value: reason })
         ],
         components: [row]
       });
 
-      // 🔒 Filtered collector
+      // 🔒 Collector (tight filter)
       const collector = msg.createMessageComponentCollector({
         time: 15000,
-        filter: i => i.user.id === interaction.user.id
+        filter: i =>
+          i.user.id === interaction.user.id &&
+          [confirmId, cancelId].includes(i.customId)
       });
 
       collector.on('collect', async (i) => {
-        await i.update({ components: [] });
+        try {
+          await i.deferUpdate();
 
-        if (i.customId === `cancel_kick_${interaction.id}`) {
-          return interaction.editReply({ content: '❌ Kick cancelled.' });
-        }
+          // 🔒 disable buttons instantly
+          await interaction.editReply({ components: [] });
 
-        if (i.customId === `confirm_kick_${interaction.id}`) {
-          try {
+          if (i.customId === cancelId) {
+            return interaction.editReply({ content: '❌ Kick cancelled.' });
+          }
+
+          if (i.customId === confirmId) {
             member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-            if (!member) {
+            if (!member)
               return interaction.editReply({
                 content: '❌ User is no longer in the server.'
               });
-            }
 
-            if (!member.kickable) {
+            if (!member.kickable)
               return interaction.editReply({
                 content: '❌ I can no longer kick this user.'
               });
-            }
 
-            // 📩 DM
+            // 📩 DM (silent fail)
             try {
               await user.send({
                 embeds: [
@@ -138,7 +134,7 @@ module.exports = {
             await member.kick(`${reason} | Kicked by ${interaction.user.tag}`);
 
             // 📁 Case
-            const result = await run(
+            const result = run(
               `INSERT INTO cases (guildId, userId, moderatorId, action, reason, timestamp)
                VALUES (?, ?, ?, ?, ?, ?)`,
               [interaction.guild.id, user.id, interaction.user.id, 'KICK', reason, Date.now()]
@@ -146,13 +142,15 @@ module.exports = {
 
             const caseId = result?.lastInsertRowid ?? 'N/A';
 
-            const embed = new EmbedBuilder()
-              .setColor(0xED4245)
-              .setTitle('User Kicked')
-              .setDescription(`👢 **${user.tag}** has been kicked`)
-              .addFields({ name: 'Case', value: `#${caseId}`, inline: true });
-
-            await interaction.editReply({ embeds: [embed] });
+            await interaction.editReply({
+              embeds: [
+                new EmbedBuilder()
+                  .setColor(0x57F287)
+                  .setTitle('User Kicked')
+                  .setDescription(`👢 **${user.tag}** has been kicked`)
+                  .addFields({ name: 'Case', value: `#${caseId}`, inline: true })
+              ]
+            });
 
             // 📜 Log
             const logEmbed = createLogEmbed({
@@ -164,11 +162,11 @@ module.exports = {
             });
 
             await sendLog(interaction.client, interaction.guild.id, logEmbed);
-
-          } catch (err) {
-            console.error(err);
-            return interaction.editReply({ content: '❌ Failed to kick user.' });
           }
+
+        } catch (err) {
+          console.error('Collector Error:', err);
+          interaction.editReply({ content: '❌ Failed to process action.' });
         }
       });
 
@@ -193,7 +191,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ Error executing kick command.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

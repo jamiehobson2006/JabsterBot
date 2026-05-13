@@ -15,7 +15,7 @@ function getStyle(action = 'LOG') {
   return { color: 0x5865F2, icon: '📌' };
 }
 
-// 🧠 Clean user format (Carl-bot style)
+// 🧠 Clean user format
 function formatUser(user) {
   if (!user) return '`Unknown`';
 
@@ -37,7 +37,8 @@ async function sendLog(client, guildId, embed) {
     const guild = client.guilds.cache.get(guildId);
     if (!guild) return;
 
-    const row = get(
+    // ✅ FIX: await database
+    const row = await get(
       `SELECT modlogChannelId FROM guild_settings WHERE guildId=?`,
       [guildId]
     );
@@ -45,9 +46,12 @@ async function sendLog(client, guildId, embed) {
     if (!row?.modlogChannelId) return;
 
     const channel = await guild.channels.fetch(row.modlogChannelId).catch(() => null);
-    if (!channel || channel.type !== ChannelType.GuildText) return;
+
+    // ✅ Better channel validation
+    if (!channel || !channel.isTextBased()) return;
 
     const perms = channel.permissionsFor(guild.members.me);
+
     if (!perms?.has([
       PermissionsBitField.Flags.SendMessages,
       PermissionsBitField.Flags.EmbedLinks,
@@ -61,7 +65,7 @@ async function sendLog(client, guildId, embed) {
   }
 }
 
-// 🔥 ADVANCED EMBED (PRO LEVEL)
+// 🔥 ADVANCED EMBED
 function createLogEmbed({
   action = 'LOG',
   user,
@@ -127,7 +131,7 @@ function createLogEmbed({
   }
 
   // ========================
-  // 🧠 FOOTER
+  // 🧠 FOOTER (cleaner)
   // ========================
   embed.setFooter({
     text: `Moderation Log • ${new Date().toLocaleString()}`

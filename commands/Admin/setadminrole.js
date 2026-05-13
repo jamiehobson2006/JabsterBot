@@ -19,58 +19,60 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Always reply properly (no defer assumed)
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
+      const role = interaction.options.getRole('role', true);
+      const botMember = interaction.guild.members.me;
 
-      // 🔐 Permission check
+      // ========================
+      // 🔐 PERMISSION CHECK
+      // ========================
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator)) {
         return interaction.editReply({
           content: '❌ You need **Administrator** to use this command.'
         });
       }
 
-      const role = interaction.options.getRole('role', true);
-      const botMember = interaction.guild.members.me;
-
       // ========================
       // 🚫 SAFETY CHECKS
       // ========================
 
-      // @everyone check
+      // @everyone
       if (role.id === interaction.guild.id) {
         return interaction.editReply({
           content: '❌ You cannot use **@everyone** as admin.'
         });
       }
 
-      // Managed roles (bots/integrations)
+      // Managed roles (bot roles)
       if (role.managed) {
         return interaction.editReply({
           content: '❌ You cannot use bot/integration roles.'
         });
       }
 
-      // Bot hierarchy check
+      // Bot hierarchy
       if (role.position >= botMember.roles.highest.position) {
         return interaction.editReply({
           content: '❌ That role is higher than or equal to my highest role.'
         });
       }
 
-      // Optional: Prevent user from setting role above themselves
+      // User hierarchy
       if (role.position >= interaction.member.roles.highest.position) {
         return interaction.editReply({
           content: '❌ You cannot set a role higher than your highest role.'
         });
       }
 
-      // ========================
-      // 💾 SAVE (AWAITED)
-      // ========================
+      // Already set check (nice UX)
+      const current = await run(
+        `SELECT adminRoleId FROM guild_settings WHERE guildId=?`,
+        [interaction.guild.id]
+      );
 
-      await run(
+      // ========================
+      // 💾 SAVE
+      // ========================
+      run(
         `INSERT INTO guild_settings (guildId, adminRoleId)
          VALUES (?, ?)
          ON CONFLICT(guildId)
@@ -81,16 +83,22 @@ module.exports = {
       // ========================
       // 🎨 RESPONSE
       // ========================
-
       const embed = new EmbedBuilder()
-        .setColor(0x57F287) // cleaner than "Green"
-        .setTitle('Admin Role Updated')
-        .setDescription(`The admin role has been set to ${role}.`)
-        .addFields({
-          name: 'Role ID',
-          value: `\`${role.id}\``,
-          inline: true
-        })
+        .setColor(0x57F287)
+        .setTitle('🛡 Admin Role Updated')
+        .setDescription(`Admin role has been set to ${role}.`)
+        .addFields(
+          {
+            name: 'Role',
+            value: `${role}`,
+            inline: true
+          },
+          {
+            name: 'Role ID',
+            value: `\`${role.id}\``,
+            inline: true
+          }
+        )
         .setFooter({ text: `Set by ${interaction.user.tag}` })
         .setTimestamp();
 
@@ -99,16 +107,9 @@ module.exports = {
     } catch (err) {
       console.error('SetAdminRole Error:', err);
 
-      if (interaction.deferred || interaction.replied) {
-        return interaction.editReply({
-          content: '❌ Failed to set admin role. Please try again.'
-        });
-      } else {
-        return interaction.reply({
-          content: '❌ Failed to set admin role. Please try again.',
-          ephemeral: true
-        });
-      }
+      return interaction.editReply({
+        content: '❌ Failed to set admin role.'
+      });
     }
   }
 };

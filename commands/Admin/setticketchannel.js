@@ -14,127 +14,132 @@ module.exports = {
 
     .addChannelOption(option =>
       option
-        .setName('category')
-        .setDescription('Category where tickets will be created')
+        .setName('support_category')
+        .setDescription('Category for support tickets')
         .addChannelTypes(ChannelType.GuildCategory)
         .setRequired(true)
     )
 
-    .addRoleOption(option =>
+    .addChannelOption(option =>
       option
-        .setName('staff_role')
-        .setDescription('Role that handles support/application tickets')
+        .setName('application_category')
+        .setDescription('Category for application tickets')
+        .addChannelTypes(ChannelType.GuildCategory)
+        .setRequired(false)
+    )
+
+    .addChannelOption(option =>
+      option
+        .setName('giveaway_category')
+        .setDescription('Category for giveaway tickets')
+        .addChannelTypes(ChannelType.GuildCategory)
         .setRequired(false)
     )
 
     .addRoleOption(option =>
-      option
-        .setName('admin_role')
-        .setDescription('Admin role (extra access / pings)')
-        .setRequired(false)
+      option.setName('staff_role').setDescription('Staff role').setRequired(false)
     )
 
     .addRoleOption(option =>
-      option
-        .setName('giveaway_role')
-        .setDescription('Role that handles giveaway claim tickets')
-        .setRequired(false)
+      option.setName('admin_role').setDescription('Admin role').setRequired(false)
+    )
+
+    .addRoleOption(option =>
+      option.setName('giveaway_role').setDescription('Giveaway role').setRequired(false)
     ),
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
+      const botMember = interaction.guild.members.me;
 
-      // 🔐 Permission check
+      // ========================
+      // 🔐 PERMISSION
+      // ========================
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator)) {
         return interaction.editReply({
-          content: '❌ You need **Administrator** to use this command.'
+          content: '❌ You need **Administrator**.'
         });
       }
 
-      const category = interaction.options.getChannel('category', true);
+      const supportCat = interaction.options.getChannel('support_category', true);
+      const appCat = interaction.options.getChannel('application_category');
+      const giveawayCat = interaction.options.getChannel('giveaway_category');
+
       const staffRole = interaction.options.getRole('staff_role');
       const adminRole = interaction.options.getRole('admin_role');
       const giveawayRole = interaction.options.getRole('giveaway_role');
 
-      const botMember = interaction.guild.members.me;
-
       // ========================
-      // 🛡 CATEGORY CHECK
+      // 🛡 CATEGORY VALIDATION
       // ========================
+      const categories = [supportCat, appCat, giveawayCat].filter(Boolean);
 
-      if (category.type !== ChannelType.GuildCategory) {
-        return interaction.editReply({
-          content: '❌ You must select a valid **category**.'
-        });
+      for (const cat of categories) {
+        if (cat.type !== ChannelType.GuildCategory) {
+          return interaction.editReply({
+            content: '❌ Invalid category selected.'
+          });
+        }
       }
 
       // ========================
       // 🛡 ROLE VALIDATION
       // ========================
-
       const roles = [staffRole, adminRole, giveawayRole].filter(Boolean);
 
       for (const role of roles) {
         if (role.id === interaction.guild.id) {
-          return interaction.editReply({
-            content: '❌ You cannot use **@everyone** as a role.'
-          });
+          return interaction.editReply({ content: '❌ Cannot use @everyone.' });
         }
 
         if (role.managed) {
-          return interaction.editReply({
-            content: '❌ You cannot use bot/integration roles.'
-          });
+          return interaction.editReply({ content: '❌ Cannot use bot roles.' });
         }
 
         if (role.position >= botMember.roles.highest.position) {
-          return interaction.editReply({
-            content: '❌ One of the roles is higher than or equal to my highest role.'
-          });
+          return interaction.editReply({ content: '❌ Role above bot.' });
         }
 
         if (role.position >= interaction.member.roles.highest.position) {
-          return interaction.editReply({
-            content: '❌ You cannot set a role higher than your highest role.'
-          });
+          return interaction.editReply({ content: '❌ Role above you.' });
         }
       }
 
       // ========================
-      // 🔄 GET EXISTING DATA (IMPORTANT)
+      // 🧠 GET EXISTING
       // ========================
-
-      const existing = await get(
-        `SELECT * FROM guild_settings WHERE guildId = ?`,
+      const existing = get(
+        `SELECT * FROM guild_settings WHERE guildId=?`,
         [interaction.guild.id]
       );
 
       // ========================
-      // 💾 SAVE (SAFE MERGE)
+      // 💾 SAVE
       // ========================
-
-      await run(
+      run(
         `INSERT INTO guild_settings (
           guildId,
-          ticketCategoryId,
+          supportCategoryId,
+          applicationCategoryId,
+          giveawayCategoryId,
           staffRoleId,
           adminRoleId,
           giveawayRoleId
         )
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(guildId) DO UPDATE SET
-          ticketCategoryId = excluded.ticketCategoryId,
+          supportCategoryId = excluded.supportCategoryId,
+          applicationCategoryId = COALESCE(excluded.applicationCategoryId, guild_settings.applicationCategoryId),
+          giveawayCategoryId = COALESCE(excluded.giveawayCategoryId, guild_settings.giveawayCategoryId),
           staffRoleId = COALESCE(excluded.staffRoleId, guild_settings.staffRoleId),
           adminRoleId = COALESCE(excluded.adminRoleId, guild_settings.adminRoleId),
           giveawayRoleId = COALESCE(excluded.giveawayRoleId, guild_settings.giveawayRoleId)
         `,
         [
           interaction.guild.id,
-          category.id,
+          supportCat.id,
+          appCat?.id ?? null,
+          giveawayCat?.id ?? null,
           staffRole?.id ?? null,
           adminRole?.id ?? null,
           giveawayRole?.id ?? null
@@ -142,17 +147,21 @@ module.exports = {
       );
 
       // ========================
-      // 🎨 RESPONSE
+      // 🎨 EMBED
       // ========================
-
       const embed = new EmbedBuilder()
         .setColor(0x9B59B6)
-        .setTitle('Ticket System Updated')
-        .setDescription('Your ticket system configuration has been updated.')
+        .setTitle('🎟 Ticket System Updated')
         .addFields(
+          { name: 'Support', value: `${supportCat}`, inline: true },
           {
-            name: 'Category',
-            value: `${category}`,
+            name: 'Applications',
+            value: appCat ? `${appCat}` : (existing?.applicationCategoryId ? `<#${existing.applicationCategoryId}>` : 'Not set'),
+            inline: true
+          },
+          {
+            name: 'Giveaways',
+            value: giveawayCat ? `${giveawayCat}` : (existing?.giveawayCategoryId ? `<#${existing.giveawayCategoryId}>` : 'Not set'),
             inline: true
           },
           {
@@ -177,18 +186,11 @@ module.exports = {
       return interaction.editReply({ embeds: [embed] });
 
     } catch (err) {
-      console.error('SetTicketChannel Error:', err);
+      console.error(err);
 
-      if (interaction.deferred || interaction.replied) {
-        return interaction.editReply({
-          content: '❌ Failed to configure ticket system.'
-        });
-      } else {
-        return interaction.reply({
-          content: '❌ Failed to configure ticket system.',
-          ephemeral: true
-        });
-      }
+      return interaction.editReply({
+        content: '❌ Failed to configure ticket system.'
+      });
     }
   }
 };

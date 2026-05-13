@@ -45,12 +45,7 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Defer
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
 
-      // 🔐 Permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageGuild)) {
         return interaction.editReply({
           content: '❌ You need **Manage Server** permission.'
@@ -69,30 +64,34 @@ module.exports = {
       const id = interaction.id;
 
       // ========================
-      // 🔎 BUILD QUERY
+      // 🔎 QUERY FUNCTION (FOR REFRESH)
       // ========================
-      let query = `SELECT * FROM cases WHERE guildId=?`;
-      const params = [interaction.guild.id];
+      const fetchCases = async () => {
+        let query = `SELECT * FROM cases WHERE guildId=?`;
+        const params = [interaction.guild.id];
 
-      if (user) {
-        query += ` AND userId=?`;
-        params.push(user.id);
-      }
+        if (user) {
+          query += ` AND userId=?`;
+          params.push(user.id);
+        }
 
-      if (moderator) {
-        query += ` AND moderatorId=?`;
-        params.push(moderator.id);
-      }
+        if (moderator) {
+          query += ` AND moderatorId=?`;
+          params.push(moderator.id);
+        }
 
-      if (action) {
-        query += ` AND action=?`;
-        params.push(action);
-      }
+        if (action) {
+          query += ` AND action=?`;
+          params.push(action);
+        }
 
-      query += ` ORDER BY id DESC LIMIT ?`;
-      params.push(limit);
+        query += ` ORDER BY id DESC LIMIT ?`;
+        params.push(limit);
 
-      const cases = await all(query, params);
+        return await all(query, params);
+      };
+
+      let cases = await fetchCases();
 
       if (!cases.length) {
         return interaction.editReply({
@@ -183,78 +182,85 @@ module.exports = {
         components: [getButtons(page, totalPages)]
       });
 
-      // ========================
-      // 🔄 COLLECTOR
-      // ========================
+      let busy = false;
+
       const collector = message.createMessageComponentCollector({
         time: 120000,
-        filter: i => i.user.id === interaction.user.id
+        filter: i =>
+          i.user.id === interaction.user.id &&
+          i.customId.endsWith(id)
       });
 
       collector.on('collect', async (i) => {
-        // 🔢 Jump modal
-        if (i.customId === `jump_${id}`) {
-          const modal = new ModalBuilder()
-            .setCustomId(`jumpmodal_${id}`)
-            .setTitle('Jump to Page');
+        if (busy) return;
+        busy = true;
 
-          const input = new TextInputBuilder()
-            .setCustomId('page')
-            .setLabel('Enter page number')
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true);
+        try {
+          // 🔢 Jump modal
+          if (i.customId === `jump_${id}`) {
+            const modal = new ModalBuilder()
+              .setCustomId(`jumpmodal_${id}`)
+              .setTitle('Jump to Page');
 
-          modal.addComponents(new ActionRowBuilder().addComponents(input));
-          await i.showModal(modal);
+            const input = new TextInputBuilder()
+              .setCustomId('page')
+              .setLabel('Enter page number')
+              .setStyle(TextInputStyle.Short)
+              .setRequired(true);
 
-          const modalSubmit = await i.awaitModalSubmit({
-            time: 15000,
-            filter: m => m.customId === `jumpmodal_${id}` && m.user.id === i.user.id
-          }).catch(() => null);
+            modal.addComponents(new ActionRowBuilder().addComponents(input));
+            await i.showModal(modal);
 
-          if (!modalSubmit) return;
+            const modalSubmit = await i.awaitModalSubmit({
+              time: 15000,
+              filter: m => m.customId === `jumpmodal_${id}` && m.user.id === i.user.id
+            }).catch(() => null);
 
-          const inputPage = parseInt(modalSubmit.fields.getTextInputValue('page'));
+            if (!modalSubmit) return;
 
-          if (isNaN(inputPage)) {
-            return modalSubmit.reply({ content: '❌ Invalid number.', ephemeral: true });
+            const inputPage = parseInt(modalSubmit.fields.getTextInputValue('page'));
+
+            if (isNaN(inputPage)) {
+              return modalSubmit.reply({ content: '❌ Invalid number.', ephemeral: true });
+            }
+
+            page = Math.min(Math.max(inputPage - 1, 0), totalPages - 1);
+
+            const data = build(page);
+
+            return modalSubmit.update({
+              embeds: [data.embed],
+              components: [getButtons(page, data.totalPages)]
+            });
           }
 
-          page = Math.min(Math.max(inputPage - 1, 0), totalPages - 1);
+          await i.deferUpdate();
+
+          // 🔄 TRUE refresh
+          if (i.customId === `refresh_${id}`) {
+            cases = await fetchCases();
+          }
+
+          if (i.customId === `first_${id}`) page = 0;
+          if (i.customId === `last_${id}`) page = totalPages - 1;
+          if (i.customId === `prev_${id}`) page--;
+          if (i.customId === `next_${id}`) page++;
 
           const data = build(page);
+          totalPages = data.totalPages;
 
-          return modalSubmit.update({
+          await i.editReply({
             embeds: [data.embed],
-            components: [getButtons(page, data.totalPages)]
+            components: [getButtons(page, totalPages)]
           });
+
+        } catch (err) {
+          console.error('Cases Collector Error:', err);
+        } finally {
+          busy = false;
         }
-
-        // 🔄 Refresh
-        if (i.customId === `refresh_${id}`) {
-          const data = build(page);
-          return i.update({
-            embeds: [data.embed],
-            components: [getButtons(page, data.totalPages)]
-          });
-        }
-
-        // Navigation
-        if (i.customId === `first_${id}`) page = 0;
-        if (i.customId === `last_${id}`) page = totalPages - 1;
-        if (i.customId === `prev_${id}`) page--;
-        if (i.customId === `next_${id}`) page++;
-
-        const data = build(page);
-        totalPages = data.totalPages;
-
-        await i.update({
-          embeds: [data.embed],
-          components: [getButtons(page, totalPages)]
-        });
       });
 
-      // ⏳ Cleanup
       collector.on('end', async () => {
         try {
           await interaction.editReply({ components: [] });
@@ -271,7 +277,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ Failed to load cases.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

@@ -3,6 +3,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  PermissionsBitField,
   SlashCommandBuilder
 } = require('discord.js');
 
@@ -22,14 +23,12 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
 
-      let text = interaction.options.getString('text', true);
+      const text = interaction.options.getString('text', true);
 
-      // 🔄 Get settings
+      // ========================
+      // 🔄 GET SETTINGS
+      // ========================
       const settings = await get(
         `SELECT suggestionChannelId FROM guild_settings WHERE guildId=?`,
         [interaction.guild.id]
@@ -49,29 +48,40 @@ module.exports = {
         });
       }
 
-      // 🔐 Bot perms check
+      // ========================
+      // 🔐 PERMISSION CHECK
+      // ========================
       const perms = channel.permissionsFor(interaction.guild.members.me);
 
-      if (!perms.has(['SendMessages', 'EmbedLinks', 'AddReactions'])) {
+      if (!perms.has([
+        PermissionsBitField.Flags.ViewChannel,
+        PermissionsBitField.Flags.SendMessages,
+        PermissionsBitField.Flags.EmbedLinks,
+        PermissionsBitField.Flags.AddReactions
+      ])) {
         return interaction.editReply({
           content: '❌ I am missing permissions in the suggestion channel.'
         });
       }
 
-      // 🎨 Embed
+      // ========================
+      // 🎨 EMBED
+      // ========================
       const embed = new EmbedBuilder()
-        .setTitle('💡 New Suggestion')
         .setColor(0x5865F2)
+        .setTitle('💡 New Suggestion')
         .setDescription(text)
         .addFields({
           name: 'Author',
-          value: `<@${interaction.user.id}>`,
+          value: `${interaction.user}`,
           inline: true
         })
         .setFooter({ text: 'Status: Pending' })
         .setTimestamp();
 
-      // 🔥 Buttons
+      // ========================
+      // 🔘 BUTTONS
+      // ========================
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`suggest_accept_${interaction.id}`)
@@ -84,6 +94,9 @@ module.exports = {
           .setStyle(ButtonStyle.Danger)
       );
 
+      // ========================
+      // 📤 SEND
+      // ========================
       const msg = await channel.send({
         embeds: [embed],
         components: [row]
@@ -93,14 +106,18 @@ module.exports = {
       await msg.react('👍');
       await msg.react('👎');
 
-      // 💾 Save
+      // ========================
+      // 💾 SAVE
+      // ========================
       await run(
         `INSERT INTO suggestions (guildId, messageId, userId, content, status, timestamp)
          VALUES (?, ?, ?, ?, 'PENDING', ?)`,
         [interaction.guild.id, msg.id, interaction.user.id, text, Date.now()]
       );
 
-      // ✅ Confirmation
+      // ========================
+      // ✅ RESPONSE
+      // ========================
       await interaction.editReply({
         content: `✅ Suggestion submitted! [Jump to message](${msg.url})`
       });

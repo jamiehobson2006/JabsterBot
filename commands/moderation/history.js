@@ -6,6 +6,30 @@ const {
 
 const { all } = require('../../database');
 
+// 🧠 Clean reason
+function trim(text, max = 150) {
+  if (!text) return 'No reason provided';
+  return text.length > max ? text.slice(0, max) + '...' : text;
+}
+
+// 🎨 Format action nicely
+function formatAction(action) {
+  if (!action) return 'Unknown';
+
+  const map = {
+    BAN: '🔨 Ban',
+    KICK: '👢 Kick',
+    MUTE: '🔇 Mute',
+    UNMUTE: '🔊 Unmute',
+    WARN: '⚠️ Warn',
+    CLEAR: '🧹 Clear',
+    'CLEAR WARNINGS': '🧹 Clear Warns',
+    'EDIT CASE': '✏️ Edit Case'
+  };
+
+  return map[action.toUpperCase()] || action;
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('history')
@@ -19,10 +43,7 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
+      const user = interaction.options.getUser('user', true);
 
       // 🔐 Permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageGuild)) {
@@ -31,10 +52,8 @@ module.exports = {
         });
       }
 
-      const user = interaction.options.getUser('user', true);
-
-      // 📦 Fetch cases (AWAITED)
-      const cases = await all(
+      // ⚡ Sync DB
+      const cases = all(
         `SELECT * FROM cases 
          WHERE guildId=? AND userId=? 
          ORDER BY id DESC LIMIT 20`,
@@ -47,39 +66,32 @@ module.exports = {
         });
       }
 
-      // 📊 Stats summary
+      // 📊 Stats
       const stats = {};
       for (const c of cases) {
-        const key = c.action.toUpperCase();
+        const key = c.action?.toUpperCase() || 'UNKNOWN';
         stats[key] = (stats[key] || 0) + 1;
       }
 
-      const summary =
-        Object.entries(stats)
-          .map(([k, v]) => `**${k}**: ${v}`)
-          .join(' • ') || 'No data';
+      const summary = Object.entries(stats)
+        .map(([k, v]) => `**${k}**: ${v}`)
+        .join(' • ') || 'No data';
 
       const embed = new EmbedBuilder()
         .setTitle(`History for ${user.tag}`)
         .setColor(0x5865F2)
         .setDescription(`**Recent Activity (last 20 cases)**\n${summary}`)
-        .setFooter({ text: `Showing latest ${Math.min(10, cases.length)} entries` })
+        .setFooter({ text: `Showing ${Math.min(10, cases.length)} of ${cases.length} cases` })
         .setTimestamp();
 
-      // 📜 Add case entries (max 10 clean)
+      // 📜 Entries (top 10 for readability)
       for (const c of cases.slice(0, 10)) {
-        let reason = c.reason || 'No reason provided';
-
-        if (reason.length > 150) {
-          reason = reason.slice(0, 150) + '...';
-        }
-
         embed.addFields({
-          name: `#${c.id} • ${c.action}`,
+          name: `#${c.id} • ${formatAction(c.action)}`,
           value:
-            `Moderator: <@${c.moderatorId}>\n` +
-            `Time: <t:${Math.floor(c.timestamp / 1000)}:R>\n` +
-            `Reason: ${reason}`,
+            `👮 Moderator: ${c.moderatorId ? `<@${c.moderatorId}>` : '`Unknown`'}\n` +
+            `🕒 Time: ${c.timestamp ? `<t:${Math.floor(c.timestamp / 1000)}:R>` : '`Unknown`'}\n` +
+            `📄 Reason: ${trim(c.reason)}`,
           inline: false
         });
       }
@@ -104,7 +116,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ Failed to fetch history.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

@@ -29,15 +29,20 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
 
-      // 🔐 Permission
+      // 🔐 User permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageRoles)) {
         return interaction.editReply({
           content: '❌ You need **Manage Roles** permission.'
+        });
+      }
+
+      const botMember = interaction.guild.members.me;
+
+      // ❌ Bot permission
+      if (!botMember.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+        return interaction.editReply({
+          content: '❌ I do not have permission to manage roles.'
         });
       }
 
@@ -48,7 +53,7 @@ module.exports = {
       const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
       if (!member) {
-        return interaction.editReply({ content: '❌ User not found.' });
+        return interaction.editReply({ content: '❌ User not found in this server.' });
       }
 
       // 🚫 @everyone
@@ -63,8 +68,15 @@ module.exports = {
         });
       }
 
+      // 🚫 Dangerous roles (optional but recommended)
+      if (role.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return interaction.editReply({
+          content: '❌ You cannot manage roles with **Administrator** permission.'
+        });
+      }
+
       // 🚫 Bot hierarchy
-      if (role.position >= interaction.guild.members.me.roles.highest.position) {
+      if (role.position >= botMember.roles.highest.position) {
         return interaction.editReply({
           content: '❌ That role is higher than my highest role.'
         });
@@ -94,7 +106,9 @@ module.exports = {
           });
         }
 
-        await member.roles.add(role);
+        await member.roles.add(role).catch(() => {
+          throw new Error('Failed to add role');
+        });
 
         const embed = new EmbedBuilder()
           .setColor(0x57F287)
@@ -126,7 +140,9 @@ module.exports = {
           });
         }
 
-        await member.roles.remove(role);
+        await member.roles.remove(role).catch(() => {
+          throw new Error('Failed to remove role');
+        });
 
         const embed = new EmbedBuilder()
           .setColor(0xE67E22)
@@ -157,7 +173,7 @@ module.exports = {
 
       if (interaction.deferred || interaction.replied) {
         return interaction.editReply({
-          content: '❌ Failed to manage role.'
+          content: '❌ Failed to manage role. Check my permissions and role hierarchy.'
         });
       } else {
         return interaction.reply({

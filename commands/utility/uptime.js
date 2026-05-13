@@ -27,44 +27,70 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply();
-      }
+  
 
-      const uptimeMs = interaction.client.uptime;
+      const client = interaction.client;
+
+      // ⏱️ Uptime
+      const uptimeMs = client.uptime;
       const uptime = formatUptime(uptimeMs);
 
-      const apiPing = Math.round(interaction.client.ws.ping);
+      // 📡 Latency
+      const apiPing = Math.round(client.ws.ping);
+
+      // 🧠 Memory
       const memoryMB = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
+
+      // ⚙️ CPU (basic)
+      const cpuUsage = process.cpuUsage();
+      const cpuPercent = ((cpuUsage.user + cpuUsage.system) / 1000000).toFixed(2);
+
+      // 🌐 Stats
+      const guilds = client.guilds.cache.size;
+      const users = client.users.cache.size;
 
       const status = getStatus(apiPing);
 
       const embed = new EmbedBuilder()
-        .setTitle('⏱️ Bot Uptime')
+        .setTitle('⏱️ Bot Uptime & Performance')
         .setColor(status.color)
-        .setDescription(`I have been online for:\n\n**${uptime}**`)
+        .setDescription(`**Uptime:**\n${uptime}`)
         .addFields(
           {
             name: '📡 API Latency',
-            value: `**${apiPing}ms**`,
+            value: `\`${apiPing}ms\``,
             inline: true
           },
           {
-            name: '🧠 Memory Usage',
-            value: `**${memoryMB} MB**`,
+            name: '🧠 Memory',
+            value: `\`${memoryMB} MB\``,
             inline: true
           },
           {
-            name: '⚙️ Status',
+            name: '⚙️ CPU',
+            value: `\`${cpuPercent}%\``,
+            inline: true
+          },
+          {
+            name: '🌐 Servers',
+            value: `\`${guilds}\``,
+            inline: true
+          },
+          {
+            name: '👥 Users',
+            value: `\`${users}\``,
+            inline: true
+          },
+          {
+            name: '💡 Status',
             value: status.text,
             inline: true
           }
         )
-        .setFooter({ text: 'JabsterBot Performance Monitor' })
+        .setFooter({ text: 'JabsterBot • Performance Monitor' })
         .setTimestamp();
 
-      await interaction.editReply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
 
     } catch (err) {
       console.error('Uptime Error:', err);

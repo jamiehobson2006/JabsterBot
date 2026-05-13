@@ -7,6 +7,8 @@ const {
   SlashCommandBuilder
 } = require('discord.js');
 
+const { get } = require('../../database');
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ticketpanel')
@@ -14,32 +16,52 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
-
-      // 🔐 Permission
+      // ========================
+      // 🔐 PERMISSION CHECK
+      // ========================
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator)) {
         return interaction.editReply({
           content: '❌ You need **Administrator** to use this command.'
         });
       }
 
-      // 🎨 Embed
+      // ========================
+      // ⚙️ CONFIG CHECK (IMPORTANT)
+      // ========================
+      const settings = get(
+        `SELECT * FROM guild_settings WHERE guildId=?`,
+        [interaction.guild.id]
+      );
+
+      if (!settings?.ticketCategoryId) {
+        return interaction.editReply({
+          content: '❌ Ticket system is not configured.\nUse `/setticketchannel` first.'
+        });
+      }
+
+      // ========================
+      // 🎨 EMBED (UPGRADED)
+      // ========================
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle('Support Center')
+        .setTitle('🎟️ Support Center')
         .setDescription(
-          'Welcome! Choose a ticket type below:\n\n' +
-          '📩 **Support** — Get help (you’ll fill out a form)\n' +
-          '📝 **Application** — Apply for roles/staff\n' +
-          '🎉 **Giveaway Claim** — Claim your prize'
+          '**Open a ticket below depending on your needs**\n\n' +
+          '📩 **Support**\nGet help from our staff team\n\n' +
+          '📝 **Application**\nApply for staff or special roles\n\n' +
+          '🎉 **Giveaway Claim**\nClaim your giveaway rewards'
         )
+        .addFields({
+          name: '⏱ Response Time',
+          value: 'We usually respond within a few minutes.',
+          inline: false
+        })
         .setFooter({ text: `Server: ${interaction.guild.name}` })
         .setTimestamp();
 
-      // 🎛 Buttons
+      // ========================
+      // 🎛 BUTTONS (CLEAN + FUTURE SAFE)
+      // ========================
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('ticket_support')
@@ -60,14 +82,16 @@ module.exports = {
           .setStyle(ButtonStyle.Secondary)
       );
 
-      // 📤 Send panel
+      // ========================
+      // 📤 SEND PANEL
+      // ========================
       await interaction.channel.send({
         embeds: [embed],
         components: [row]
       });
 
       return interaction.editReply({
-        content: '✅ Ticket panel sent.'
+        content: '✅ Ticket panel sent successfully.'
       });
 
     } catch (err) {
@@ -80,7 +104,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ Failed to send ticket panel.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

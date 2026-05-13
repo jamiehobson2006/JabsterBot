@@ -1,7 +1,8 @@
 const { 
   PermissionsBitField, 
   EmbedBuilder, 
-  SlashCommandBuilder 
+  SlashCommandBuilder,
+  ChannelType
 } = require('discord.js');
 
 const { sendLog, createLogEmbed } = require('../../utils/logger');
@@ -14,18 +15,13 @@ module.exports = {
       option
         .setName('reason')
         .setDescription('Reason for locking the channel')
-        .setRequired(false)
         .setMaxLength(200)
     ),
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply();
-      }
 
-      // 🔐 Permission
+      // 🔐 User permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageChannels)) {
         return interaction.editReply({
           content: '❌ You need **Manage Channels** permission.'
@@ -34,10 +30,26 @@ module.exports = {
 
       const channel = interaction.channel;
       const reason = interaction.options.getString('reason') || 'No reason provided';
+      const botMember = interaction.guild.members.me;
 
-      const overwrite = channel.permissionOverwrites.cache.get(
-        interaction.guild.roles.everyone.id
-      );
+      // ❌ Channel type safety
+      if (!channel || channel.type !== ChannelType.GuildText) {
+        return interaction.editReply({
+          content: '❌ You can only lock **text channels**.'
+        });
+      }
+
+      // ❌ Bot permission check
+      const perms = channel.permissionsFor(botMember);
+      if (!perms.has(PermissionsBitField.Flags.ManageChannels)) {
+        return interaction.editReply({
+          content: '❌ I do not have permission to manage this channel.'
+        });
+      }
+
+      const everyoneRole = interaction.guild.roles.everyone;
+
+      const overwrite = channel.permissionOverwrites.cache.get(everyoneRole.id);
 
       const alreadyLocked = overwrite?.deny.has(PermissionsBitField.Flags.SendMessages);
 
@@ -47,27 +59,27 @@ module.exports = {
         });
       }
 
-      // 🔒 Lock
-      await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
+      // 🔒 Lock channel
+      await channel.permissionOverwrites.edit(everyoneRole, {
         SendMessages: false
       });
 
-      // 🎨 Embed
-      const embed = new EmbedBuilder()
-        .setTitle('🔒 Channel Locked')
-        .setColor(0xED4245)
-        .setDescription(
-          `This channel has been locked.\n\n**Reason:** ${reason}`
-        )
-        .setFooter({ text: `Locked by ${interaction.user.tag}` })
-        .setTimestamp();
+      // 📢 Public message in channel
+      await channel.send({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xED4245)
+            .setTitle('🔒 Channel Locked')
+            .setDescription(`**Reason:** ${reason}`)
+            .setFooter({ text: `Locked by ${interaction.user.tag}` })
+            .setTimestamp()
+        ]
+      });
 
-      const reply = await interaction.editReply({ embeds: [embed] });
-
-      // 🧹 Auto delete after 5 seconds
-      setTimeout(() => {
-        reply.delete().catch(() => {});
-      }, 5000);
+      // ✅ Private confirmation
+      await interaction.editReply({
+        content: '✅ Channel locked successfully.'
+      });
 
       // 📜 Log
       const logEmbed = createLogEmbed({
@@ -90,7 +102,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ Failed to lock channel.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

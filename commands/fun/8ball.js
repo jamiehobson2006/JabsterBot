@@ -3,25 +3,37 @@ const {
   SlashCommandBuilder
 } = require('discord.js');
 
-// 🎱 Responses
-const responses = [
-  'Yes.',
-  'No.',
-  'Maybe...',
-  'Definitely!',
-  'I doubt it.',
-  'Ask again later.',
-  'Without a doubt.',
-  'Very unlikely.',
-  'Signs point to yes.',
-  'Don’t count on it.',
-  'It is certain.',
-  'My sources say no.',
-  'Outlook good.',
-  'Better not tell you now.',
-  'Absolutely.',
-  'No chance.'
-];
+// 🎱 Responses grouped (better feel)
+const responses = {
+  positive: [
+    'Yes.',
+    'Definitely!',
+    'Without a doubt.',
+    'Signs point to yes.',
+    'It is certain.',
+    'Outlook good.',
+    'Absolutely.'
+  ],
+  neutral: [
+    'Maybe...',
+    'Ask again later.',
+    'Better not tell you now.'
+  ],
+  negative: [
+    'No.',
+    'I doubt it.',
+    'Very unlikely.',
+    'Don’t count on it.',
+    'My sources say no.',
+    'No chance.'
+  ]
+};
+
+function getRandomResponse() {
+  const categories = Object.values(responses);
+  const pool = categories[Math.floor(Math.random() * categories.length)];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -37,25 +49,19 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply();
-      }
-
       const question = interaction.options.getString('question', true);
-
-      const answer = responses[Math.floor(Math.random() * responses.length)];
+      const answer = getRandomResponse();
 
       const embed = new EmbedBuilder()
         .setColor(0x9B59B6)
-        .setTitle('Magic 8-Ball')
+        .setTitle('🎱 Magic 8-Ball')
         .addFields(
           {
-            name: 'Question',
+            name: '❓ Question',
             value: question
           },
           {
-            name: 'Answer',
+            name: '🔮 Answer',
             value: `*${answer}*`
           }
         )
@@ -74,7 +80,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ The 8-ball broke... try again.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

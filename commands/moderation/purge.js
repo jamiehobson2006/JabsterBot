@@ -4,6 +4,8 @@ const {
   SlashCommandBuilder
 } = require('discord.js');
 
+const { sendLog, createLogEmbed } = require('../../utils/logger');
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('purge')
@@ -36,15 +38,20 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Defer
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
 
-      // 🔐 Permission
+      // 🔐 User permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageMessages)) {
         return interaction.editReply({
           content: '❌ You need **Manage Messages** permission.'
+        });
+      }
+
+      const botMember = interaction.guild.members.me;
+
+      // ❌ Bot permission
+      if (!botMember.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+        return interaction.editReply({
+          content: '❌ I do not have permission to delete messages.'
         });
       }
 
@@ -59,8 +66,8 @@ module.exports = {
         });
       }
 
-      // 📥 Fetch messages (always max 100 for filtering)
-      const messages = await interaction.channel.messages.fetch({ limit: 100 });
+      // 📥 Fetch ONLY what we need
+      const messages = await interaction.channel.messages.fetch({ limit: amount });
 
       let filtered = messages;
 
@@ -69,7 +76,7 @@ module.exports = {
         filtered = filtered.filter(m => m.author.id === target.id);
       }
 
-      // 🤖 Filter by type
+      // 🤖 Filter type
       if (type === 'bots') {
         filtered = filtered.filter(m => m.author.bot);
       }
@@ -89,39 +96,58 @@ module.exports = {
       // 🧹 Delete
       const deleted = await interaction.channel.bulkDelete(toDelete, true);
 
-      if (!deleted.size) {
+      const deletedCount = deleted.size;
+      const skipped = toDelete.length - deletedCount;
+
+      if (!deletedCount) {
         return interaction.editReply({
           content: '❌ Messages may be older than 14 days.'
         });
       }
 
-      // 🎨 Public message
+      // 🎨 Public feedback
       const embed = new EmbedBuilder()
         .setColor(0xE67E22)
         .setTitle('Messages Cleared')
         .setDescription(
           target
-            ? `Deleted **${deleted.size} messages** from ${target}`
+            ? `Deleted **${deletedCount} messages** from ${target}`
             : type === 'bots'
-              ? `Deleted **${deleted.size} bot messages**`
+              ? `Deleted **${deletedCount} bot messages**`
               : type === 'humans'
-                ? `Deleted **${deleted.size} human messages**`
-                : `Deleted **${deleted.size} messages**`
+                ? `Deleted **${deletedCount} human messages**`
+                : `Deleted **${deletedCount} messages**`
+        )
+        .addFields(
+          skipped > 0
+            ? { name: 'Skipped', value: `${skipped} (older than 14 days)`, inline: true }
+            : { name: '\u200b', value: '\u200b', inline: true }
         )
         .setFooter({ text: `By ${interaction.user.tag}` })
         .setTimestamp();
 
       const msg = await interaction.channel.send({ embeds: [embed] });
 
-      // 🧹 Auto delete log message after 5s
+      // 🧹 Auto delete public log
       setTimeout(() => {
         msg.delete().catch(() => {});
       }, 5000);
 
       // ✅ Private confirmation
       await interaction.editReply({
-        content: `✅ Deleted ${deleted.size} messages.`
+        content: `✅ Deleted ${deletedCount} messages.${skipped ? ` (${skipped} skipped)` : ''}`
       });
+
+      // 📜 Log system (your system 🔥)
+      const logEmbed = createLogEmbed({
+        action: 'PURGE',
+        user: { id: 'CHANNEL', tag: interaction.channel.name },
+        moderator: interaction.user,
+        reason: `Deleted ${deletedCount} messages`,
+        caseId: null
+      });
+
+      await sendLog(interaction.client, interaction.guild.id, logEmbed);
 
     } catch (err) {
       console.error('Purge Error:', err);
@@ -133,7 +159,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ Failed to purge messages.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

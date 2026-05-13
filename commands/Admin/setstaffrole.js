@@ -4,7 +4,7 @@ const {
   SlashCommandBuilder
 } = require('discord.js');
 
-const { run } = require('../../database');
+const { run, get } = require('../../database');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -19,44 +19,44 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
+      const role = interaction.options.getRole('role', true);
+      const botMember = interaction.guild.members.me;
 
-      // 🔐 Permission check
+      // ========================
+      // 🔐 PERMISSION CHECK
+      // ========================
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator)) {
         return interaction.editReply({
           content: '❌ You need **Administrator** to use this command.'
         });
       }
 
-      const role = interaction.options.getRole('role', true);
-      const botMember = interaction.guild.members.me;
-
       // ========================
       // 🚫 SAFETY CHECKS
       // ========================
 
+      // @everyone
       if (role.id === interaction.guild.id) {
         return interaction.editReply({
           content: '❌ You cannot use **@everyone** as staff.'
         });
       }
 
+      // Managed roles
       if (role.managed) {
         return interaction.editReply({
           content: '❌ You cannot use bot/integration roles.'
         });
       }
 
+      // Bot hierarchy
       if (role.position >= botMember.roles.highest.position) {
         return interaction.editReply({
           content: '❌ That role is higher than or equal to my highest role.'
         });
       }
 
-      // 🔒 Prevent abuse
+      // User hierarchy
       if (role.position >= interaction.member.roles.highest.position) {
         return interaction.editReply({
           content: '❌ You cannot set a role higher than your highest role.'
@@ -64,10 +64,19 @@ module.exports = {
       }
 
       // ========================
-      // 💾 SAVE (AWAITED)
+      // 🧠 CHECK EXISTING
       // ========================
+      const existing = get(
+        `SELECT staffRoleId FROM guild_settings WHERE guildId=?`,
+        [interaction.guild.id]
+      );
 
-      await run(
+      const alreadySet = existing?.staffRoleId === role.id;
+
+      // ========================
+      // 💾 SAVE
+      // ========================
+      run(
         `INSERT INTO guild_settings (guildId, staffRoleId)
          VALUES (?, ?)
          ON CONFLICT(guildId)
@@ -78,16 +87,26 @@ module.exports = {
       // ========================
       // 🎨 RESPONSE
       // ========================
-
       const embed = new EmbedBuilder()
-        .setColor(0x3498DB) // clean blue hex
-        .setTitle('Staff Role Updated')
-        .setDescription(`The staff role has been set to ${role}.`)
-        .addFields({
-          name: 'Role ID',
-          value: `\`${role.id}\``,
-          inline: true
-        })
+        .setColor(0x3498DB)
+        .setTitle('👮 Staff Role Updated')
+        .setDescription(
+          alreadySet
+            ? `${role} is already set as the staff role.`
+            : `Staff role has been set to ${role}.`
+        )
+        .addFields(
+          {
+            name: 'Role',
+            value: `${role}`,
+            inline: true
+          },
+          {
+            name: 'Role ID',
+            value: `\`${role.id}\``,
+            inline: true
+          }
+        )
         .setFooter({ text: `Set by ${interaction.user.tag}` })
         .setTimestamp();
 
@@ -96,16 +115,9 @@ module.exports = {
     } catch (err) {
       console.error('SetStaffRole Error:', err);
 
-      if (interaction.deferred || interaction.replied) {
-        return interaction.editReply({
-          content: '❌ Failed to set staff role. Please try again.'
-        });
-      } else {
-        return interaction.reply({
-          content: '❌ Failed to set staff role. Please try again.',
-          ephemeral: true
-        });
-      }
+      return interaction.editReply({
+        content: '❌ Failed to set staff role.'
+      });
     }
   }
 };

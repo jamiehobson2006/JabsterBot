@@ -7,22 +7,18 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      const start = Date.now();
+      // ❌ NO defer here (handled in interactionCreate)
 
-      // ✅ Defer first
-      await interaction.deferReply();
-
-      const botLatency = Date.now() - start;
+      const botLatency = Date.now() - interaction.createdTimestamp;
       const apiLatency = Math.round(interaction.client.ws.ping);
 
-      // 🔥 Optional status indicator
       function getStatus(ms) {
         if (ms < 100) return '🟢 Excellent';
         if (ms < 200) return '🟡 Good';
         return '🔴 Slow';
       }
 
-      await interaction.editReply(
+      return interaction.editReply(
         `🏓 **Pong!**\n\n` +
         `📡 Bot Latency: \`${botLatency}ms\` (${getStatus(botLatency)})\n` +
         `🌐 API Latency: \`${apiLatency}ms\` (${getStatus(apiLatency)})`

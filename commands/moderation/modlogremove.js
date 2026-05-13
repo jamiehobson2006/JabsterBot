@@ -15,12 +15,17 @@ module.exports = {
     .setName('modlogremove')
     .setDescription('Delete a moderation case')
     .addIntegerOption(option =>
-      option.setName('case_id').setDescription('Case ID').setRequired(true).setMinValue(1)
+      option
+        .setName('case_id')
+        .setDescription('Case ID')
+        .setRequired(true)
+        .setMinValue(1)
     ),
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
+
+      // ✅ SAFE DEFER (CRITICAL FIX)
       if (!interaction.deferred && !interaction.replied) {
         await interaction.deferReply({ ephemeral: true });
       }
@@ -48,15 +53,18 @@ module.exports = {
       let reason = caseData.reason || 'No reason';
       if (reason.length > 200) reason = reason.slice(0, 200) + '...';
 
-      // 🎯 Confirmation UI
+      // 🎯 Unique button IDs
+      const confirmId = `confirm_delete_${interaction.id}`;
+      const cancelId = `cancel_delete_${interaction.id}`;
+
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`confirm_delete_${interaction.id}`)
+          .setCustomId(confirmId)
           .setLabel('Confirm Delete')
           .setStyle(ButtonStyle.Danger),
 
         new ButtonBuilder()
-          .setCustomId(`cancel_delete_${interaction.id}`)
+          .setCustomId(cancelId)
           .setLabel('Cancel')
           .setStyle(ButtonStyle.Secondary)
       );
@@ -74,23 +82,31 @@ module.exports = {
         components: [row]
       });
 
-      // 🔒 Filtered collector
+      let handled = false;
+
       const collector = msg.createMessageComponentCollector({
         time: 15000,
-        filter: i => i.user.id === interaction.user.id
+        filter: i =>
+          i.user.id === interaction.user.id &&
+          [confirmId, cancelId].includes(i.customId)
       });
 
       collector.on('collect', async (i) => {
-        await i.update({ components: [] });
+        if (handled) return;
+        handled = true;
 
-        if (i.customId === `cancel_delete_${interaction.id}`) {
-          return interaction.editReply({
-            content: '❌ Deletion cancelled.'
-          });
-        }
+        try {
+          // ✅ SAFE ACK (FIXES 10062)
+          await i.update({ components: [] }).catch(() => {});
 
-        if (i.customId === `confirm_delete_${interaction.id}`) {
-          try {
+          if (i.customId === cancelId) {
+            return interaction.editReply({
+              content: '❌ Deletion cancelled.'
+            });
+          }
+
+          if (i.customId === confirmId) {
+
             // 🗑 Delete case
             await run(
               `DELETE FROM cases WHERE guildId=? AND id=?`,
@@ -121,14 +137,16 @@ module.exports = {
               }
             }
 
-            const embed = new EmbedBuilder()
-              .setColor(0xED4245)
-              .setTitle('Case Deleted')
-              .setDescription(
-                `🗑️ Removed case **#${caseId} (${caseData.action})** for <@${caseData.userId}>`
-              );
-
-            await interaction.editReply({ embeds: [embed] });
+            await interaction.editReply({
+              embeds: [
+                new EmbedBuilder()
+                  .setColor(0x57F287)
+                  .setTitle('Case Deleted')
+                  .setDescription(
+                    `🗑️ Removed case **#${caseId} (${caseData.action})** for <@${caseData.userId}>`
+                  )
+              ]
+            });
 
             // 📜 Log
             const logEmbed = createLogEmbed({
@@ -140,18 +158,19 @@ module.exports = {
             });
 
             await sendLog(interaction.client, interaction.guild.id, logEmbed);
-
-          } catch (err) {
-            console.error(err);
-            return interaction.editReply({
-              content: '❌ Failed to delete case.'
-            });
           }
+
+        } catch (err) {
+          console.error('Delete Collector Error:', err);
+
+          return interaction.editReply({
+            content: '❌ Failed to process deletion.'
+          });
         }
       });
 
-      collector.on('end', async (collected) => {
-        if (!collected.size) {
+      collector.on('end', async () => {
+        if (!handled) {
           try {
             await interaction.editReply({
               content: '⌛ Deletion timed out.',

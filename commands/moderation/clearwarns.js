@@ -17,10 +17,7 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
+      const user = interaction.options.getUser('user', true);
 
       // 🔐 Permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageGuild)) {
@@ -29,28 +26,20 @@ module.exports = {
         });
       }
 
-      const user = interaction.options.getUser('user', true);
-
       // 🚫 Basic checks
       if (user.id === interaction.user.id) {
-        return interaction.editReply({
-          content: '❌ You cannot clear your own warnings.'
-        });
+        return interaction.editReply({ content: '❌ You cannot clear your own warnings.' });
       }
 
       if (user.id === interaction.client.user.id) {
-        return interaction.editReply({
-          content: '❌ You cannot clear the bot’s warnings.'
-        });
+        return interaction.editReply({ content: '❌ You cannot clear the bot’s warnings.' });
       }
 
       if (user.id === interaction.guild.ownerId) {
-        return interaction.editReply({
-          content: '❌ You cannot clear warnings for the server owner.'
-        });
+        return interaction.editReply({ content: '❌ You cannot clear warnings for the server owner.' });
       }
 
-      // 🔄 Member check (for hierarchy)
+      // 🔄 Member check (hierarchy)
       const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
       if (member) {
@@ -61,8 +50,8 @@ module.exports = {
         }
       }
 
-      // 🔢 Get warn count (AWAITED)
-      const row = await get(
+      // 🔢 Get warn count (SYNC)
+      const row = get(
         `SELECT count FROM warns WHERE guildId=? AND userId=?`,
         [interaction.guild.id, user.id]
       );
@@ -75,21 +64,21 @@ module.exports = {
         });
       }
 
-      // 🧹 Delete warns (AWAITED)
-      await run(
+      // 🧹 Delete warns
+      run(
         `DELETE FROM warns WHERE guildId=? AND userId=?`,
         [interaction.guild.id, user.id]
       );
 
-      // 📁 Case log (AWAITED)
-      const result = await run(
+      // 📁 Case log
+      const result = run(
         `INSERT INTO cases (guildId, userId, moderatorId, action, reason, timestamp)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [
           interaction.guild.id,
           user.id,
           interaction.user.id,
-          'CLEARWARNS',
+          'CLEAR',
           `Cleared ${warnCount} warnings`,
           Date.now()
         ]
@@ -97,7 +86,7 @@ module.exports = {
 
       const caseId = result?.lastInsertRowid ?? 'N/A';
 
-      // 📩 DM user
+      // 📩 DM user (silent fail)
       try {
         await user.send({
           embeds: [
@@ -113,22 +102,23 @@ module.exports = {
         });
       } catch {}
 
-      // ✅ Response (clean embed)
+      // ✅ Response
       const embed = new EmbedBuilder()
         .setColor(0x57F287)
         .setTitle('Warnings Cleared')
-        .setDescription(`🧹 Cleared **${warnCount} warnings** for ${user.tag}`)
+        .setDescription(`🧹 Cleared **${warnCount} warnings** for <@${user.id}>`)
         .addFields({
           name: 'Case',
           value: `#${caseId}`,
           inline: true
-        });
+        })
+        .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
 
       // 📜 Mod log
       const logEmbed = createLogEmbed({
-        action: 'CLEAR WARNS',
+        action: 'CLEAR WARNINGS',
         user,
         moderator: interaction.user,
         reason: `Cleared ${warnCount} warnings`,
@@ -147,7 +137,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ Failed to clear warnings.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

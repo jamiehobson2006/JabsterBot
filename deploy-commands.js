@@ -1,66 +1,83 @@
-require('dotenv').config();
+require('dotenv').config(); // ✅ make sure this is FIRST
 
-const { REST, Routes } = require('discord.js');
 const fs = require('fs');
+const path = require('path');
+const { REST, Routes } = require('discord.js');
 
-const clientId = process.env.CLIENT_ID;
-const guildId = process.env.GUILD_ID;
-const token = process.env.TOKEN;
+// 🔐 CONFIG
+const TOKEN = process.env.TOKEN || 'YOUR_BOT_TOKEN';
+
+// ✅ YOUR CLIENT ID ADDED HERE
+const CLIENT_ID = process.env.CLIENT_ID || '1497394527571415181';
+
+// ⚡ DEV MODE
+const GUILD_ID = process.env.GUILD_ID || null;
+
+// 🔍 DEBUG (VERY IMPORTANT)
+console.log('CLIENT_ID:', CLIENT_ID);
+console.log('TOKEN LOADED:', !!TOKEN);
+
+// ❌ Safety check
+if (!TOKEN || TOKEN === 'YOUR_BOT_TOKEN') {
+  throw new Error('❌ TOKEN is missing or invalid');
+}
+
+if (!CLIENT_ID || CLIENT_ID === 'YOUR_CLIENT_ID') {
+  throw new Error('❌ CLIENT_ID is missing');
+}
 
 // ========================
 // 📦 LOAD COMMANDS
 // ========================
 const commands = [];
-const folders = fs.readdirSync('./commands');
 
-for (const folder of folders) {
-  const files = fs.readdirSync(`./commands/${folder}`)
+const foldersPath = path.join(__dirname, 'commands');
+const commandFolders = fs.readdirSync(foldersPath);
+
+for (const folder of commandFolders) {
+  const commandsPath = path.join(foldersPath, folder);
+  const commandFiles = fs
+    .readdirSync(commandsPath)
     .filter(file => file.endsWith('.js'));
 
-  for (const file of files) {
-    try {
-      const command = require(`./commands/${folder}/${file}`);
+  for (const file of commandFiles) {
+    const filePath = path.join(commandsPath, file);
+    const command = require(filePath);
 
-      if (!command.data) {
-        console.log(`⚠️ Skipped ${file} (no .data)`);
-        continue;
-      }
-
-      const json = command.data.toJSON();
-      commands.push(json);
-
-      console.log(`✅ Loaded ${json.name}`);
-
-    } catch (err) {
-      console.error(`❌ Failed loading ${file}:`, err);
+    if ('data' in command && 'execute' in command) {
+      commands.push(command.data.toJSON());
+    } else {
+      console.warn(`⚠️ Missing "data" or "execute" in ${file}`);
     }
   }
 }
 
-console.log(`\n📦 Total commands: ${commands.length}`);
+// ========================
+// 🚀 DEPLOY
+// ========================
+const rest = new REST({ version: '10' }).setToken(TOKEN);
 
-// ========================
-// 🚀 DEPLOY (FAST + CLEAN)
-// ========================
 (async () => {
   try {
-    if (!clientId || !guildId || !token) {
-      console.error('❌ Missing CLIENT_ID, GUILD_ID, or TOKEN in .env');
-      return;
+    console.log(`🔄 Deploying ${commands.length} commands...`);
+
+    if (GUILD_ID) {
+      await rest.put(
+        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+        { body: commands }
+      );
+
+      console.log(`✅ Commands deployed to guild ${GUILD_ID}`);
+    } else {
+      await rest.put(
+        Routes.applicationCommands(CLIENT_ID),
+        { body: commands }
+      );
+
+      console.log(`✅ Global commands deployed`);
     }
 
-    const rest = new REST({ version: '10', timeout: 15000 }).setToken(token);
-
-    console.log('\n🚀 Deploying commands...\n');
-
-    const data = await rest.put(
-      Routes.applicationGuildCommands(clientId, guildId),
-      { body: commands }
-    );
-
-    console.log(`✅ SUCCESS: ${data.length} commands deployed`);
-
-  } catch (err) {
-    console.error('❌ Deploy failed:', err);
+  } catch (error) {
+    console.error('❌ Deploy error:', error);
   }
 })();

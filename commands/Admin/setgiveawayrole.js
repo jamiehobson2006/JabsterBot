@@ -4,7 +4,7 @@ const {
   SlashCommandBuilder
 } = require('discord.js');
 
-const { run } = require('../../database');
+const { run, get } = require('../../database');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -19,45 +19,44 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
+      const role = interaction.options.getRole('role', true);
+      const botMember = interaction.guild.members.me;
 
-      // 🔐 Permission check
+      // ========================
+      // 🔐 PERMISSION CHECK
+      // ========================
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator)) {
         return interaction.editReply({
           content: '❌ You need **Administrator** to use this command.'
         });
       }
 
-      const role = interaction.options.getRole('role', true);
-      const botMember = interaction.guild.members.me;
-
       // ========================
       // 🚫 SAFETY CHECKS
       // ========================
 
+      // @everyone
       if (role.id === interaction.guild.id) {
         return interaction.editReply({
           content: '❌ You cannot use **@everyone**.'
         });
       }
 
+      // Managed roles
       if (role.managed) {
         return interaction.editReply({
           content: '❌ You cannot use bot/integration roles.'
         });
       }
 
-      // Bot hierarchy check (important for ticket perms)
+      // Bot hierarchy
       if (role.position >= botMember.roles.highest.position) {
         return interaction.editReply({
           content: '❌ That role is higher than or equal to my highest role.'
         });
       }
 
-      // Prevent user abuse
+      // User hierarchy
       if (role.position >= interaction.member.roles.highest.position) {
         return interaction.editReply({
           content: '❌ You cannot set a role higher than your highest role.'
@@ -65,10 +64,19 @@ module.exports = {
       }
 
       // ========================
-      // 💾 SAVE (AWAITED)
+      // 🧠 CHECK EXISTING
       // ========================
+      const existing = get(
+        `SELECT giveawayRoleId FROM guild_settings WHERE guildId=?`,
+        [interaction.guild.id]
+      );
 
-      await run(
+      const alreadySet = existing?.giveawayRoleId === role.id;
+
+      // ========================
+      // 💾 SAVE
+      // ========================
+      run(
         `INSERT INTO guild_settings (guildId, giveawayRoleId)
          VALUES (?, ?)
          ON CONFLICT(guildId)
@@ -79,16 +87,26 @@ module.exports = {
       // ========================
       // 🎨 RESPONSE
       // ========================
-
       const embed = new EmbedBuilder()
-        .setColor(0xF1C40F) // gold hex (more consistent)
-        .setTitle('Giveaway Role Updated')
-        .setDescription(`Giveaway claim tickets will now be handled by ${role}.`)
-        .addFields({
-          name: 'Role ID',
-          value: `\`${role.id}\``,
-          inline: true
-        })
+        .setColor(0xF1C40F)
+        .setTitle('🎉 Giveaway Role Updated')
+        .setDescription(
+          alreadySet
+            ? `${role} is already set as the giveaway role.`
+            : `Giveaway tickets will now be handled by ${role}.`
+        )
+        .addFields(
+          {
+            name: 'Role',
+            value: `${role}`,
+            inline: true
+          },
+          {
+            name: 'Role ID',
+            value: `\`${role.id}\``,
+            inline: true
+          }
+        )
         .setFooter({ text: `Set by ${interaction.user.tag}` })
         .setTimestamp();
 
@@ -97,16 +115,9 @@ module.exports = {
     } catch (err) {
       console.error('SetGiveawayRole Error:', err);
 
-      if (interaction.deferred || interaction.replied) {
-        return interaction.editReply({
-          content: '❌ Failed to set giveaway role. Please try again.'
-        });
-      } else {
-        return interaction.reply({
-          content: '❌ Failed to set giveaway role. Please try again.',
-          ephemeral: true
-        });
-      }
+      return interaction.editReply({
+        content: '❌ Failed to set giveaway role.'
+      });
     }
   }
 };

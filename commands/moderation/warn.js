@@ -7,6 +7,12 @@ const {
 const { run, get } = require('../../database');
 const { sendLog, createLogEmbed } = require('../../utils/logger');
 
+// ⏱ Punishment durations
+const punishments = {
+  3: { type: 'timeout', duration: 10 * 60 * 1000 }, // 10 minutes
+  5: { type: 'timeout', duration: 60 * 60 * 1000 }  // 1 hour
+};
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('warn')
@@ -20,15 +26,20 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
 
-      // 🔐 Permission
+      // 🔐 User permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ModerateMembers)) {
         return interaction.editReply({
           content: '❌ You need **Moderate Members** permission.'
+        });
+      }
+
+      const botMember = interaction.guild.members.me;
+
+      // ❌ Bot permission
+      if (!botMember.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+        return interaction.editReply({
+          content: '❌ I do not have permission to moderate members.'
         });
       }
 
@@ -100,18 +111,45 @@ module.exports = {
       const caseId = result?.lastInsertRowid ?? 'N/A';
 
       // ========================
-      // ⚠️ ESCALATION
+      // 🚨 ESCALATION SYSTEM
       // ========================
-      let escalation = '';
+      let escalationText = null;
 
-      if (warnCount === 3) {
-        escalation = '🚨 User has reached **3 warnings**.';
-      } else if (warnCount === 5) {
-        escalation = '⛔ User has reached **5 warnings**.';
+      const punishment = punishments[warnCount];
+
+      if (punishment) {
+        try {
+          if (punishment.type === 'timeout' && member.moderatable) {
+            await member.timeout(
+              punishment.duration,
+              `Auto punishment (${warnCount} warns)`
+            );
+
+            const minutes = Math.floor(punishment.duration / 60000);
+
+            escalationText = `🔇 Auto timeout applied (**${minutes} minutes**)`;
+
+            // 📁 Add punishment case
+            await run(
+              `INSERT INTO cases (guildId, userId, moderatorId, action, reason, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [
+                interaction.guild.id,
+                user.id,
+                interaction.client.user.id,
+                'AUTO-MUTE',
+                `Reached ${warnCount} warns`,
+                Date.now()
+              ]
+            );
+          }
+        } catch (err) {
+          console.error('Escalation Error:', err);
+        }
       }
 
       // ========================
-      // 📩 DM USER (optional but good)
+      // 📩 DM USER
       // ========================
       try {
         await user.send({
@@ -119,7 +157,10 @@ module.exports = {
             new EmbedBuilder()
               .setColor(0xF1C40F)
               .setTitle(`You were warned in ${interaction.guild.name}`)
-              .setDescription(`Reason: ${reason}`)
+              .setDescription(
+                `Reason: ${reason}\n\nTotal Warnings: ${warnCount}`
+              )
+              .setTimestamp()
           ]
         });
       } catch {}
@@ -139,10 +180,10 @@ module.exports = {
         .setFooter({ text: `By ${interaction.user.tag}` })
         .setTimestamp();
 
-      if (escalation) {
+      if (escalationText) {
         embed.addFields({
-          name: 'Escalation',
-          value: escalation
+          name: 'Action Taken',
+          value: escalationText
         });
       }
 

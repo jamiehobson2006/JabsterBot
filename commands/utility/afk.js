@@ -18,16 +18,24 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
 
       let reason = interaction.options.getString('reason') || 'AFK';
 
+      // ========================
+      // 🧹 SANITISE INPUT
+      // ========================
+      reason = reason.trim();
+
+      if (!reason.length) reason = 'AFK';
+
+      // Prevent abuse (mass mentions)
+      reason = reason.replace(/@everyone|@here/g, '[mention removed]');
+
       const userId = interaction.user.id;
 
-      // 🔍 Check existing AFK
+      // ========================
+      // 🔍 CHECK EXISTING
+      // ========================
       const existing = await get(
         `SELECT * FROM afk WHERE userId=?`,
         [userId]
@@ -35,7 +43,9 @@ module.exports = {
 
       const now = Date.now();
 
-      // 💾 Save AFK
+      // ========================
+      // 💾 SAVE
+      // ========================
       await run(
         `INSERT INTO afk (userId, reason, timestamp)
          VALUES (?, ?, ?)
@@ -44,21 +54,30 @@ module.exports = {
         [userId, reason, now, reason, now]
       );
 
-      // 🎨 Embed
+      // ========================
+      // 🎨 EMBED
+      // ========================
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle('💤 AFK Set')
+        .setTitle('💤 AFK Status Set')
         .setDescription(
           existing
-            ? 'Your AFK status has been updated.'
-            : 'You are now AFK.'
+            ? `Your AFK status has been **updated**.`
+            : `You are now AFK.`
         )
-        .addFields({
-          name: 'Reason',
-          value: reason
-        })
+        .addFields(
+          {
+            name: 'Reason',
+            value: reason
+          },
+          {
+            name: 'Since',
+            value: `<t:${Math.floor(now / 1000)}:R>`,
+            inline: true
+          }
+        )
         .setFooter({
-          text: `Since ${new Date(now).toLocaleTimeString()}`
+          text: `User: ${interaction.user.tag}`
         })
         .setTimestamp();
 

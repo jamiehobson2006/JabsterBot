@@ -11,7 +11,6 @@ module.exports = {
       option
         .setName('guess')
         .setDescription('Choose heads or tails (optional)')
-        .setRequired(false)
         .addChoices(
           { name: 'Heads', value: 'heads' },
           { name: 'Tails', value: 'tails' }
@@ -20,28 +19,26 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply();
-      }
-
       const guess = interaction.options.getString('guess');
 
       // 🎲 Flip
       const result = Math.random() < 0.5 ? 'heads' : 'tails';
 
-      let outcomeText = '';
-      let color = 0xF1C40F; // gold default
+      // 🎭 Coin emoji variation
+      const coinEmoji = result === 'heads' ? '🪙' : '💿';
+
+      let outcomeText;
+      let color = 0xF1C40F; // default gold
 
       if (guess) {
         const win = guess === result;
 
         if (win) {
           outcomeText = `🎉 You guessed **${guess}** and got it right!`;
-          color = 0x57F287; // green
+          color = 0x57F287;
         } else {
           outcomeText = `💀 You guessed **${guess}** but it landed on **${result}**.`;
-          color = 0xED4245; // red
+          color = 0xED4245;
         }
       } else {
         outcomeText = `The coin landed on **${result.toUpperCase()}**.`;
@@ -52,7 +49,7 @@ module.exports = {
         .setColor(color)
         .setTitle('🪙 Coin Flip')
         .setDescription(
-          `🪙 Result: **${result.toUpperCase()}**\n\n${outcomeText}`
+          `${coinEmoji} **Result:** ${result.toUpperCase()}\n\n${outcomeText}`
         )
         .setFooter({ text: 'Heads or tails?' })
         .setTimestamp();
@@ -69,7 +66,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ Coinflip failed.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

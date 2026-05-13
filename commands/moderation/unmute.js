@@ -13,23 +13,33 @@ module.exports = {
     .setDescription('Remove timeout (unmute) from a user')
     .addUserOption(option =>
       option.setName('user').setDescription('User').setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName('reason').setDescription('Reason').setMaxLength(300)
     ),
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
 
-      // 🔐 Permission
+
+      // 🔐 User permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ModerateMembers)) {
         return interaction.editReply({
           content: '❌ You need **Moderate Members** permission.'
         });
       }
 
+      const botMember = interaction.guild.members.me;
+
+      // ❌ Bot permission
+      if (!botMember.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+        return interaction.editReply({
+          content: '❌ I do not have permission to moderate members.'
+        });
+      }
+
       const user = interaction.options.getUser('user', true);
+      const reason = interaction.options.getString('reason') || 'No reason provided';
 
       // 🚫 Checks
       if (user.id === interaction.user.id) {
@@ -66,12 +76,28 @@ module.exports = {
       // 🔍 Check if actually muted
       if (!member.isCommunicationDisabled()) {
         return interaction.editReply({
-          content: '❌ This user is not muted.'
+          content: '⚠️ This user is not muted.'
         });
       }
 
       // 🔊 Remove timeout
-      await member.timeout(null, `Unmuted by ${interaction.user.tag}`);
+      await member.timeout(null, `${reason} | Unmuted by ${interaction.user.tag}`)
+        .catch(() => {
+          throw new Error('Failed to remove timeout');
+        });
+
+      // 📩 DM user (silent fail)
+      try {
+        await user.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x57F287)
+              .setTitle(`You were unmuted in ${interaction.guild.name}`)
+              .setDescription(`Reason: ${reason}`)
+              .setTimestamp()
+          ]
+        });
+      } catch {}
 
       // 📁 Case
       const result = await run(
@@ -82,7 +108,7 @@ module.exports = {
           user.id,
           interaction.user.id,
           'UNMUTE',
-          'Manual unmute',
+          reason,
           Date.now()
         ]
       );
@@ -94,7 +120,10 @@ module.exports = {
         .setColor(0x57F287)
         .setTitle('User Unmuted')
         .setDescription(`🔊 **${user.tag}** has been unmuted`)
-        .addFields({ name: 'Case', value: `#${caseId}`, inline: true })
+        .addFields(
+          { name: 'Reason', value: reason },
+          { name: 'Case', value: `#${caseId}`, inline: true }
+        )
         .setFooter({ text: `By ${interaction.user.tag}` })
         .setTimestamp();
 
@@ -105,7 +134,7 @@ module.exports = {
         action: 'UNMUTE',
         user,
         moderator: interaction.user,
-        reason: 'Manual unmute',
+        reason,
         caseId
       });
 
@@ -116,7 +145,7 @@ module.exports = {
 
       if (interaction.deferred || interaction.replied) {
         return interaction.editReply({
-          content: '❌ Failed to unmute.'
+          content: '❌ Failed to unmute. Check my permissions.'
         });
       } else {
         return interaction.reply({

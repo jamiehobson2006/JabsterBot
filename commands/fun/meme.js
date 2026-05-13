@@ -7,7 +7,7 @@ const {
 async function fetchMeme(retries = 3) {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
+    const timeout = setTimeout(() => controller.abort(), 5000);
 
     const res = await fetch('https://meme-api.com/gimme', {
       signal: controller.signal
@@ -15,9 +15,11 @@ async function fetchMeme(retries = 3) {
 
     clearTimeout(timeout);
 
+    if (!res.ok) throw new Error('Bad response');
+
     const data = await res.json();
 
-    // ❌ Invalid / NSFW / missing image
+    // ❌ Filter bad memes
     if (
       !data ||
       !data.url ||
@@ -43,10 +45,10 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply();
-      }
+      // ❌ REMOVED deferReply (handled globally)
+
+      // Optional: quick feedback (feels faster UX)
+      await interaction.editReply({ content: '📡 Fetching a meme...' });
 
       const data = await fetchMeme();
 
@@ -70,12 +72,14 @@ module.exports = {
         })
         .setTimestamp();
 
-      // Only set URL if valid
       if (data.postLink) {
         embed.setURL(data.postLink);
       }
 
-      return interaction.editReply({ embeds: [embed] });
+      return interaction.editReply({
+        content: null,
+        embeds: [embed]
+      });
 
     } catch (err) {
       console.error('Meme Command Error:', err);
@@ -87,7 +91,7 @@ module.exports = {
       } else {
         return interaction.reply({
           content: '❌ Error fetching meme.',
-          ephemeral: true
+          flags: 64
         });
       }
     }

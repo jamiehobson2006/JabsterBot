@@ -13,10 +13,6 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ✅ Ensure reply exists (PUBLIC)
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply(); // not ephemeral
-      }
 
       const embed = new EmbedBuilder()
         .setColor(0xE67E22)
@@ -61,9 +57,9 @@ module.exports = {
 
         new ButtonBuilder()
           .setLabel('Community')
-          .setEmoji('📢')
+          .setEmoji('👥')
           .setStyle(ButtonStyle.Link)
-          .setURL('https://discord.gg/') // replace this
+          .setURL('https://www.roblox.com/communities/11716549/JabsterStudios#!/about')
       );
 
       await interaction.editReply({

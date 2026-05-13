@@ -20,7 +20,6 @@ module.exports = {
     try {
       // ✅ Ensure reply exists
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
       }
 
       const target = interaction.options.getUser('user') || interaction.user;
