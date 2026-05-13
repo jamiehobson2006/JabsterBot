@@ -1,4 +1,4 @@
-const {
+﻿const {
   PermissionsBitField,
   ActionRowBuilder,
   ButtonBuilder,
@@ -25,15 +25,15 @@ module.exports = {
   async execute(interaction) {
     try {
 
-      // ✅ SAFE DEFER (CRITICAL FIX)
+      // âœ… SAFE DEFER (CRITICAL FIX)
       if (!interaction.deferred && !interaction.replied) {
         await interaction.deferReply({ ephemeral: true });
       }
 
-      // 🔐 Permission
+      // ðŸ” Permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageGuild)) {
         return interaction.editReply({
-          content: '❌ You need **Manage Server** permission.'
+          content: 'âŒ You need **Manage Server** permission.'
         });
       }
 
@@ -46,14 +46,14 @@ module.exports = {
 
       if (!caseData) {
         return interaction.editReply({
-          content: '❌ Case not found.'
+          content: 'âŒ Case not found.'
         });
       }
 
       let reason = caseData.reason || 'No reason';
       if (reason.length > 200) reason = reason.slice(0, 200) + '...';
 
-      // 🎯 Unique button IDs
+      // ðŸŽ¯ Unique button IDs
       const confirmId = `confirm_delete_${interaction.id}`;
       const cancelId = `cancel_delete_${interaction.id}`;
 
@@ -76,7 +76,7 @@ module.exports = {
             .setTitle('Confirm Case Deletion')
             .setDescription(
               `Delete case **#${caseId} (${caseData.action})** for <@${caseData.userId}>?\n\n` +
-              `📄 ${reason}`
+              `ðŸ“„ ${reason}`
             )
         ],
         components: [row]
@@ -96,24 +96,24 @@ module.exports = {
         handled = true;
 
         try {
-          // ✅ SAFE ACK (FIXES 10062)
+          // âœ… SAFE ACK (FIXES 10062)
           await i.update({ components: [] }).catch(() => {});
 
           if (i.customId === cancelId) {
             return interaction.editReply({
-              content: '❌ Deletion cancelled.'
+              content: 'âŒ Deletion cancelled.'
             });
           }
 
           if (i.customId === confirmId) {
 
-            // 🗑 Delete case
+            // ðŸ—‘ Delete case
             await run(
               `DELETE FROM cases WHERE guildId=? AND id=?`,
               [interaction.guild.id, caseId]
             );
 
-            // ⚠️ Fix warn count
+            // âš ï¸ Fix warn count
             if (caseData.action === 'WARN') {
               const warnRow = await get(
                 `SELECT count FROM warns WHERE guildId=? AND userId=?`,
@@ -143,18 +143,18 @@ module.exports = {
                   .setColor(0x57F287)
                   .setTitle('Case Deleted')
                   .setDescription(
-                    `🗑️ Removed case **#${caseId} (${caseData.action})** for <@${caseData.userId}>`
+                    `ðŸ—‘ï¸ Removed case **#${caseId} (${caseData.action})** for <@${caseData.userId}>`
                   )
               ]
             });
 
-            // 📜 Log
+            // ðŸ“œ Log
             const logEmbed = createLogEmbed({
               action: 'DELETE CASE',
               user: { id: caseData.userId },
               moderator: interaction.user,
               reason: `Deleted case #${caseId} (${caseData.action})`,
-              caseId
+
             });
 
             await sendLog(interaction.client, interaction.guild.id, logEmbed);
@@ -164,7 +164,7 @@ module.exports = {
           console.error('Delete Collector Error:', err);
 
           return interaction.editReply({
-            content: '❌ Failed to process deletion.'
+            content: 'âŒ Failed to process deletion.'
           });
         }
       });
@@ -173,7 +173,7 @@ module.exports = {
         if (!handled) {
           try {
             await interaction.editReply({
-              content: '⌛ Deletion timed out.',
+              content: 'âŒ› Deletion timed out.',
               components: []
             });
           } catch {}
@@ -185,14 +185,15 @@ module.exports = {
 
       if (interaction.deferred || interaction.replied) {
         return interaction.editReply({
-          content: '❌ Failed to remove case.'
+          content: 'âŒ Failed to remove case.'
         });
       } else {
         return interaction.reply({
-          content: '❌ Failed to remove case.',
+          content: 'âŒ Failed to remove case.',
           ephemeral: true
         });
       }
     }
   }
 };
+

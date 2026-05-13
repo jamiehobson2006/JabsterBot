@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Collection, Partials } = require('discord.js');
+﻿const { Client, GatewayIntentBits, Collection, Partials } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -20,7 +20,7 @@ const client = new Client({
 });
 
 // ========================
-// 📦 COMMANDS
+// ðŸ“¦ COMMANDS
 // ========================
 client.commands = new Collection();
 
@@ -44,23 +44,23 @@ function loadCommands() {
         const command = require(filePath);
 
         if (!command.data || !command.execute) {
-          console.log(`⚠️ Skipped ${file}`);
+          console.log(`âš ï¸ Skipped ${file}`);
           continue;
         }
 
         client.commands.set(command.data.name, command);
 
       } catch (err) {
-        console.error(`❌ Failed loading ${file}:`, err);
+        console.error(`âŒ Failed loading ${file}:`, err);
       }
     }
   }
 
-  console.log(`✅ Loaded ${client.commands.size} commands`);
+  console.log(`âœ… Loaded ${client.commands.size} commands`);
 }
 
 // ========================
-// 📂 EVENTS
+// ðŸ“‚ EVENTS
 // ========================
 function loadEvents() {
   const eventsPath = path.join(__dirname, 'events');
@@ -86,15 +86,15 @@ function loadEvents() {
       }
 
     } catch (err) {
-      console.error(`❌ Failed loading event ${file}:`, err);
+      console.error(`âŒ Failed loading event ${file}:`, err);
     }
   }
 
-  console.log(`✅ Loaded ${files.length} events`);
+  console.log(`âœ… Loaded ${files.length} events`);
 }
 
 // ========================
-// 🔊 AUTO UNMUTE SYSTEM
+// ðŸ”Š AUTO UNMUTE SYSTEM
 // ========================
 function startMuteLoop() {
   setInterval(async () => {
@@ -125,45 +125,45 @@ function startMuteLoop() {
         );
       }
 
-      console.log(`🔊 Processed ${expired.length} expired mutes`);
+      console.log(`ðŸ”Š Processed ${expired.length} expired mutes`);
 
     } catch (err) {
-      console.error('❌ Auto-unmute error:', err);
+      console.error('âŒ Auto-unmute error:', err);
     }
   }, 15000);
 }
 
 // ========================
-// 🚀 READY
+// ðŸš€ READY
 // ========================
 client.once('clientReady', async () => {
-  console.log(`🚀 Logged in as ${client.user.tag}`);
+  console.log(`ðŸš€ Logged in as ${client.user.tag}`);
 
   await new Promise(res => setTimeout(res, 3000));
 
-  console.log('✅ Systems initialized');
+  console.log('âœ… Systems initialized');
 
   startMuteLoop();
 });
 
 // ========================
-// ❌ GLOBAL ERROR HANDLING
+// âŒ GLOBAL ERROR HANDLING
 // ========================
 process.on('unhandledRejection', err => {
-  console.error('❌ Unhandled Promise Rejection:', err);
+  console.error('âŒ Unhandled Promise Rejection:', err);
 });
 
 process.on('uncaughtException', err => {
-  console.error('❌ Uncaught Exception:', err);
+  console.error('âŒ Uncaught Exception:', err);
 });
 
 // ========================
-// 🔧 INIT
+// ðŸ”§ INIT
 // ========================
 loadCommands();
 loadEvents();
 
 // ========================
-// 🔑 LOGIN
+// ðŸ”‘ LOGIN
 // ========================
-client.login(process.env.TOKEN);
+client.login(process.env.TOKEN || process.env.Token);

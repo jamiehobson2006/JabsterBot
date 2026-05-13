@@ -1,92 +1,55 @@
-const {
+﻿const {
   PermissionsBitField,
   EmbedBuilder,
-  SlashCommandBuilder
+  SlashCommandBuilder,
 } = require('discord.js');
 
 const { run, get } = require('../../database');
-const { sendLog, createLogEmbed } = require('../../utils/logger');
+const { createAuditEmbed, logAudit } = require('../../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('clearwarns')
     .setDescription('Clear all warnings for a user')
-    .addUserOption(option =>
-      option.setName('user').setDescription('User').setRequired(true)
-    ),
+    .addUserOption((option) => option.setName('user').setDescription('User').setRequired(true)),
 
   async execute(interaction) {
     try {
       const user = interaction.options.getUser('user', true);
 
-      // 🔐 Permission
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageGuild)) {
-        return interaction.editReply({
-          content: '❌ You need **Manage Server** permission.'
-        });
+        return interaction.editReply({ content: 'You need Manage Server permission.' });
       }
 
-      // 🚫 Basic checks
       if (user.id === interaction.user.id) {
-        return interaction.editReply({ content: '❌ You cannot clear your own warnings.' });
+        return interaction.editReply({ content: 'You cannot clear your own warnings.' });
       }
 
       if (user.id === interaction.client.user.id) {
-        return interaction.editReply({ content: '❌ You cannot clear the bot’s warnings.' });
+        return interaction.editReply({ content: "You cannot clear the bot's warnings." });
       }
 
       if (user.id === interaction.guild.ownerId) {
-        return interaction.editReply({ content: '❌ You cannot clear warnings for the server owner.' });
+        return interaction.editReply({ content: 'You cannot clear warnings for the server owner.' });
       }
 
-      // 🔄 Member check (hierarchy)
       const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-
-      if (member) {
-        if (member.roles.highest.position >= interaction.member.roles.highest.position) {
-          return interaction.editReply({
-            content: '❌ You cannot clear warnings for this user (role hierarchy).'
-          });
-        }
+      if (member && member.roles.highest.position >= interaction.member.roles.highest.position) {
+        return interaction.editReply({ content: 'You cannot clear warnings for this user because of role hierarchy.' });
       }
 
-      // 🔢 Get warn count (SYNC)
       const row = get(
-        `SELECT count FROM warns WHERE guildId=? AND userId=?`,
-        [interaction.guild.id, user.id]
+        'SELECT count FROM warns WHERE guildId = ? AND userId = ?',
+        [interaction.guild.id, user.id],
       );
-
       const warnCount = row?.count || 0;
 
       if (warnCount === 0) {
-        return interaction.editReply({
-          content: `ℹ️ ${user.tag} has no warnings to clear.`
-        });
+        return interaction.editReply({ content: `${user.tag} has no warnings to clear.` });
       }
 
-      // 🧹 Delete warns
-      run(
-        `DELETE FROM warns WHERE guildId=? AND userId=?`,
-        [interaction.guild.id, user.id]
-      );
+      run('DELETE FROM warns WHERE guildId = ? AND userId = ?', [interaction.guild.id, user.id]);
 
-      // 📁 Case log
-      const result = run(
-        `INSERT INTO cases (guildId, userId, moderatorId, action, reason, timestamp)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          interaction.guild.id,
-          user.id,
-          interaction.user.id,
-          'CLEAR',
-          `Cleared ${warnCount} warnings`,
-          Date.now()
-        ]
-      );
-
-      const caseId = result?.lastInsertRowid ?? 'N/A';
-
-      // 📩 DM user (silent fail)
       try {
         await user.send({
           embeds: [
@@ -95,51 +58,39 @@ module.exports = {
               .setTitle('Your warnings were cleared')
               .setDescription(
                 `Your warnings in **${interaction.guild.name}** have been cleared.\n\n` +
-                `Amount removed: **${warnCount}**`
+                `Amount removed: **${warnCount}**`,
               )
-              .setTimestamp()
-          ]
+              .setTimestamp(),
+          ],
         });
       } catch {}
 
-      // ✅ Response
-      const embed = new EmbedBuilder()
-        .setColor(0x57F287)
-        .setTitle('Warnings Cleared')
-        .setDescription(`🧹 Cleared **${warnCount} warnings** for <@${user.id}>`)
-        .addFields({
-          name: 'Case',
-          value: `#${caseId}`,
-          inline: true
-        })
-        .setTimestamp();
-
-      await interaction.editReply({ embeds: [embed] });
-
-      // 📜 Mod log
-      const logEmbed = createLogEmbed({
-        action: 'CLEAR WARNINGS',
-        user,
-        moderator: interaction.user,
-        reason: `Cleared ${warnCount} warnings`,
-        caseId
+      await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x57F287)
+            .setTitle('Warnings Cleared')
+            .setDescription(`Cleared **${warnCount} warning(s)** for <@${user.id}>`)
+            .setTimestamp(),
+        ],
       });
 
-      await sendLog(interaction.client, interaction.guild.id, logEmbed);
-
+      await logAudit(interaction.client, interaction.guild.id, {
+        action: 'CLEAR_WARNINGS',
+        targetId: user.id,
+        executorId: interaction.user.id,
+        metadata: { warningsCleared: warnCount },
+        embed: createAuditEmbed({
+          action: 'Warnings Cleared',
+          target: `<@${user.id}> (${user.tag})`,
+          executor: `<@${interaction.user.id}>`,
+          extra: `${warnCount} warning(s) cleared`,
+          color: 'Green',
+        }),
+      });
     } catch (err) {
       console.error('ClearWarns Error:', err);
-
-      if (interaction.deferred || interaction.replied) {
-        return interaction.editReply({
-          content: '❌ Failed to clear warnings.'
-        });
-      } else {
-        return interaction.reply({
-          content: '❌ Failed to clear warnings.',
-          flags: 64
-        });
-      }
+      return interaction.editReply({ content: 'Failed to clear warnings.' });
     }
-  }
+  },
 };

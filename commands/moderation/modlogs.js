@@ -1,4 +1,4 @@
-const {
+﻿const {
   PermissionsBitField,
   EmbedBuilder,
   ActionRowBuilder,
@@ -14,7 +14,7 @@ const { all } = require('../../database');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('cases')
+    .setName('modlogs')
     .setDescription('View moderation cases')
 
     .addUserOption(option =>
@@ -32,7 +32,8 @@ module.exports = {
           { name: 'Ban', value: 'BAN' },
           { name: 'Kick', value: 'KICK' },
           { name: 'Warn', value: 'WARN' },
-          { name: 'Clear Warns', value: 'CLEARWARNS' }
+          { name: 'Mute', value: 'MUTE' },
+          { name: 'Unmute', value: 'UNMUTE' }
         )
     )
 
@@ -48,7 +49,7 @@ module.exports = {
 
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageGuild)) {
         return interaction.editReply({
-          content: '❌ You need **Manage Server** permission.'
+          content: 'âŒ You need **Manage Server** permission.'
         });
       }
 
@@ -64,7 +65,7 @@ module.exports = {
       const id = interaction.id;
 
       // ========================
-      // 🔎 QUERY FUNCTION (FOR REFRESH)
+      // ðŸ”Ž QUERY FUNCTION (FOR REFRESH)
       // ========================
       const fetchCases = async () => {
         let query = `SELECT * FROM cases WHERE guildId=?`;
@@ -95,12 +96,12 @@ module.exports = {
 
       if (!cases.length) {
         return interaction.editReply({
-          content: '📭 No cases found.'
+          content: 'ðŸ“­ No cases found.'
         });
       }
 
       // ========================
-      // 📦 BUILD PAGE
+      // ðŸ“¦ BUILD PAGE
       // ========================
       function build(page) {
         const totalPages = Math.max(1, Math.ceil(cases.length / perPage));
@@ -113,7 +114,7 @@ module.exports = {
           .setTitle('Moderation Cases')
           .setColor(0x5865F2)
           .setFooter({
-            text: `Page ${page + 1}/${totalPages} • ${cases.length} cases`
+            text: `Page ${page + 1}/${totalPages} â€¢ ${cases.length} cases`
           })
           .setTimestamp();
 
@@ -125,11 +126,11 @@ module.exports = {
           }
 
           embed.addFields({
-            name: `#${c.id} • ${c.action}`,
+            name: `#${c.id} â€¢ ${c.action}`,
             value:
               `User: <@${c.userId}>\n` +
               `Mod: <@${c.moderatorId}>\n` +
-              `Time: <t:${Math.floor(c.timestamp / 1000)}:R>\n` +
+              `Time: <t:${Math.floor((c.timestamp || c.createdAt || Date.now()) / 1000)}:R>\n` +
               `Reason: ${reason}`
           });
         }
@@ -141,36 +142,36 @@ module.exports = {
         return new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`first_${id}`)
-            .setLabel('⏮')
+            .setLabel('â®')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page === 0),
 
           new ButtonBuilder()
             .setCustomId(`prev_${id}`)
-            .setLabel('⬅️')
+            .setLabel('â¬…ï¸')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page === 0),
 
           new ButtonBuilder()
             .setCustomId(`jump_${id}`)
-            .setLabel('🔢')
+            .setLabel('ðŸ”¢')
             .setStyle(ButtonStyle.Primary),
 
           new ButtonBuilder()
             .setCustomId(`next_${id}`)
-            .setLabel('➡️')
+            .setLabel('âž¡ï¸')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page >= totalPages - 1),
 
           new ButtonBuilder()
             .setCustomId(`last_${id}`)
-            .setLabel('⏭')
+            .setLabel('â­')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page >= totalPages - 1),
 
           new ButtonBuilder()
             .setCustomId(`refresh_${id}`)
-            .setLabel('🔄')
+            .setLabel('ðŸ”„')
             .setStyle(ButtonStyle.Success)
         );
       }
@@ -196,7 +197,7 @@ module.exports = {
         busy = true;
 
         try {
-          // 🔢 Jump modal
+          // ðŸ”¢ Jump modal
           if (i.customId === `jump_${id}`) {
             const modal = new ModalBuilder()
               .setCustomId(`jumpmodal_${id}`)
@@ -221,7 +222,7 @@ module.exports = {
             const inputPage = parseInt(modalSubmit.fields.getTextInputValue('page'));
 
             if (isNaN(inputPage)) {
-              return modalSubmit.reply({ content: '❌ Invalid number.', ephemeral: true });
+              return modalSubmit.reply({ content: 'âŒ Invalid number.', ephemeral: true });
             }
 
             page = Math.min(Math.max(inputPage - 1, 0), totalPages - 1);
@@ -236,7 +237,7 @@ module.exports = {
 
           await i.deferUpdate();
 
-          // 🔄 TRUE refresh
+          // ðŸ”„ TRUE refresh
           if (i.customId === `refresh_${id}`) {
             cases = await fetchCases();
           }
@@ -272,14 +273,16 @@ module.exports = {
 
       if (interaction.deferred || interaction.replied) {
         return interaction.editReply({
-          content: '❌ Failed to load cases.'
+          content: 'âŒ Failed to load cases.'
         });
       } else {
         return interaction.reply({
-          content: '❌ Failed to load cases.',
+          content: 'âŒ Failed to load cases.',
           flags: 64
         });
       }
     }
   }
 };
+
+

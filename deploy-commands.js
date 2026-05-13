@@ -1,34 +1,65 @@
-require('dotenv').config(); // ✅ make sure this is FIRST
+﻿require('dotenv').config(); // âœ… make sure this is FIRST
 
 const fs = require('fs');
 const path = require('path');
-const { REST, Routes } = require('discord.js');
+const { PermissionFlagsBits, REST, Routes } = require('discord.js');
 
-// 🔐 CONFIG
-const TOKEN = process.env.TOKEN || 'YOUR_BOT_TOKEN';
+// ðŸ” CONFIG
+const TOKEN = process.env.TOKEN || process.env.Token || 'YOUR_BOT_TOKEN';
 
-// ✅ YOUR CLIENT ID ADDED HERE
+// âœ… YOUR CLIENT ID ADDED HERE
 const CLIENT_ID = process.env.CLIENT_ID || '1497394527571415181';
 
-// ⚡ DEV MODE
+// âš¡ DEV MODE
 const GUILD_ID = process.env.GUILD_ID || null;
 
-// 🔍 DEBUG (VERY IMPORTANT)
+// ðŸ” DEBUG (VERY IMPORTANT)
 console.log('CLIENT_ID:', CLIENT_ID);
 console.log('TOKEN LOADED:', !!TOKEN);
 
-// ❌ Safety check
+// âŒ Safety check
 if (!TOKEN || TOKEN === 'YOUR_BOT_TOKEN') {
-  throw new Error('❌ TOKEN is missing or invalid');
+  throw new Error('âŒ TOKEN is missing or invalid');
 }
 
 if (!CLIENT_ID || CLIENT_ID === 'YOUR_CLIENT_ID') {
-  throw new Error('❌ CLIENT_ID is missing');
+  throw new Error('âŒ CLIENT_ID is missing');
 }
 
 // ========================
-// 📦 LOAD COMMANDS
+// ðŸ“¦ LOAD COMMANDS
 // ========================
+const permissionDefaults = {
+  ban: PermissionFlagsBits.BanMembers,
+  unban: PermissionFlagsBits.BanMembers,
+  kick: PermissionFlagsBits.KickMembers,
+  mute: PermissionFlagsBits.ModerateMembers,
+  unmute: PermissionFlagsBits.ModerateMembers,
+  warn: PermissionFlagsBits.ModerateMembers,
+  warnings: PermissionFlagsBits.ModerateMembers,
+  clearwarns: PermissionFlagsBits.ModerateMembers,
+  case: PermissionFlagsBits.ManageGuild,
+  cases: PermissionFlagsBits.ManageGuild,
+  modlogs: PermissionFlagsBits.ManageGuild,
+  history: PermissionFlagsBits.ManageGuild,
+  editcase: PermissionFlagsBits.ManageGuild,
+  modlogremove: PermissionFlagsBits.ManageGuild,
+  purge: PermissionFlagsBits.ManageMessages,
+  role: PermissionFlagsBits.ManageRoles,
+  slowmode: PermissionFlagsBits.ManageChannels,
+  lock: PermissionFlagsBits.ManageChannels,
+  unlock: PermissionFlagsBits.ManageChannels,
+  poll: PermissionFlagsBits.ManageMessages,
+  setmodlogs: PermissionFlagsBits.ManageGuild,
+  suggestchannel: PermissionFlagsBits.ManageGuild,
+  setadminrole: PermissionFlagsBits.Administrator,
+  setstaffrole: PermissionFlagsBits.Administrator,
+  setgiveawayrole: PermissionFlagsBits.Administrator,
+  setticketchannel: PermissionFlagsBits.Administrator,
+  settranscriptchannel: PermissionFlagsBits.Administrator,
+  ticketpanel: PermissionFlagsBits.Administrator,
+};
+
 const commands = [];
 
 const foldersPath = path.join(__dirname, 'commands');
@@ -45,21 +76,26 @@ for (const folder of commandFolders) {
     const command = require(filePath);
 
     if ('data' in command && 'execute' in command) {
-      commands.push(command.data.toJSON());
+            const commandJson = command.data.toJSON();
+      const defaultPermission = permissionDefaults[commandJson.name];
+      if (defaultPermission !== undefined) {
+        commandJson.default_member_permissions = defaultPermission.toString();
+      }
+      commands.push(commandJson);
     } else {
-      console.warn(`⚠️ Missing "data" or "execute" in ${file}`);
+      console.warn(`âš ï¸ Missing "data" or "execute" in ${file}`);
     }
   }
 }
 
 // ========================
-// 🚀 DEPLOY
+// ðŸš€ DEPLOY
 // ========================
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 (async () => {
   try {
-    console.log(`🔄 Deploying ${commands.length} commands...`);
+    console.log(`ðŸ”„ Deploying ${commands.length} commands...`);
 
     if (GUILD_ID) {
       await rest.put(
@@ -67,17 +103,18 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
         { body: commands }
       );
 
-      console.log(`✅ Commands deployed to guild ${GUILD_ID}`);
+      console.log(`âœ… Commands deployed to guild ${GUILD_ID}`);
     } else {
       await rest.put(
         Routes.applicationCommands(CLIENT_ID),
         { body: commands }
       );
 
-      console.log(`✅ Global commands deployed`);
+      console.log(`âœ… Global commands deployed`);
     }
 
   } catch (error) {
-    console.error('❌ Deploy error:', error);
+    console.error('âŒ Deploy error:', error);
   }
 })();
+

@@ -1,4 +1,4 @@
-const {
+﻿const {
   PermissionsBitField,
   SlashCommandBuilder,
   EmbedBuilder
@@ -27,33 +27,33 @@ module.exports = {
   async execute(interaction) {
     try {
 
-      // 🔐 Permission check
+      // ðŸ” Permission check
       if (!interaction.memberPermissions.has(PermissionsBitField.Flags.BanMembers)) {
         return interaction.editReply({
-          content: '❌ You need **Ban Members** permission.'
+          content: 'âŒ You need **Ban Members** permission.'
         });
       }
 
       const userId = interaction.options.getString('user_id', true);
       const reason = interaction.options.getString('reason') || 'No reason provided';
 
-      // 🔍 Fetch ban
+      // ðŸ” Fetch ban
       let ban;
       try {
         ban = await interaction.guild.bans.fetch(userId);
       } catch {
         return interaction.editReply({
-          content: '❌ That user is not banned.'
+          content: 'âŒ That user is not banned.'
         });
       }
 
-      // 🔓 Unban
+      // ðŸ”“ Unban
       await interaction.guild.members.unban(userId, reason);
 
-      // 🎨 Response
+      // ðŸŽ¨ Response
       const embed = new EmbedBuilder()
         .setColor(0x57F287)
-        .setTitle('🔓 User Unbanned')
+        .setTitle('ðŸ”“ User Unbanned')
         .setDescription(`Successfully unbanned **${ban.user.tag}**`)
         .addFields(
           { name: 'User ID', value: `\`${userId}\``, inline: true },
@@ -65,7 +65,7 @@ module.exports = {
       await interaction.editReply({ embeds: [embed] });
 
       // ========================
-      // 📜 LOG SYSTEM
+      // ðŸ“œ LOG SYSTEM
       // ========================
       const logEmbed = createLogEmbed({
         action: 'UNBAN',
@@ -77,10 +77,10 @@ module.exports = {
       await sendLog(interaction.client, interaction.guild.id, logEmbed);
 
       // ========================
-      // 💾 SAVE CASE
+      // ðŸ’¾ SAVE CASE
       // ========================
       await run(
-        `INSERT INTO cases (guildId, userId, moderatorId, action, reason, createdAt)
+        `INSERT INTO cases (guildId, userId, moderatorId, action, reason, timestamp)
          VALUES (?, ?, ?, 'UNBAN', ?, ?)`,
         [interaction.guild.id, userId, interaction.user.id, reason, Date.now()]
       );
@@ -90,11 +90,11 @@ module.exports = {
 
       if (interaction.deferred || interaction.replied) {
         return interaction.editReply({
-          content: '❌ Failed to unban user.'
+          content: 'âŒ Failed to unban user.'
         });
       } else {
         return interaction.reply({
-          content: '❌ Failed to unban user.',
+          content: 'âŒ Failed to unban user.',
           ephemeral: true
         });
       }

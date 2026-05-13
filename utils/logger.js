@@ -1,146 +1,106 @@
-const { EmbedBuilder, ChannelType, PermissionsBitField } = require('discord.js');
-const { get } = require('../database');
+﻿const { ChannelType, EmbedBuilder } = require('discord.js');
+const { get, run } = require('../database');
 
-// 🎨 Action styling
-function getStyle(action = 'LOG') {
-  const a = action.toUpperCase();
+async function getLogChannel(client, guildId) {
+  const settings = get('SELECT modlogChannelId FROM guild_settings WHERE guildId = ?', [guildId]);
+  const channelId = settings?.modlogChannelId || process.env.MODLOG_CHANNEL_ID || '1425864349641216100';
+  if (!channelId) return null;
 
-  if (a.includes('BAN')) return { color: 0x992d22, icon: '🔨' };
-  if (a.includes('KICK')) return { color: 0xe74c3c, icon: '👢' };
-  if (a.includes('MUTE')) return { color: 0xf39c12, icon: '🔇' };
-  if (a.includes('UNMUTE')) return { color: 0x2ecc71, icon: '🔊' };
-  if (a.includes('WARN')) return { color: 0xf1c40f, icon: '⚠️' };
-  if (a.includes('CLEAR')) return { color: 0x95a5a6, icon: '🧹' };
-
-  return { color: 0x5865F2, icon: '📌' };
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel || channel.type !== ChannelType.GuildText) return null;
+  return channel;
 }
 
-// 🧠 Clean user format
-function formatUser(user) {
-  if (!user) return '`Unknown`';
-
-  const tag = user.tag || 'Unknown';
-  const id = user.id || 'Unknown';
-
-  return `${tag} (\`${id}\`)`;
-}
-
-// 🧠 Safe truncate
-function trim(text, max = 1000) {
-  if (!text) return 'No reason provided';
-  return text.length > max ? text.slice(0, max) + '...' : text;
-}
-
-// 🔥 SEND LOG
 async function sendLog(client, guildId, embed) {
-  try {
-    const guild = client.guilds.cache.get(guildId);
-    if (!guild) return;
+  const channel = await getLogChannel(client, guildId);
+  if (!channel) return null;
 
-    // ✅ FIX: await database
-    const row = await get(
-      `SELECT modlogChannelId FROM guild_settings WHERE guildId=?`,
-      [guildId]
-    );
-
-    if (!row?.modlogChannelId) return;
-
-    const channel = await guild.channels.fetch(row.modlogChannelId).catch(() => null);
-
-    // ✅ Better channel validation
-    if (!channel || !channel.isTextBased()) return;
-
-    const perms = channel.permissionsFor(guild.members.me);
-
-    if (!perms?.has([
-      PermissionsBitField.Flags.SendMessages,
-      PermissionsBitField.Flags.EmbedLinks,
-      PermissionsBitField.Flags.ViewChannel
-    ])) return;
-
-    await channel.send({ embeds: [embed] });
-
-  } catch (err) {
-    console.error('Logger error:', err);
-  }
+  return channel.send({ embeds: [embed] }).catch((err) => {
+    console.error('Failed to send mod log:', err.message);
+    return null;
+  });
 }
 
-// 🔥 ADVANCED EMBED
-function createLogEmbed({
-  action = 'LOG',
-  user,
-  moderator,
-  reason,
-  caseId,
-  duration,
-  channel,
-  messageLink,
-  extra = {}
-}) {
-  const { color, icon } = getStyle(action);
+function formatUser(userId) {
+  return userId ? `<@${userId}>` : 'Unknown';
+}
 
+function formatEmbedValue(value) {
+  if (!value) return null;
+  if (typeof value === 'string') return value;
+
+  if (value.id === 'CHANNEL') {
+    return value.tag || value.name || 'Channel';
+  }
+
+  if (value.id && value.tag) {
+    return `<@${value.id}> (${value.tag})`;
+  }
+
+  if (value.id && value.username) {
+    return `<@${value.id}> (${value.username})`;
+  }
+
+  if (value.id) {
+    return `<@${value.id}>`;
+  }
+
+  return String(value);
+}
+
+function createLogEmbed({ action, user, moderator, reason, caseId, duration, color = 'Blurple' }) {
   const embed = new EmbedBuilder()
+    .setTitle(caseId ? `Case #${caseId} | ${action}` : action)
     .setColor(color)
-    .setTitle(`${icon} ${action}`)
     .setTimestamp();
 
-  // ========================
-  // 🧾 MAIN BLOCK
-  // ========================
-  embed.setDescription(
-    `**User:** ${formatUser(user)}\n` +
-    `**Moderator:** ${formatUser(moderator)}\n` +
-    (channel ? `**Channel:** <#${channel.id}>\n` : '') +
-    (duration ? `**Duration:** ${duration}\n` : '') +
-    (caseId ? `**Case:** #${caseId}\n` : '')
-  );
+  const userValue = formatEmbedValue(user);
+  const moderatorValue = formatEmbedValue(moderator);
 
-  // ========================
-  // 📄 REASON
-  // ========================
-  embed.addFields({
-    name: '📄 Reason',
-    value: trim(reason),
-    inline: false
-  });
-
-  // ========================
-  // 🔗 LINKS
-  // ========================
-  if (messageLink) {
-    embed.addFields({
-      name: '🔗 Message',
-      value: `[Jump to message](${messageLink})`,
-      inline: false
-    });
-  }
-
-  // ========================
-  // ➕ EXTRA DATA
-  // ========================
-  if (extra && typeof extra === 'object') {
-    for (const [key, value] of Object.entries(extra)) {
-      if (!value) continue;
-
-      embed.addFields({
-        name: key,
-        value: trim(String(value), 500),
-        inline: true
-      });
-    }
-  }
-
-  // ========================
-  // 🧠 FOOTER (cleaner)
-  // ========================
-  embed.setFooter({
-    text: `Moderation Log • ${new Date().toLocaleString()}`
-  });
+  if (userValue) embed.addFields({ name: 'User', value: userValue, inline: true });
+  if (moderatorValue) embed.addFields({ name: 'Moderator', value: moderatorValue, inline: true });
+  if (duration) embed.addFields({ name: 'Duration', value: String(duration), inline: true });
+  if (reason) embed.addFields({ name: 'Reason', value: String(reason).slice(0, 1024) });
 
   return embed;
 }
 
+function createAuditEmbed({ action, target, executor, reason, channel, messageLink, extra, color = 'DarkButNotBlack' }) {
+  const embed = new EmbedBuilder()
+    .setTitle(action)
+    .setColor(color)
+    .setTimestamp();
+
+  if (target) embed.addFields({ name: 'Target', value: target, inline: true });
+  if (executor) embed.addFields({ name: 'Executor', value: executor, inline: true });
+  if (channel) embed.addFields({ name: 'Channel', value: channel, inline: true });
+  if (messageLink) embed.addFields({ name: 'Message', value: messageLink });
+  if (reason) embed.addFields({ name: 'Reason', value: reason.slice(0, 1024) });
+  if (extra) embed.addFields({ name: 'Details', value: extra.slice(0, 1024) });
+
+  return embed;
+}
+
+async function logAudit(client, guildId, { action, targetId, executorId, metadata = {}, embed }) {
+  run(
+    `INSERT INTO audit_logs (guildId, action, targetId, executorId, metadata, timestamp)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [guildId, action, targetId || null, executorId || null, JSON.stringify(metadata), Date.now()],
+  );
+
+  return sendLog(client, guildId, embed || createAuditEmbed({
+    action,
+    target: formatUser(targetId),
+    executor: formatUser(executorId),
+    extra: Object.keys(metadata).length ? JSON.stringify(metadata).slice(0, 1024) : undefined,
+  }));
+}
+
 module.exports = {
+  createAuditEmbed,
+  createLogEmbed,
+  getLogChannel,
+  logAudit,
   sendLog,
-  createLogEmbed
 };
+

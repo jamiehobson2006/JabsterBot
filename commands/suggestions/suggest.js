@@ -1,4 +1,4 @@
-const {
+﻿const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -27,7 +27,7 @@ module.exports = {
       const text = interaction.options.getString('text', true);
 
       // ========================
-      // 🔄 GET SETTINGS
+      // ðŸ”„ GET SETTINGS
       // ========================
       const settings = await get(
         `SELECT suggestionChannelId FROM guild_settings WHERE guildId=?`,
@@ -36,7 +36,7 @@ module.exports = {
 
       if (!settings?.suggestionChannelId) {
         return interaction.editReply({
-          content: '❌ Suggestion channel not set.'
+          content: 'âŒ Suggestion channel not set.'
         });
       }
 
@@ -44,12 +44,12 @@ module.exports = {
 
       if (!channel || !channel.isTextBased()) {
         return interaction.editReply({
-          content: '❌ Suggestion channel is invalid.'
+          content: 'âŒ Suggestion channel is invalid.'
         });
       }
 
       // ========================
-      // 🔐 PERMISSION CHECK
+      // ðŸ” PERMISSION CHECK
       // ========================
       const perms = channel.permissionsFor(interaction.guild.members.me);
 
@@ -60,16 +60,16 @@ module.exports = {
         PermissionsBitField.Flags.AddReactions
       ])) {
         return interaction.editReply({
-          content: '❌ I am missing permissions in the suggestion channel.'
+          content: 'âŒ I am missing permissions in the suggestion channel.'
         });
       }
 
       // ========================
-      // 🎨 EMBED
+      // ðŸŽ¨ EMBED
       // ========================
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle('💡 New Suggestion')
+        .setTitle('ðŸ’¡ New Suggestion')
         .setDescription(text)
         .addFields({
           name: 'Author',
@@ -80,7 +80,7 @@ module.exports = {
         .setTimestamp();
 
       // ========================
-      // 🔘 BUTTONS
+      // ðŸ”˜ BUTTONS
       // ========================
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -95,19 +95,19 @@ module.exports = {
       );
 
       // ========================
-      // 📤 SEND
+      // ðŸ“¤ SEND
       // ========================
       const msg = await channel.send({
         embeds: [embed],
         components: [row]
       });
 
-      // 👍 Voting
-      await msg.react('👍');
-      await msg.react('👎');
+      // ðŸ‘ Voting
+      await msg.react('\\u2705');
+      await msg.react('\\u274C');
 
       // ========================
-      // 💾 SAVE
+      // ðŸ’¾ SAVE
       // ========================
       await run(
         `INSERT INTO suggestions (guildId, messageId, userId, content, status, timestamp)
@@ -116,10 +116,10 @@ module.exports = {
       );
 
       // ========================
-      // ✅ RESPONSE
+      // âœ… RESPONSE
       // ========================
       await interaction.editReply({
-        content: `✅ Suggestion submitted! [Jump to message](${msg.url})`
+        content: `âœ… Suggestion submitted! [Jump to message](${msg.url})`
       });
 
     } catch (err) {
@@ -127,11 +127,11 @@ module.exports = {
 
       if (interaction.deferred || interaction.replied) {
         return interaction.editReply({
-          content: '❌ Failed to send suggestion.'
+          content: 'âŒ Failed to send suggestion.'
         });
       } else {
         return interaction.reply({
-          content: '❌ Failed to send suggestion.',
+          content: 'âŒ Failed to send suggestion.',
           ephemeral: true
         });
       }
