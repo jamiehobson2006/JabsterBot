@@ -24,6 +24,16 @@ function containsBlockedLink(content) {
   return !allowedDomains().some((domain) => lower.includes(domain));
 }
 
+function trackTicketMessage(message) {
+  run(
+    `UPDATE tickets
+     SET messageCount = COALESCE(messageCount, 0) + 1,
+         lastMessageAt = ?
+     WHERE guildId = ? AND channelId = ?`,
+    [Date.now(), message.guild.id, message.channel.id],
+  );
+}
+
 async function handleLinkFilter(message) {
   if (!message.inGuild() || message.author.bot || canBypassLinkFilter(message.member)) return false;
   if (!containsBlockedLink(message.content)) return false;
@@ -82,6 +92,8 @@ module.exports = {
   name: Events.MessageCreate,
   async execute(message) {
     if (!message.guild || message.author.bot) return;
+
+    trackTicketMessage(message);
 
     const blocked = await handleLinkFilter(message);
     if (blocked) return;

@@ -1,0 +1,9 @@
+
+> jabsterbot@1.0.0 start
+> node index.js
+
+◇ injected env (3) from .env // tip: ⌘ suppress logs { quiet: true }
+âœ… Loaded 37 commands
+âœ… Loaded 16 events
+ðŸš€ Logged in as JabsterStudios#3874
+âœ… Systems initialized

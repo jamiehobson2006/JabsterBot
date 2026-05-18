@@ -1,4 +1,4 @@
-﻿const { PermissionsBitField, EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, MessageFlags, PermissionsBitField } = require('discord.js');
 const { get, run } = require('../database');
 const { useCooldown } = require('../utils/cooldowns');
 
@@ -29,7 +29,43 @@ const ephemeralCommands = [
   'setticketchannel',
   'settranscriptchannel',
   'ticketpanel',
+  'ticketstats',
 ];
+
+function isStaleInteractionError(error) {
+  return error?.code === 10062 || error?.code === 40060;
+}
+
+async function safelyDeferReply(interaction, ephemeral) {
+  if (interaction.deferred || interaction.replied) return true;
+
+  try {
+    await interaction.deferReply({
+      flags: ephemeral ? MessageFlags.Ephemeral : undefined,
+    });
+    return true;
+  } catch (error) {
+    if (!isStaleInteractionError(error)) {
+      console.error('Failed to defer interaction:', error);
+    }
+    return false;
+  }
+}
+
+async function safelyReply(interaction, payload) {
+  try {
+    if (interaction.deferred || interaction.replied) {
+      return interaction.editReply(payload);
+    }
+
+    return interaction.reply(payload);
+  } catch (error) {
+    if (!isStaleInteractionError(error)) {
+      console.error('Failed to respond to interaction:', error);
+    }
+    return null;
+  }
+}
 
 module.exports = {
   name: 'interactionCreate',
@@ -41,7 +77,10 @@ module.exports = {
 
         if (customId.startsWith('suggest_')) {
           if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: 'Admin only.', ephemeral: true });
+            return safelyReply(interaction, {
+              content: 'Admin only.',
+              flags: MessageFlags.Ephemeral,
+            });
           }
 
           await interaction.deferUpdate();
@@ -49,11 +88,17 @@ module.exports = {
           const suggestion = get('SELECT * FROM suggestions WHERE messageId = ?', [messageId]);
 
           if (!suggestion) {
-            return interaction.followUp({ content: 'Suggestion not found.', ephemeral: true });
+            return interaction.followUp({
+              content: 'Suggestion not found.',
+              flags: MessageFlags.Ephemeral,
+            });
           }
 
           if (suggestion.status !== 'PENDING') {
-            return interaction.followUp({ content: `Already ${suggestion.status}.`, ephemeral: true });
+            return interaction.followUp({
+              content: `Already ${suggestion.status}.`,
+              flags: MessageFlags.Ephemeral,
+            });
           }
 
           const embed = EmbedBuilder.from(interaction.message.embeds[0]);
@@ -81,7 +126,10 @@ module.exports = {
       } catch (err) {
         console.error('Button error:', err);
         if (!interaction.replied && !interaction.deferred) {
-          return interaction.reply({ content: 'Error handling button.', ephemeral: true });
+          return safelyReply(interaction, {
+            content: 'Error handling button.',
+            flags: MessageFlags.Ephemeral,
+          });
         }
       }
     }
@@ -92,6 +140,10 @@ module.exports = {
     if (!command) return;
 
     try {
+      const shouldBeEphemeral = ephemeralCommands.includes(interaction.commandName);
+      const acknowledged = await safelyDeferReply(interaction, shouldBeEphemeral);
+      if (!acknowledged) return;
+
       const cooldown = await useCooldown(
         interaction.guild?.id,
         interaction.user.id,
@@ -100,15 +152,8 @@ module.exports = {
       );
 
       if (cooldown > 0) {
-        return interaction.reply({
+        return safelyReply(interaction, {
           content: `Slow down! Try again in **${Math.ceil(cooldown / 1000)}s**.`,
-          ephemeral: true,
-        });
-      }
-
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({
-          ephemeral: ephemeralCommands.includes(interaction.commandName),
         });
       }
 
@@ -116,12 +161,10 @@ module.exports = {
     } catch (error) {
       console.error(`Command error (${interaction.commandName}):`, error);
 
-      const message = { content: 'Something went wrong.' };
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply(message).catch(() => null);
-      } else {
-        await interaction.reply({ ...message, ephemeral: true }).catch(() => null);
-      }
+      await safelyReply(interaction, {
+        content: 'Something went wrong.',
+        flags: MessageFlags.Ephemeral,
+      });
     }
   },
 };

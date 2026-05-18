@@ -143,6 +143,10 @@ function createGuildSettingsTable() {
     staffRoleId TEXT,
     adminRoleId TEXT,
     ticketCategoryId TEXT,
+    supportCategoryId TEXT,
+    applicationCategoryId TEXT,
+    bugCategoryId TEXT,
+    giveawayCategoryId TEXT,
     transcriptChannelId TEXT,
     giveawayRoleId TEXT,
     gamblingEnabled INTEGER DEFAULT 1,
@@ -154,10 +158,20 @@ function createGuildSettingsTable() {
   ensureColumn('guild_settings', 'staffRoleId', 'TEXT');
   ensureColumn('guild_settings', 'adminRoleId', 'TEXT');
   ensureColumn('guild_settings', 'ticketCategoryId', 'TEXT');
+  ensureColumn('guild_settings', 'supportCategoryId', 'TEXT');
+  ensureColumn('guild_settings', 'applicationCategoryId', 'TEXT');
+  ensureColumn('guild_settings', 'bugCategoryId', 'TEXT');
+  ensureColumn('guild_settings', 'giveawayCategoryId', 'TEXT');
   ensureColumn('guild_settings', 'transcriptChannelId', 'TEXT');
   ensureColumn('guild_settings', 'giveawayRoleId', 'TEXT');
   ensureColumn('guild_settings', 'gamblingEnabled', 'INTEGER DEFAULT 1');
   ensureColumn('guild_settings', 'robEnabled', 'INTEGER DEFAULT 1');
+
+  rawRun(
+    `UPDATE guild_settings
+     SET supportCategoryId = COALESCE(supportCategoryId, ticketCategoryId)
+     WHERE ticketCategoryId IS NOT NULL`,
+  );
 }
 
 function createEconomyTables() {
@@ -287,12 +301,16 @@ function createTicketTables() {
     status TEXT NOT NULL DEFAULT 'OPEN',
     claimedBy TEXT,
     createdAt INTEGER NOT NULL,
+    messageCount INTEGER DEFAULT 0,
+    lastMessageAt INTEGER,
     closedAt INTEGER,
     deletedAt INTEGER
   )`);
 
   ensureColumn('tickets', 'status', "TEXT NOT NULL DEFAULT 'OPEN'");
   ensureColumn('tickets', 'createdAt', 'INTEGER');
+  ensureColumn('tickets', 'messageCount', 'INTEGER DEFAULT 0');
+  ensureColumn('tickets', 'lastMessageAt', 'INTEGER');
   ensureColumn('tickets', 'claimedBy', 'TEXT');
   ensureColumn('tickets', 'closedAt', 'INTEGER');
   ensureColumn('tickets', 'deletedAt', 'INTEGER');

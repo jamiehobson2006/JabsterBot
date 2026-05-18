@@ -58,6 +58,7 @@ const permissionDefaults = {
   setticketchannel: PermissionFlagsBits.Administrator,
   settranscriptchannel: PermissionFlagsBits.Administrator,
   ticketpanel: PermissionFlagsBits.Administrator,
+  ticketstats: PermissionFlagsBits.Administrator,
 };
 
 const commands = [];
