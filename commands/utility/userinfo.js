@@ -1,169 +1,553 @@
 const {
   EmbedBuilder,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  PermissionsBitField
 } = require('discord.js');
 
+// ========================
+// 🏅 FORMAT BADGES
+// ========================
+function formatBadge(badge) {
+
+  return badge
+
+    .toLowerCase()
+
+    .replace(/_/g, ' ')
+
+    .replace(/\b\w/g, l => l.toUpperCase());
+}
+
+// ========================
+// 🎮 FORMAT ACTIVITY
+// ========================
+function getActivity(member) {
+
+  const activities =
+    member.presence?.activities;
+
+  if (!activities?.length) {
+    return 'None';
+  }
+
+  const activity =
+    activities.find(a => a.type !== 4) ||
+    activities[0];
+
+  switch (activity.type) {
+
+    case 0:
+      return `🎮 Playing **${activity.name}**`;
+
+    case 1:
+      return `📺 Streaming **${activity.name}**`;
+
+    case 2:
+      return `🎵 Listening to **${activity.name}**`;
+
+    case 3:
+      return `📹 Watching **${activity.name}**`;
+
+    case 4:
+      return activity.state
+        ? `💭 ${activity.state}`
+        : 'Custom Status';
+
+    case 5:
+      return `🏆 Competing in **${activity.name}**`;
+
+    default:
+      return activity.name || 'Unknown';
+  }
+}
+
+// ========================
+// 🟢 STATUS FORMAT
+// ========================
+function getStatus(status) {
+
+  const map = {
+
+    online:
+      '🟢 Online',
+
+    idle:
+      '🌙 Idle',
+
+    dnd:
+      '⛔ Do Not Disturb',
+
+    offline:
+      '⚫ Offline'
+  };
+
+  return map[status] ||
+    '⚫ Offline';
+}
+
+// ========================
+// 👤 MEMBER TYPE
+// ========================
+function getMemberType(member, guild) {
+
+  if (member.user.bot) {
+    return '🤖 Bot';
+  }
+
+  if (member.id === guild.ownerId) {
+    return '👑 Server Owner';
+  }
+
+  if (
+    member.permissions.has(
+      PermissionsBitField.Flags.Administrator
+    )
+  ) {
+
+    return '🛡 Administrator';
+  }
+
+  if (
+    member.permissions.has(
+      PermissionsBitField.Flags.ManageMessages
+    )
+  ) {
+
+    return '🔨 Moderator';
+  }
+
+  return '👤 Member';
+}
+
 module.exports = {
+
+  cooldown: 3000,
+
   data: new SlashCommandBuilder()
+
     .setName('userinfo')
-    .setDescription('View information about a user')
+
+    .setDescription(
+      'View information about a user'
+    )
+
     .addUserOption(option =>
       option
         .setName('user')
-        .setDescription('User to view')
+        .setDescription(
+          'User to view'
+        )
     ),
 
   async execute(interaction) {
+
     try {
 
-      const user = interaction.options.getUser('user') || interaction.user;
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+      // ========================
+      // 👤 TARGET USER
+      // ========================
+      const user =
+        interaction.options.getUser('user') ||
+        interaction.user;
+
+      const member =
+        await interaction.guild.members
+          .fetch(user.id)
+          .catch(() => null);
 
       if (!member) {
+
         return interaction.editReply({
-          content: '❌ User not found in this server.'
+          content:
+            '❌ User not found in this server.'
         });
       }
 
-      // 🎭 Roles
-      const roles = member.roles.cache
-        .filter(r => r.id !== interaction.guild.id)
-        .sort((a, b) => b.position - a.position)
-        .map(r => r.toString());
+      // ========================
+      // 🎭 ROLES
+      // ========================
+      const roles =
+        member.roles.cache
 
-      const rolesDisplay = roles.length
-        ? roles.slice(0, 10).join(', ') + (roles.length > 10 ? `\n+${roles.length - 10} more` : '')
-        : 'None';
+          .filter(
+            r => r.id !== interaction.guild.id
+          )
 
-      // 🟢 Status
-      const statusMap = {
-        online: '🟢 Online',
-        idle: '🌙 Idle',
-        dnd: '⛔ Do Not Disturb',
-        offline: '⚫ Offline'
-      };
+          .sort(
+            (a, b) =>
+              b.position - a.position
+          )
 
-      const status = statusMap[member.presence?.status] || '⚫ Offline';
+          .map(
+            r => `• ${r}`
+          );
 
-      // 🎮 Activity (improved)
-      let activity = 'None';
-      const activities = member.presence?.activities;
+      const roleDisplay =
+        roles.length
 
-      if (activities?.length) {
-        const act = activities[0];
+          ? roles
+              .slice(0, 10)
+              .join('\n') +
 
-        if (act.type === 0) activity = `Playing ${act.name}`;
-        else if (act.type === 1) activity = `Streaming ${act.name}`;
-        else if (act.type === 2) activity = `Listening to ${act.name}`;
-        else if (act.type === 3) activity = `Watching ${act.name}`;
-        else if (act.type === 4) activity = act.state || 'Custom Status';
+            (
+              roles.length > 10
+
+                ? `\n+${roles.length - 10} more`
+
+                : ''
+            )
+
+          : 'None';
+
+      // ========================
+      // 🏅 BADGES
+      // ========================
+      const flags =
+        await user.fetchFlags();
+
+      const badges =
+        flags.toArray();
+
+      const badgeDisplay =
+        badges.length
+
+          ? badges
+              .map(
+                b => `• ${formatBadge(b)}`
+              )
+              .join('\n')
+
+          : 'None';
+
+      // ========================
+      // 🎮 ACTIVITY
+      // ========================
+      const activity =
+        getActivity(member);
+
+      // ========================
+      // 🟢 STATUS
+      // ========================
+      const status =
+        getStatus(
+          member.presence?.status
+        );
+
+      // ========================
+      // ⏱ TIMEOUT
+      // ========================
+      const timeout =
+        member.communicationDisabledUntilTimestamp
+
+          ? `<t:${Math.floor(member.communicationDisabledUntilTimestamp / 1000)}:R>`
+
+          : 'None';
+
+      // ========================
+      // 🚀 BOOSTING
+      // ========================
+      const boosting =
+        member.premiumSinceTimestamp
+
+          ? `<t:${Math.floor(member.premiumSinceTimestamp / 1000)}:R>`
+
+          : 'Not Boosting';
+
+      // ========================
+      // 🎨 EMBED COLOR
+      // ========================
+      const color =
+
+        member.displayHexColor &&
+        member.displayHexColor !== '#000000'
+
+          ? member.displayHexColor
+
+          : user.hexAccentColor ||
+
+            0x5865F2;
+
+      // ========================
+      // 📊 JOIN POSITION
+      // ========================
+      let joinPosition =
+        'Server too large';
+
+      if (
+        interaction.guild.memberCount < 1000
+      ) {
+
+        try {
+
+          const members =
+            await interaction.guild.members.fetch();
+
+          const sorted =
+            members.sort(
+              (a, b) =>
+                a.joinedTimestamp -
+                b.joinedTimestamp
+            );
+
+          joinPosition =
+            `#${sorted.map(m => m.id).indexOf(user.id) + 1}`;
+
+        } catch {}
       }
 
-      // 🏆 Badges
-      const flags = await user.fetchFlags();
-      const badges = flags.toArray();
+      // ========================
+      // 🛡 IMPORTANT PERMS
+      // ========================
+      const importantPerms = [];
 
-      const badgeDisplay = badges.length
-        ? badges.map(b => `• ${b}`).join('\n')
-        : 'None';
-
-      // 🧠 Join position (advanced)
-      const members = await interaction.guild.members.fetch();
-      const sorted = members.sort((a, b) => a.joinedTimestamp - b.joinedTimestamp);
-      const position = sorted.map(m => m.id).indexOf(user.id) + 1;
-
-      // ⏱ Timeout
-      const timeout = member.communicationDisabledUntilTimestamp
-        ? `<t:${Math.floor(member.communicationDisabledUntilTimestamp / 1000)}:R>`
-        : 'None';
-
-      // 🎨 Color
-      const color =
-        member.displayHexColor && member.displayHexColor !== '#000000'
-          ? member.displayHexColor
-          : 0x5865F2;
-
-      const embed = new EmbedBuilder()
-        .setTitle(`👤 ${user.tag}`)
-        .setColor(color)
-        .setThumbnail(user.displayAvatarURL({ dynamic: true, size: 256 }))
-
-        .addFields(
-          {
-            name: '🆔 ID',
-            value: `\`${user.id}\``,
-            inline: true
-          },
-          {
-            name: '🤖 Bot',
-            value: user.bot ? 'Yes' : 'No',
-            inline: true
-          },
-          {
-            name: '🟢 Status',
-            value: status,
-            inline: true
-          },
-          {
-            name: '📅 Account Created',
-            value: `<t:${Math.floor(user.createdTimestamp / 1000)}:F>`,
-            inline: false
-          },
-          {
-            name: '📥 Joined Server',
-            value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>`,
-            inline: false
-          },
-          {
-            name: '📊 Join Position',
-            value: `#${position}`,
-            inline: true
-          },
-          {
-            name: '🏆 Highest Role',
-            value: member.roles.highest?.toString() || 'None',
-            inline: true
-          },
-          {
-            name: '🔇 Timeout',
-            value: timeout,
-            inline: true
-          },
-          {
-            name: '🎮 Activity',
-            value: activity,
-            inline: true
-          },
-          {
-            name: '🏅 Badges',
-            value: badgeDisplay,
-            inline: true
-          },
-          {
-            name: '🎭 Roles',
-            value: rolesDisplay,
-            inline: false
-          }
+      if (
+        member.permissions.has(
+          PermissionsBitField.Flags.Administrator
         )
-        .setImage(user.bannerURL({ dynamic: true, size: 512 }) || null)
-        .setFooter({ text: `Requested by ${interaction.user.tag}` })
-        .setTimestamp();
+      ) {
+        importantPerms.push('Administrator');
+      }
 
-      return interaction.editReply({ embeds: [embed] });
+      if (
+        member.permissions.has(
+          PermissionsBitField.Flags.ManageGuild
+        )
+      ) {
+        importantPerms.push('Manage Server');
+      }
+
+      if (
+        member.permissions.has(
+          PermissionsBitField.Flags.BanMembers
+        )
+      ) {
+        importantPerms.push('Ban Members');
+      }
+
+      if (
+        member.permissions.has(
+          PermissionsBitField.Flags.KickMembers
+        )
+      ) {
+        importantPerms.push('Kick Members');
+      }
+
+      if (
+        member.permissions.has(
+          PermissionsBitField.Flags.ManageMessages
+        )
+      ) {
+        importantPerms.push('Manage Messages');
+      }
+
+      // ========================
+      // 🎨 EMBED
+      // ========================
+      const embed =
+        new EmbedBuilder()
+
+          .setTitle(
+            `👤 ${user.tag}`
+          )
+
+          .setColor(color)
+
+          .setThumbnail(
+            user.displayAvatarURL({
+              dynamic: true,
+              size: 512
+            })
+          )
+
+          .setDescription(
+            `${getMemberType(member, interaction.guild)}`
+          )
+
+          .addFields(
+
+            {
+              name: '🆔 User ID',
+
+              value:
+                `\`${user.id}\``,
+
+              inline: true
+            },
+
+            {
+              name: '🟢 Status',
+
+              value:
+                status,
+
+              inline: true
+            },
+
+            {
+              name: '🔇 Timeout',
+
+              value:
+                timeout,
+
+              inline: true
+            },
+
+            {
+              name: '📅 Account Created',
+
+              value:
+                `<t:${Math.floor(user.createdTimestamp / 1000)}:F>`,
+
+              inline: false
+            },
+
+            {
+              name: '📥 Joined Server',
+
+              value:
+                `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>`,
+
+              inline: false
+            },
+
+            {
+              name: '📊 Join Position',
+
+              value:
+                joinPosition,
+
+              inline: true
+            },
+
+            {
+              name: '🏆 Highest Role',
+
+              value:
+                member.roles.highest.toString(),
+
+              inline: true
+            },
+
+            {
+              name: '🚀 Boosting Since',
+
+              value:
+                boosting,
+
+              inline: true
+            },
+
+            {
+              name: '🎮 Activity',
+
+              value:
+                activity,
+
+              inline: false
+            },
+
+            {
+              name: '🛡 Key Permissions',
+
+              value:
+
+                importantPerms.length
+
+                  ? importantPerms
+                      .map(p => `• ${p}`)
+                      .join('\n')
+
+                  : 'None',
+
+              inline: true
+            },
+
+            {
+              name: '🏅 Badges',
+
+              value:
+                badgeDisplay,
+
+              inline: true
+            },
+
+            {
+              name: '🎭 Roles',
+
+              value:
+                roleDisplay,
+
+              inline: false
+            },
+
+            {
+              name: '🔗 Profile Links',
+
+              value:
+
+                `[Avatar](${user.displayAvatarURL({
+                  dynamic: true,
+                  size: 1024
+                })})` +
+
+                (
+                  user.bannerURL()
+
+                    ? ` • [Banner](${user.bannerURL({
+                        dynamic: true,
+                        size: 1024
+                      })})`
+
+                    : ''
+                ),
+
+              inline: false
+            }
+          )
+
+          .setImage(
+            user.bannerURL({
+              dynamic: true,
+              size: 1024
+            })
+          )
+
+          .setFooter({
+            text:
+              `Requested by ${interaction.user.tag}`
+          })
+
+          .setTimestamp();
+
+      return interaction.editReply({
+        embeds: [embed]
+      });
 
     } catch (err) {
-      console.error('UserInfo Error:', err);
 
-      if (interaction.deferred || interaction.replied) {
+      console.error(
+        'UserInfo Error:',
+        err
+      );
+
+      if (
+        interaction.deferred ||
+        interaction.replied
+      ) {
+
         return interaction.editReply({
-          content: '❌ Failed to fetch user info.'
-        });
-      } else {
-        return interaction.reply({
-          content: '❌ Failed to fetch user info.',
-          ephemeral: true
+          content:
+            '❌ Failed to fetch user info.'
         });
       }
+
+      return interaction.reply({
+
+        content:
+          '❌ Failed to fetch user info.',
+
+        ephemeral: true
+      });
     }
   }
 };

@@ -1,121 +1,353 @@
-﻿require('dotenv').config(); // âœ… make sure this is FIRST
+﻿require('dotenv').config();
 
 const fs = require('fs');
 const path = require('path');
-const { PermissionFlagsBits, REST, Routes } = require('discord.js');
 
-// ðŸ” CONFIG
-const TOKEN = process.env.TOKEN || process.env.Token || 'YOUR_BOT_TOKEN';
+const {
+  PermissionFlagsBits,
+  REST,
+  Routes
+} = require('discord.js');
 
-// âœ… YOUR CLIENT ID ADDED HERE
-const CLIENT_ID = process.env.CLIENT_ID || '1497394527571415181';
+// ==================================================
+// 🔐 ENV
+// ==================================================
+const TOKEN =
+  process.env.TOKEN;
 
-// âš¡ DEV MODE
-const GUILD_ID = process.env.GUILD_ID || null;
+const CLIENT_ID =
+  process.env.CLIENT_ID;
 
-// ðŸ” DEBUG (VERY IMPORTANT)
-console.log('CLIENT_ID:', CLIENT_ID);
-console.log('TOKEN LOADED:', !!TOKEN);
+const DEV_GUILD_ID =
+  process.env.DEV_GUILD_ID || null;
 
-// âŒ Safety check
-if (!TOKEN || TOKEN === 'YOUR_BOT_TOKEN') {
-  throw new Error('âŒ TOKEN is missing or invalid');
+// ==================================================
+// 🛡 SAFETY CHECKS
+// ==================================================
+if (!TOKEN) {
+
+  throw new Error(
+    '❌ TOKEN missing in .env'
+  );
 }
 
-if (!CLIENT_ID || CLIENT_ID === 'YOUR_CLIENT_ID') {
-  throw new Error('âŒ CLIENT_ID is missing');
+if (!CLIENT_ID) {
+
+  throw new Error(
+    '❌ CLIENT_ID missing in .env'
+  );
 }
 
-// ========================
-// ðŸ“¦ LOAD COMMANDS
-// ========================
+// ==================================================
+// 📡 DEBUG
+// ==================================================
+console.log('━━━━━━━━━━━━━━━━━━━━━━');
+console.log('🚀 Deploying Commands');
+console.log('━━━━━━━━━━━━━━━━━━━━━━');
+
+console.log(
+  'Client ID:',
+  CLIENT_ID
+);
+
+console.log(
+  'Mode:',
+  DEV_GUILD_ID
+    ? 'Development'
+    : 'Global'
+);
+
+console.log(
+  '━━━━━━━━━━━━━━━━━━━━━━'
+);
+
+// ==================================================
+// 🔐 DEFAULT PERMISSIONS
+// ==================================================
 const permissionDefaults = {
-  ban: PermissionFlagsBits.BanMembers,
-  unban: PermissionFlagsBits.BanMembers,
-  kick: PermissionFlagsBits.KickMembers,
-  mute: PermissionFlagsBits.ModerateMembers,
-  unmute: PermissionFlagsBits.ModerateMembers,
-  warn: PermissionFlagsBits.ModerateMembers,
-  warnings: PermissionFlagsBits.ModerateMembers,
-  clearwarns: PermissionFlagsBits.ModerateMembers,
-  case: PermissionFlagsBits.ManageGuild,
-  cases: PermissionFlagsBits.ManageGuild,
-  modlogs: PermissionFlagsBits.ManageGuild,
-  history: PermissionFlagsBits.ManageGuild,
-  editcase: PermissionFlagsBits.ManageGuild,
-  modlogremove: PermissionFlagsBits.ManageGuild,
-  purge: PermissionFlagsBits.ManageMessages,
-  role: PermissionFlagsBits.ManageRoles,
-  slowmode: PermissionFlagsBits.ManageChannels,
-  lock: PermissionFlagsBits.ManageChannels,
-  unlock: PermissionFlagsBits.ManageChannels,
-  poll: PermissionFlagsBits.ManageMessages,
-  setmodlogs: PermissionFlagsBits.ManageGuild,
-  suggestchannel: PermissionFlagsBits.ManageGuild,
-  setadminrole: PermissionFlagsBits.Administrator,
-  setstaffrole: PermissionFlagsBits.Administrator,
-  setgiveawayrole: PermissionFlagsBits.Administrator,
-  setticketchannel: PermissionFlagsBits.Administrator,
-  settranscriptchannel: PermissionFlagsBits.Administrator,
-  ticketpanel: PermissionFlagsBits.Administrator,
-  ticketstats: PermissionFlagsBits.Administrator,
+
+  ban:
+    PermissionFlagsBits.BanMembers,
+
+  unban:
+    PermissionFlagsBits.BanMembers,
+
+  kick:
+    PermissionFlagsBits.KickMembers,
+
+  mute:
+    PermissionFlagsBits.ModerateMembers,
+
+  unmute:
+    PermissionFlagsBits.ModerateMembers,
+
+  warn:
+    PermissionFlagsBits.ModerateMembers,
+
+  warnings:
+    PermissionFlagsBits.ModerateMembers,
+
+  clearwarns:
+    PermissionFlagsBits.ModerateMembers,
+
+  case:
+    PermissionFlagsBits.ManageGuild,
+
+  modlogs:
+    PermissionFlagsBits.ManageGuild,
+
+  history:
+    PermissionFlagsBits.ManageGuild,
+
+  editcase:
+    PermissionFlagsBits.ManageGuild,
+
+  modlogremove:
+    PermissionFlagsBits.ManageGuild,
+
+  purge:
+    PermissionFlagsBits.ManageMessages,
+
+  role:
+    PermissionFlagsBits.ManageRoles,
+
+  slowmode:
+    PermissionFlagsBits.ManageChannels,
+
+  lock:
+    PermissionFlagsBits.ManageChannels,
+
+  unlock:
+    PermissionFlagsBits.ManageChannels,
+
+  poll:
+    PermissionFlagsBits.ManageMessages,
+
+  setmodlogs:
+    PermissionFlagsBits.ManageGuild,
+
+  suggestchannel:
+    PermissionFlagsBits.ManageGuild,
+
+  setadminrole:
+    PermissionFlagsBits.Administrator,
+
+  setstaffrole:
+    PermissionFlagsBits.Administrator,
+
+  setgiveawayrole:
+    PermissionFlagsBits.Administrator,
+
+  setticketchannel:
+    PermissionFlagsBits.Administrator,
+
+  settranscriptchannel:
+    PermissionFlagsBits.Administrator,
+
+  ticketpanel:
+    PermissionFlagsBits.Administrator,
+
+  ticketsetup:
+    PermissionFlagsBits.Administrator,
+
+  ticketpanelv3:
+    PermissionFlagsBits.Administrator,
+
+  ticketdebug:
+    PermissionFlagsBits.Administrator,
+
+  ticketstats:
+    PermissionFlagsBits.Administrator
 };
 
+// ==================================================
+// 📦 LOAD COMMANDS
+// ==================================================
 const commands = [];
 
-const foldersPath = path.join(__dirname, 'commands');
-const commandFolders = fs.readdirSync(foldersPath);
+const loadedNames = new Set();
+
+const foldersPath =
+  path.join(__dirname, 'commands');
+
+const commandFolders =
+  fs.readdirSync(foldersPath);
 
 for (const folder of commandFolders) {
-  const commandsPath = path.join(foldersPath, folder);
-  const commandFiles = fs
-    .readdirSync(commandsPath)
-    .filter(file => file.endsWith('.js'));
+
+  const commandsPath =
+    path.join(foldersPath, folder);
+
+  const commandFiles =
+    fs.readdirSync(commandsPath)
+
+      .filter(file =>
+        file.endsWith('.js')
+      );
 
   for (const file of commandFiles) {
-    const filePath = path.join(commandsPath, file);
-    const command = require(filePath);
 
-    if ('data' in command && 'execute' in command) {
-            const commandJson = command.data.toJSON();
-      const defaultPermission = permissionDefaults[commandJson.name];
-      if (defaultPermission !== undefined) {
-        commandJson.default_member_permissions = defaultPermission.toString();
+    try {
+
+      const filePath =
+        path.join(commandsPath, file);
+
+      const command =
+        require(filePath);
+
+      // ========================
+      // 🛡 VALIDATION
+      // ========================
+      if (
+        !('data' in command) ||
+        !('execute' in command)
+      ) {
+
+        console.warn(
+
+          `⚠️ Invalid command: ${file}`
+        );
+
+        continue;
       }
-      commands.push(commandJson);
-    } else {
-      console.warn(`âš ï¸ Missing "data" or "execute" in ${file}`);
+
+      const commandJson =
+        command.data.toJSON();
+
+      // ========================
+      // 🚫 DUPLICATES
+      // ========================
+      if (
+        loadedNames.has(
+          commandJson.name
+        )
+      ) {
+
+        console.warn(
+
+          `⚠️ Duplicate command: ${commandJson.name}`
+        );
+
+        continue;
+      }
+
+      loadedNames.add(
+        commandJson.name
+      );
+
+      // ========================
+      // 🔐 DEFAULT PERMS
+      // ========================
+      const defaultPermission =
+        permissionDefaults[
+          commandJson.name
+        ];
+
+      if (
+        defaultPermission !==
+        undefined
+      ) {
+
+        commandJson.default_member_permissions =
+          defaultPermission.toString();
+      }
+
+      commands.push(
+        commandJson
+      );
+
+      console.log(
+        `✅ Loaded /${commandJson.name}`
+      );
+
+    } catch (err) {
+
+      console.error(
+
+        `❌ Failed loading ${file}:`,
+
+        err
+      );
     }
   }
 }
 
-// ========================
-// ðŸš€ DEPLOY
-// ========================
-const rest = new REST({ version: '10' }).setToken(TOKEN);
+// ==================================================
+// 🛡 EMPTY CHECK
+// ==================================================
+if (!commands.length) {
+
+  throw new Error(
+    '❌ No commands loaded.'
+  );
+}
+
+// ==================================================
+// 🚀 DEPLOY
+// ==================================================
+const rest =
+  new REST({ version: '10' })
+    .setToken(TOKEN);
 
 (async () => {
+
   try {
-    console.log(`ðŸ”„ Deploying ${commands.length} commands...`);
 
-    if (GUILD_ID) {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━');
+
+    console.log(
+
+      `📦 Deploying ${commands.length} commands...`
+    );
+
+    // ==========================================
+    // ⚡ DEV DEPLOY
+    // ==========================================
+    if (DEV_GUILD_ID) {
+
       await rest.put(
-        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+
+        Routes.applicationGuildCommands(
+          CLIENT_ID,
+          DEV_GUILD_ID
+        ),
+
         { body: commands }
       );
 
-      console.log(`âœ… Commands deployed to guild ${GUILD_ID}`);
-    } else {
-      await rest.put(
-        Routes.applicationCommands(CLIENT_ID),
-        { body: commands }
-      );
+      console.log(
 
-      console.log(`âœ… Global commands deployed`);
+        `✅ Deployed to DEV guild ${DEV_GUILD_ID}`
+      );
     }
 
-  } catch (error) {
-    console.error('âŒ Deploy error:', error);
-  }
-})();
+    // ==========================================
+    // 🌍 GLOBAL DEPLOY
+    // ==========================================
+    else {
 
+      await rest.put(
+
+        Routes.applicationCommands(
+          CLIENT_ID
+        ),
+
+        { body: commands }
+      );
+
+      console.log(
+        '✅ Global commands deployed'
+      );
+    }
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━');
+
+  } catch (error) {
+
+    console.error(
+      '❌ Deploy Error:',
+      error
+    );
+  }
+
+})();

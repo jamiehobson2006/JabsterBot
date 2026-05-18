@@ -3,97 +3,122 @@ const {
   SlashCommandBuilder
 } = require('discord.js');
 
-// 🔁 Fetch with retry + timeout
-async function fetchMeme(retries = 3) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+// 🔁 Fetch meme safely
+async function fetchMeme() {
 
-    const res = await fetch('https://meme-api.com/gimme', {
-      signal: controller.signal
-    });
+  for (let i = 0; i < 3; i++) {
 
-    clearTimeout(timeout);
+    try {
 
-    if (!res.ok) throw new Error('Bad response');
+      const controller = new AbortController();
 
-    const data = await res.json();
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, 5000);
 
-    // ❌ Filter bad memes
-    if (
-      !data ||
-      !data.url ||
-      data.nsfw ||
-      !data.url.match(/\.(jpg|jpeg|png|gif)$/i)
-    ) {
-      if (retries > 0) return fetchMeme(retries - 1);
-      return null;
+      const res = await fetch(
+        'https://meme-api.com/gimme',
+        {
+          signal: controller.signal
+        }
+      );
+
+      clearTimeout(timeout);
+
+      if (!res.ok) continue;
+
+      const data = await res.json();
+
+      // 🛡 Filter bad posts
+      if (
+        !data ||
+        !data.url ||
+        data.nsfw ||
+        !data.url.match(/\.(jpg|jpeg|png|gif)$/i)
+      ) {
+        continue;
+      }
+
+      return data;
+
+    } catch (err) {
+
+      console.error('Meme fetch error:', err);
     }
-
-    return data;
-
-  } catch {
-    if (retries > 0) return fetchMeme(retries - 1);
-    return null;
   }
+
+  return null;
 }
 
 module.exports = {
+
+  cooldown: 4000,
+
   data: new SlashCommandBuilder()
     .setName('meme')
     .setDescription('Get a random meme'),
 
   async execute(interaction) {
-    try {
-      // ❌ REMOVED deferReply (handled globally)
 
-      // Optional: quick feedback (feels faster UX)
-      await interaction.editReply({ content: '📡 Fetching a meme...' });
+    try {
+
+      // ⚡ Fast UX feedback
+      await interaction.editReply({
+        content: '📡 Fetching meme...'
+      });
 
       const data = await fetchMeme();
 
       if (!data) {
+
         return interaction.editReply({
-          content: '❌ Could not fetch a meme. Try again.'
+          content: '❌ Failed to fetch a meme.'
         });
       }
 
+      // 🎨 Embed
       const embed = new EmbedBuilder()
-        .setColor(Math.floor(Math.random() * 0xFFFFFF))
+        .setColor(0x5865F2)
         .setTitle(data.title || '😂 Meme')
+        .setURL(data.postLink || null)
         .setImage(data.url)
-        .addFields({
-          name: '👍 Stats',
-          value: `⬆️ ${data.ups || 0} upvotes`,
-          inline: true
-        })
+        .addFields(
+          {
+            name: '📍 Subreddit',
+            value: `r/${data.subreddit}`,
+            inline: true
+          },
+          {
+            name: '⬆️ Upvotes',
+            value: `${data.ups || 0}`,
+            inline: true
+          }
+        )
         .setFooter({
-          text: `From r/${data.subreddit} • Powered by meme-api`
+          text: 'Powered by meme-api'
         })
         .setTimestamp();
 
-      if (data.postLink) {
-        embed.setURL(data.postLink);
-      }
-
       return interaction.editReply({
-        content: null,
+        content: '',
         embeds: [embed]
       });
 
     } catch (err) {
+
       console.error('Meme Command Error:', err);
 
       if (interaction.deferred || interaction.replied) {
+
         return interaction.editReply({
           content: '❌ Error fetching meme.'
         });
-      } else {
-        return interaction.reply({
-          content: '❌ Error fetching meme.',
-          flags: 64
-        });
       }
+
+      return interaction.reply({
+        content: '❌ Error fetching meme.',
+        ephemeral: true
+      });
     }
   }
 };

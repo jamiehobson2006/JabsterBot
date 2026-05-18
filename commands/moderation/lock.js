@@ -1,6 +1,6 @@
-const { 
-  PermissionsBitField, 
-  EmbedBuilder, 
+const {
+  PermissionsBitField,
+  EmbedBuilder,
   SlashCommandBuilder,
   ChannelType
 } = require('discord.js');
@@ -8,9 +8,13 @@ const {
 const { sendLog, createLogEmbed } = require('../../utils/logger');
 
 module.exports = {
+
+  cooldown: 3000,
+
   data: new SlashCommandBuilder()
     .setName('lock')
     .setDescription('Lock the current channel')
+
     .addStringOption(option =>
       option
         .setName('reason')
@@ -19,92 +23,193 @@ module.exports = {
     ),
 
   async execute(interaction) {
+
     try {
 
-      // 🔐 User permission
-      if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageChannels)) {
+      // ========================
+      // 🔐 PERMISSION CHECK
+      // ========================
+      if (
+        !interaction.memberPermissions.has(
+          PermissionsBitField.Flags.ManageChannels
+        )
+      ) {
+
         return interaction.editReply({
-          content: '❌ You need **Manage Channels** permission.'
+          content:
+            '❌ You need **Manage Channels** permission.'
         });
       }
 
       const channel = interaction.channel;
-      const reason = interaction.options.getString('reason') || 'No reason provided';
-      const botMember = interaction.guild.members.me;
 
-      // ❌ Channel type safety
-      if (!channel || channel.type !== ChannelType.GuildText) {
+      const reason =
+        interaction.options.getString('reason') ||
+        'No reason provided';
+
+      const botMember =
+        interaction.guild.members.me;
+
+      // ========================
+      // 📺 CHANNEL TYPE CHECK
+      // ========================
+      if (
+        !channel ||
+        ![
+          ChannelType.GuildText,
+          ChannelType.GuildAnnouncement
+        ].includes(channel.type)
+      ) {
+
         return interaction.editReply({
-          content: '❌ You can only lock **text channels**.'
+          content:
+            '❌ You can only lock text channels.'
         });
       }
 
-      // ❌ Bot permission check
-      const perms = channel.permissionsFor(botMember);
-      if (!perms.has(PermissionsBitField.Flags.ManageChannels)) {
+      // ========================
+      // 🤖 BOT PERMISSIONS
+      // ========================
+      const perms =
+        channel.permissionsFor(botMember);
+
+      if (
+        !perms?.has([
+          PermissionsBitField.Flags.ManageChannels,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ViewChannel
+        ])
+      ) {
+
         return interaction.editReply({
-          content: '❌ I do not have permission to manage this channel.'
+          content:
+            '❌ I am missing permissions in this channel.'
         });
       }
 
-      const everyoneRole = interaction.guild.roles.everyone;
+      const everyoneRole =
+        interaction.guild.roles.everyone;
 
-      const overwrite = channel.permissionOverwrites.cache.get(everyoneRole.id);
+      // ========================
+      // 🔒 ALREADY LOCKED?
+      // ========================
+      const overwrite =
+        channel.permissionOverwrites.cache.get(
+          everyoneRole.id
+        );
 
-      const alreadyLocked = overwrite?.deny.has(PermissionsBitField.Flags.SendMessages);
+      const alreadyLocked =
+        overwrite?.deny.has(
+          PermissionsBitField.Flags.SendMessages
+        );
 
       if (alreadyLocked) {
+
         return interaction.editReply({
-          content: '⚠️ This channel is already locked.'
+          content:
+            '⚠️ This channel is already locked.'
         });
       }
 
-      // 🔒 Lock channel
-      await channel.permissionOverwrites.edit(everyoneRole, {
-        SendMessages: false
-      });
+      // ========================
+      // 🔒 LOCK CHANNEL
+      // ========================
+      await channel.permissionOverwrites.edit(
+        everyoneRole,
+        {
+          SendMessages: false
+        }
+      );
 
-      // 📢 Public message in channel
-      await channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0xED4245)
-            .setTitle('🔒 Channel Locked')
-            .setDescription(`**Reason:** ${reason}`)
-            .setFooter({ text: `Locked by ${interaction.user.tag}` })
-            .setTimestamp()
-        ]
-      });
+      // ========================
+      // 📢 PUBLIC MESSAGE
+      // ========================
+      const lockMessage =
+        await channel.send({
 
-      // ✅ Private confirmation
+          embeds: [
+
+            new EmbedBuilder()
+
+              .setColor(0xED4245)
+
+              .setTitle('🔒 Channel Locked')
+
+              .setDescription(
+                `**Reason:** ${reason}`
+              )
+
+              .setFooter({
+                text:
+                  `Locked by ${interaction.user.tag}`
+              })
+
+              .setTimestamp()
+          ]
+        });
+
+      // 🧹 AUTO DELETE
+      setTimeout(() => {
+        lockMessage.delete().catch(() => {});
+      }, 2000);
+
+      // ========================
+      // ✅ RESPONSE
+      // ========================
       await interaction.editReply({
-        content: '✅ Channel locked successfully.'
+        content:
+          `✅ Locked ${channel}.`
       });
 
-      // 📜 Log
-      const logEmbed = createLogEmbed({
-        action: 'LOCK',
-        user: { id: 'CHANNEL', tag: channel.name },
-        moderator: interaction.user,
-        reason,
-        caseId: null
-      });
+      // ========================
+      // 📜 MOD LOG
+      // ========================
+      const logEmbed =
+        createLogEmbed({
 
-      await sendLog(interaction.client, interaction.guild.id, logEmbed);
+          action: 'LOCK',
+
+          user: {
+            id: channel.id,
+            tag: `#${channel.name}`
+          },
+
+          moderator: interaction.user,
+
+          reason,
+
+          caseId: null
+        });
+
+      await sendLog(
+        interaction.client,
+        interaction.guild.id,
+        logEmbed
+      );
 
     } catch (err) {
-      console.error('Lock Command Error:', err);
 
-      if (interaction.deferred || interaction.replied) {
+      console.error(
+        'Lock Command Error:',
+        err
+      );
+
+      if (
+        interaction.deferred ||
+        interaction.replied
+      ) {
+
         return interaction.editReply({
-          content: '❌ Failed to lock channel.'
-        });
-      } else {
-        return interaction.reply({
-          content: '❌ Failed to lock channel.',
-          flags: 64
+          content:
+            '❌ Failed to lock channel.'
         });
       }
+
+      return interaction.reply({
+        content:
+          '❌ Failed to lock channel.',
+        ephemeral: true
+      });
     }
   }
 };

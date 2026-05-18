@@ -1,74 +1,224 @@
 const { get, run } = require('../database');
 
-// ⚡ In-memory cache (guild-user-command)
+// ========================
+// ⚡ CACHE
+// ========================
 const cache = new Map();
 
-// 🧠 Key helper
+// 🧹 Cache cleanup interval
+const CACHE_LIFETIME = 1000 * 60 * 30; // 30 mins
+
+// ========================
+// 🧠 CACHE KEY
+// ========================
 function key(guildId, userId, command) {
+
   return `${guildId || 'dm'}:${userId}:${command}`;
 }
 
-// 🧠 Get last used (cache first, DB fallback)
-async function getCooldown(guildId, userId, command) {
-  const k = key(guildId, userId, command);
+// ========================
+// 🧹 CACHE SWEEPER
+// ========================
+setInterval(() => {
 
-  if (cache.has(k)) {
-    return cache.get(k);
+  const now = Date.now();
+
+  for (const [k, data] of cache.entries()) {
+
+    if (data.expires < now) {
+      cache.delete(k);
+    }
   }
 
-  const data = await get(
-    `SELECT lastUsed FROM cooldowns WHERE guildId=? AND userId=? AND command=?`,
-    [guildId || 'dm', userId, command]
+}, 1000 * 60 * 10); // every 10 mins
+
+// ========================
+// 🧠 GET COOLDOWN
+// ========================
+async function getCooldown(
+  guildId,
+  userId,
+  command
+) {
+
+  const k = key(
+    guildId,
+    userId,
+    command
   );
 
-  const lastUsed = data?.lastUsed || 0;
+  const cached = cache.get(k);
 
-  cache.set(k, lastUsed);
+  // ========================
+  // ⚡ CACHE HIT
+  // ========================
+  if (cached) {
+
+    return cached.lastUsed;
+  }
+
+  // ========================
+  // 💾 DB FALLBACK
+  // ========================
+  const data = await get(
+
+    `SELECT lastUsed
+     FROM cooldowns
+
+     WHERE guildId = ?
+     AND userId = ?
+     AND command = ?`,
+
+    [
+      guildId || 'dm',
+      userId,
+      command
+    ]
+  );
+
+  const lastUsed =
+    data?.lastUsed || 0;
+
+  // ========================
+  // 💾 STORE CACHE
+  // ========================
+  cache.set(k, {
+
+    lastUsed,
+
+    expires:
+      Date.now() +
+      CACHE_LIFETIME
+  });
+
   return lastUsed;
 }
 
-// ⏱ Check cooldown
-async function checkCooldown(guildId, userId, command, cooldownMs) {
-  const lastUsed = await getCooldown(guildId, userId, command);
+// ========================
+// ⏱ CHECK COOLDOWN
+// ========================
+async function checkCooldown(
+  guildId,
+  userId,
+  command,
+  cooldownMs
+) {
+
+  const lastUsed =
+    await getCooldown(
+      guildId,
+      userId,
+      command
+    );
+
+  if (!lastUsed) {
+    return 0;
+  }
+
   const now = Date.now();
 
-  if (!lastUsed) return 0;
+  const remaining =
+    cooldownMs -
+    (now - lastUsed);
 
-  const remaining = cooldownMs - (now - lastUsed);
-  return remaining > 0 ? remaining : 0;
+  return remaining > 0
+
+    ? remaining
+
+    : 0;
 }
 
-// 💾 Set cooldown (cache + DB)
-async function setCooldown(guildId, userId, command) {
+// ========================
+// 💾 SET COOLDOWN
+// ========================
+async function setCooldown(
+  guildId,
+  userId,
+  command
+) {
+
   const now = Date.now();
-  const k = key(guildId, userId, command);
 
-  // ⚡ Update cache instantly
-  cache.set(k, now);
+  const k = key(
+    guildId,
+    userId,
+    command
+  );
 
-  // 💾 Save async
+  // ========================
+  // ⚡ UPDATE CACHE
+  // ========================
+  cache.set(k, {
+
+    lastUsed: now,
+
+    expires:
+      now + CACHE_LIFETIME
+  });
+
+  // ========================
+  // 💾 SAVE DATABASE
+  // ========================
   await run(
-    `INSERT INTO cooldowns (guildId, userId, command, lastUsed)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(guildId, userId, command)
-     DO UPDATE SET lastUsed = excluded.lastUsed`,
-    [guildId || 'dm', userId, command, now]
+
+    `INSERT INTO cooldowns
+    (guildId, userId, command, lastUsed)
+
+    VALUES (?, ?, ?, ?)
+
+    ON CONFLICT(guildId, userId, command)
+
+    DO UPDATE SET
+    lastUsed = excluded.lastUsed`,
+
+    [
+      guildId || 'dm',
+      userId,
+      command,
+      now
+    ]
   );
 }
 
-// ⚡ Combined helper (BEST to use)
-async function useCooldown(guildId, userId, command, cooldownMs) {
-  const remaining = await checkCooldown(guildId, userId, command, cooldownMs);
+// ========================
+// ⚡ USE COOLDOWN
+// ========================
+async function useCooldown(
+  guildId,
+  userId,
+  command,
+  cooldownMs
+) {
 
-  if (remaining > 0) return remaining;
+  const remaining =
+    await checkCooldown(
 
-  await setCooldown(guildId, userId, command);
+      guildId,
+      userId,
+      command,
+      cooldownMs
+    );
+
+  if (remaining > 0) {
+    return remaining;
+  }
+
+  await setCooldown(
+    guildId,
+    userId,
+    command
+  );
+
   return 0;
 }
 
 module.exports = {
+
   getCooldown,
+
   checkCooldown,
+
   setCooldown,
+
   useCooldown
 };

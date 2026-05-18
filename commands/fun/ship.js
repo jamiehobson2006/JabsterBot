@@ -5,54 +5,99 @@ const {
 
 // 💘 Deterministic + ORDER-INDEPENDENT
 function getCompatibility(id1, id2) {
+
   const [a, b] = [id1, id2].sort();
   const combined = a + b;
 
   let hash = 0;
+
   for (let i = 0; i < combined.length; i++) {
     hash = combined.charCodeAt(i) + ((hash << 5) - hash);
   }
 
-  return Math.abs(hash % 101);
+  const raw = Math.abs(hash % 101);
+
+  return Math.floor(
+    Math.pow(raw / 100, 0.75) * 100
+  );
 }
 
 // 🎯 Tier system
 function getTier(percent) {
-  if (percent >= 90) return { text: '💞 Soulmates!', color: 0xED4245 };
-  if (percent >= 75) return { text: '💖 Perfect Match!', color: 0xFF73FA };
-  if (percent >= 60) return { text: '💕 Strong Connection!', color: 0xF47FFF };
-  if (percent >= 40) return { text: '😐 Could work...', color: 0x95A5A6 };
-  if (percent >= 20) return { text: '💀 Not looking good...', color: 0x576574 };
+
+  if (percent >= 95) {
+    return { text: '💞 Soulmates!', color: 0xED4245 };
+  }
+
+  if (percent >= 75) {
+    return { text: '💖 Perfect Match!', color: 0xFF73FA };
+  }
+
+  if (percent >= 60) {
+    return { text: '💕 Strong Connection!', color: 0xF47FFF };
+  }
+
+  if (percent >= 40) {
+    return { text: '😐 Could work...', color: 0x95A5A6 };
+  }
+
+  if (percent >= 20) {
+    return { text: '💀 Not looking good...', color: 0x576574 };
+  }
+
   return { text: '🚫 Disaster.', color: 0x2C2F33 };
 }
 
-// 📊 Progress bar (🔥 BIG upgrade)
+// ❤️ Progress bar
 function createBar(percent) {
+
   const total = 10;
+
   const filled = Math.round((percent / 100) * total);
   const empty = total - filled;
 
-  return '🟥'.repeat(filled) + '⬛'.repeat(empty);
+  return '❤️'.repeat(filled) + '🖤'.repeat(empty);
+}
+
+// 🏷 Ship name
+function createShipName(name1, name2) {
+
+  return (
+    name1.slice(0, Math.ceil(name1.length / 2)) +
+    name2.slice(Math.floor(name2.length / 2))
+  );
 }
 
 module.exports = {
+
+  cooldown: 3000,
+
   data: new SlashCommandBuilder()
     .setName('ship')
     .setDescription('Check compatibility between two users')
     .addUserOption(option =>
-      option.setName('user1').setDescription('First user').setRequired(true)
+      option
+        .setName('user1')
+        .setDescription('First user')
+        .setRequired(true)
     )
     .addUserOption(option =>
-      option.setName('user2').setDescription('Second user').setRequired(true)
+      option
+        .setName('user2')
+        .setDescription('Second user')
+        .setRequired(true)
     ),
 
   async execute(interaction) {
+
     try {
+
       const user1 = interaction.options.getUser('user1', true);
       const user2 = interaction.options.getUser('user2', true);
 
-      // ❌ Same user
+      // 💀 Same user
       if (user1.id === user2.id) {
+
         return interaction.editReply({
           content: '💀 You can’t ship someone with themselves... or can you?'
         });
@@ -60,51 +105,67 @@ module.exports = {
 
       // 🤖 Bots
       if (user1.bot || user2.bot) {
+
         return interaction.editReply({
           content: '🤖 Bots don’t do relationships... yet.'
         });
       }
 
-      // 💘 Compatibility
+      // 💘 Suspense
+      await interaction.editReply({
+        content: '💘 Calculating compatibility...'
+      });
+
+      await new Promise(res => setTimeout(res, 900));
+
       const percent = getCompatibility(user1.id, user2.id);
+
       const tier = getTier(percent);
       const bar = createBar(percent);
 
-      // ⚡ Small suspense effect (feels premium)
-      await interaction.editReply({ content: '💘 Calculating compatibility...' });
-      await new Promise(res => setTimeout(res, 900));
+      const shipName = createShipName(
+        user1.username,
+        user2.username
+      );
 
       const embed = new EmbedBuilder()
         .setColor(tier.color)
         .setTitle('💘 Ship Result')
         .setDescription(
           `${user1} ❤️ ${user2}\n\n` +
+          `🏷 **Ship Name:** \`${shipName}\`\n\n` +
           `💖 **Compatibility:** \`${percent}%\`\n` +
           `${bar}\n\n` +
           `💬 **Status:** ${tier.text}`
         )
-        .setThumbnail(user1.displayAvatarURL({ dynamic: true }))
-        .setFooter({ text: 'Love is unpredictable... or is it?' })
+        .setThumbnail(
+          user1.displayAvatarURL({ dynamic: true })
+        )
+        .setFooter({
+          text: 'Love is unpredictable... or is it?'
+        })
         .setTimestamp();
 
       return interaction.editReply({
-        content: null,
+        content: '',
         embeds: [embed]
       });
 
     } catch (err) {
+
       console.error('Ship Command Error:', err);
 
       if (interaction.deferred || interaction.replied) {
+
         return interaction.editReply({
           content: '❌ Shipping failed.'
         });
-      } else {
-        return interaction.reply({
-          content: '❌ Shipping failed.',
-          flags: 64
-        });
       }
+
+      return interaction.reply({
+        content: '❌ Shipping failed.',
+        ephemeral: true
+      });
     }
   }
 };

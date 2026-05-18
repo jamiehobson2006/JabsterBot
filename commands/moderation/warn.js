@@ -4,147 +4,311 @@ const {
   SlashCommandBuilder
 } = require('discord.js');
 
-const { run, get } = require('../../database');
-const { sendLog, createLogEmbed } = require('../../utils/logger');
+const {
+  run,
+  get
+} = require('../../database');
 
-// ⏱ Punishment durations
+const {
+  sendLog,
+  createLogEmbed
+} = require('../../utils/logger');
+
+// ========================
+// ⏱ AUTO PUNISHMENTS
+// ========================
 const punishments = {
-  3: { type: 'timeout', duration: 10 * 60 * 1000 }, // 10 minutes
-  5: { type: 'timeout', duration: 60 * 60 * 1000 }  // 1 hour
+
+  3: {
+    type: 'timeout',
+    duration: 10 * 60 * 1000 // 10m
+  },
+
+  5: {
+    type: 'timeout',
+    duration: 60 * 60 * 1000 // 1h
+  }
 };
 
 module.exports = {
+
+  cooldown: 3000,
+
   data: new SlashCommandBuilder()
+
     .setName('warn')
+
     .setDescription('Warn a user')
+
     .addUserOption(option =>
-      option.setName('user').setDescription('User').setRequired(true)
+      option
+        .setName('user')
+        .setDescription('User')
+        .setRequired(true)
     )
+
     .addStringOption(option =>
-      option.setName('reason').setDescription('Reason').setMaxLength(300)
+      option
+        .setName('reason')
+        .setDescription('Reason')
+        .setMaxLength(300)
     ),
 
   async execute(interaction) {
+
     try {
 
-      // 🔐 User permission
-      if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+      // ========================
+      // 🔐 USER PERMISSION
+      // ========================
+      if (
+        !interaction.memberPermissions.has(
+          PermissionsBitField.Flags.ModerateMembers
+        )
+      ) {
+
         return interaction.editReply({
-          content: '❌ You need **Moderate Members** permission.'
+          content:
+            '❌ You need **Moderate Members** permission.'
         });
       }
 
-      const botMember = interaction.guild.members.me;
+      const botMember =
+        interaction.guild.members.me;
 
-      // ❌ Bot permission
-      if (!botMember.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+      // ========================
+      // 🤖 BOT PERMISSION
+      // ========================
+      if (
+        !botMember.permissions.has(
+          PermissionsBitField.Flags.ModerateMembers
+        )
+      ) {
+
         return interaction.editReply({
-          content: '❌ I do not have permission to moderate members.'
+          content:
+            '❌ I do not have permission to moderate members.'
         });
       }
 
-      const user = interaction.options.getUser('user', true);
-      const reason = interaction.options.getString('reason') || 'No reason provided';
+      // ========================
+      // 📥 OPTIONS
+      // ========================
+      const user =
+        interaction.options.getUser(
+          'user',
+          true
+        );
 
-      // 🚫 Checks
-      if (user.id === interaction.user.id) {
-        return interaction.editReply({ content: '❌ You cannot warn yourself.' });
+      const reason =
+        interaction.options.getString(
+          'reason'
+        ) || 'No reason provided';
+
+      // ========================
+      // 🚫 BASIC CHECKS
+      // ========================
+      if (
+        user.id === interaction.user.id
+      ) {
+
+        return interaction.editReply({
+          content:
+            '❌ You cannot warn yourself.'
+        });
       }
 
-      if (user.id === interaction.client.user.id) {
-        return interaction.editReply({ content: '❌ You cannot warn the bot.' });
+      if (
+        user.id === interaction.client.user.id
+      ) {
+
+        return interaction.editReply({
+          content:
+            '❌ You cannot warn the bot.'
+        });
       }
 
-      if (user.id === interaction.guild.ownerId) {
-        return interaction.editReply({ content: '❌ You cannot warn the server owner.' });
+      if (
+        user.id === interaction.guild.ownerId
+      ) {
+
+        return interaction.editReply({
+          content:
+            '❌ You cannot warn the server owner.'
+        });
       }
 
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+      // ========================
+      // 👤 FETCH MEMBER
+      // ========================
+      const member =
+        await interaction.guild.members
+          .fetch(user.id)
+          .catch(() => null);
 
       if (!member) {
+
         return interaction.editReply({
-          content: '❌ User not found in this server.'
+          content:
+            '❌ User not found in this server.'
         });
       }
 
-      // 🔼 Hierarchy
-      if (member.roles.highest.position >= interaction.member.roles.highest.position) {
+      // ========================
+      // 🔼 USER HIERARCHY
+      // ========================
+      if (
+
+        member.id !== interaction.user.id &&
+
+        member.roles.highest.position >=
+        interaction.member.roles.highest.position
+
+      ) {
+
         return interaction.editReply({
-          content: '❌ You cannot warn this user (role hierarchy).'
+          content:
+            '❌ You cannot warn this user due to role hierarchy.'
+        });
+      }
+
+      // ========================
+      // 🤖 BOT HIERARCHY
+      // ========================
+      if (
+
+        member.roles.highest.position >=
+        botMember.roles.highest.position
+
+      ) {
+
+        return interaction.editReply({
+          content:
+            '❌ I cannot warn this user due to role hierarchy.'
         });
       }
 
       // ========================
       // 🔢 UPDATE WARN COUNT
       // ========================
-      await run(
-        `INSERT INTO warns (guildId, userId, count)
-         VALUES (?, ?, 1)
-         ON CONFLICT(guildId, userId)
-         DO UPDATE SET count = count + 1`,
-        [interaction.guild.id, user.id]
-      );
+      run(
 
-      const row = await get(
-        `SELECT count FROM warns WHERE guildId=? AND userId=?`,
-        [interaction.guild.id, user.id]
-      );
+        `INSERT INTO warns
+        (guildId, userId, count)
+        VALUES (?, ?, 1)
 
-      const warnCount = row?.count || 1;
+        ON CONFLICT(guildId, userId)
 
-      // ========================
-      // 📄 CREATE CASE
-      // ========================
-      const result = await run(
-        `INSERT INTO cases (guildId, userId, moderatorId, action, reason, timestamp)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        DO UPDATE SET
+        count = count + 1`,
+
         [
           interaction.guild.id,
-          user.id,
-          interaction.user.id,
-          'WARN',
-          reason,
-          Date.now()
+          user.id
         ]
       );
 
-      const caseId = result?.lastInsertRowid ?? 'N/A';
+      const row =
+        get(
+
+          `SELECT count FROM warns
+          WHERE guildId = ?
+          AND userId = ?`,
+
+          [
+            interaction.guild.id,
+            user.id
+          ]
+        );
+
+      const warnCount =
+        row?.count || 1;
 
       // ========================
-      // 🚨 ESCALATION SYSTEM
+      // 📁 CREATE CASE
+      // ========================
+      const result =
+        run(
+
+          `INSERT INTO cases
+          (guildId, userId, moderatorId, action, reason, timestamp)
+
+          VALUES (?, ?, ?, ?, ?, ?)`,
+
+          [
+            interaction.guild.id,
+            user.id,
+            interaction.user.id,
+            'WARN',
+            reason,
+            Date.now()
+          ]
+        );
+
+      const caseId =
+        result?.lastInsertRowid || 'N/A';
+
+      // ========================
+      // 🚨 ESCALATION
       // ========================
       let escalationText = null;
 
-      const punishment = punishments[warnCount];
+      const punishment =
+        punishments[warnCount];
 
-      if (punishment) {
+      if (
+        punishment &&
+        member.moderatable
+      ) {
+
         try {
-          if (punishment.type === 'timeout' && member.moderatable) {
+
+          if (
+            punishment.type === 'timeout'
+          ) {
+
             await member.timeout(
+
               punishment.duration,
+
               `Auto punishment (${warnCount} warns)`
             );
 
-            const minutes = Math.floor(punishment.duration / 60000);
+            const minutes =
+              Math.floor(
+                punishment.duration / 60000
+              );
 
-            escalationText = `🔇 Auto timeout applied (**${minutes} minutes**)`;
+            escalationText =
+              `🔇 Automatic timeout applied (${minutes} minutes)`;
 
-            // 📁 Add punishment case
-            await run(
-              `INSERT INTO cases (guildId, userId, moderatorId, action, reason, timestamp)
-               VALUES (?, ?, ?, ?, ?, ?)`,
+            // ========================
+            // 📁 AUTO CASE
+            // ========================
+            run(
+
+              `INSERT INTO cases
+              (guildId, userId, moderatorId, action, reason, timestamp)
+
+              VALUES (?, ?, ?, ?, ?, ?)`,
+
               [
                 interaction.guild.id,
                 user.id,
                 interaction.client.user.id,
-                'AUTO-MUTE',
+                'AUTO-TIMEOUT',
                 `Reached ${warnCount} warns`,
                 Date.now()
               ]
             );
           }
+
         } catch (err) {
-          console.error('Escalation Error:', err);
+
+          console.error(
+            'Warn Escalation Error:',
+            err
+          );
         }
       }
 
@@ -152,69 +316,157 @@ module.exports = {
       // 📩 DM USER
       // ========================
       try {
+
         await user.send({
+
           embeds: [
+
             new EmbedBuilder()
+
               .setColor(0xF1C40F)
-              .setTitle(`You were warned in ${interaction.guild.name}`)
-              .setDescription(
-                `Reason: ${reason}\n\nTotal Warnings: ${warnCount}`
+
+              .setTitle(
+                `⚠️ You Were Warned`
               )
+
+              .setDescription(
+                `You were warned in **${interaction.guild.name}**.`
+              )
+
+              .addFields(
+
+                {
+                  name: '📄 Reason',
+                  value: reason
+                },
+
+                {
+                  name: '⚠️ Total Warnings',
+                  value: `${warnCount}`
+                }
+              )
+
               .setTimestamp()
           ]
         });
+
       } catch {}
 
       // ========================
       // 🎨 RESPONSE
       // ========================
-      const embed = new EmbedBuilder()
-        .setColor(0xF1C40F)
-        .setTitle('User Warned')
-        .setDescription(`⚠️ **${user.tag}** has been warned`)
-        .addFields(
-          { name: 'Reason', value: reason },
-          { name: 'Total Warns', value: `${warnCount}`, inline: true },
-          { name: 'Case', value: `#${caseId}`, inline: true }
-        )
-        .setFooter({ text: `By ${interaction.user.tag}` })
-        .setTimestamp();
+      const embed =
+        new EmbedBuilder()
+
+          .setColor(0xF1C40F)
+
+          .setTitle('⚠️ User Warned')
+
+          .setDescription(
+            `${user} has been warned.`
+          )
+
+          .addFields(
+
+            {
+              name: '📄 Reason',
+              value: reason
+            },
+
+            {
+              name: '⚠️ Total Warns',
+              value: `${warnCount}`,
+              inline: true
+            },
+
+            {
+              name: '📁 Case',
+              value: `#${caseId}`,
+              inline: true
+            }
+          )
+
+          .setFooter({
+            text:
+              `Moderator: ${interaction.user.tag}`
+          })
+
+          .setTimestamp();
 
       if (escalationText) {
+
         embed.addFields({
-          name: 'Action Taken',
+
+          name: '🚨 Automatic Action',
+
           value: escalationText
         });
       }
 
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply({
+        embeds: [embed]
+      });
+
+      // ========================
+      // 🗑 AUTO DELETE
+      // ========================
+      setTimeout(() => {
+
+        interaction
+          .deleteReply()
+          .catch(() => {});
+
+      }, 3000);
 
       // ========================
       // 📜 LOG
       // ========================
-      const log = createLogEmbed({
-        action: 'WARN',
-        user,
-        moderator: interaction.user,
-        reason: `${reason}\nTotal Warns: ${warnCount}`,
-        caseId
-      });
+      const log =
+        createLogEmbed({
 
-      await sendLog(interaction.client, interaction.guild.id, log);
+          action: 'WARN',
+
+          user,
+
+          moderator: interaction.user,
+
+          reason:
+            `${reason}\nTotal Warns: ${warnCount}`,
+
+          caseId
+        });
+
+      await sendLog(
+        interaction.client,
+        interaction.guild.id,
+        log
+      );
 
     } catch (err) {
-      console.error('Warn Error:', err);
 
-      if (interaction.deferred || interaction.replied) {
+      console.error(
+        'Warn Error:',
+        err
+      );
+
+      if (
+        interaction.deferred ||
+        interaction.replied
+      ) {
+
         return interaction.editReply({
-          content: '❌ Failed to execute warn command.'
-        });
-      } else {
-        return interaction.reply({
-          content: '❌ Failed to execute warn command.',
-          ephemeral: true
+          content:
+            '❌ Failed to warn user.'
         });
       }
+
+      return interaction.reply({
+
+        content:
+          '❌ Failed to warn user.',
+
+        ephemeral: true
+      });
     }
   }
 };

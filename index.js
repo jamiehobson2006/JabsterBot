@@ -1,169 +1,415 @@
-﻿const { Client, GatewayIntentBits, Collection, Partials } = require('discord.js');
+﻿const {
+
+  Client,
+
+  GatewayIntentBits,
+
+  Collection,
+
+  Partials,
+
+  ActivityType
+
+} = require('discord.js');
+
 const fs = require('fs');
 const path = require('path');
+
 require('dotenv').config();
 
-const { all, run } = require('./database');
+const {
+  all,
+  run
+} = require('./database');
 
+// ==================================================
+// 🔐 TOKEN CHECK
+// ==================================================
+if (!process.env.TOKEN) {
+
+  throw new Error(
+    '❌ TOKEN missing in .env'
+  );
+}
+
+// ==================================================
+// 🏗 BUILD INFO
+// ==================================================
+const BOT_BUILD =
+  'Ticket System v3';
+
+// ==================================================
+// 🤖 CLIENT
+// ==================================================
 const client = new Client({
+
   intents: [
+
     GatewayIntentBits.Guilds,
+
     GatewayIntentBits.GuildMembers,
+
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+
+    GatewayIntentBits.MessageContent,
+
+    GatewayIntentBits.GuildModeration,
+
+    GatewayIntentBits.GuildMessageReactions,
+
+    GatewayIntentBits.GuildVoiceStates,
+
+    GatewayIntentBits.GuildPresences
   ],
+
   partials: [
+
     Partials.Message,
+
     Partials.Channel,
-    Partials.User
-  ]
+
+    Partials.User,
+
+    Partials.Reaction
+  ],
+
+  sweepers: {
+
+    messages: {
+
+      interval: 300,
+
+      lifetime: 600
+    },
+
+    users: {
+
+      interval: 3600,
+
+      filter: () => user => user.bot
+    }
+  }
 });
 
-// ========================
-// ðŸ“¦ COMMANDS
-// ========================
-client.commands = new Collection();
+// ==================================================
+// 📦 COMMAND COLLECTION
+// ==================================================
+client.commands =
+  new Collection();
 
+// ==================================================
+// 📦 LOAD COMMANDS
+// ==================================================
 function loadCommands() {
-  const commandsPath = path.join(__dirname, 'commands');
 
-  if (!fs.existsSync(commandsPath)) return;
+  const commandsPath =
+    path.join(__dirname, 'commands');
 
-  const folders = fs.readdirSync(commandsPath);
+  if (
+    !fs.existsSync(commandsPath)
+  ) {
+
+    console.warn(
+      '⚠️ Commands folder missing'
+    );
+
+    return;
+  }
+
+  const folders =
+    fs.readdirSync(commandsPath);
+
+  let loaded = 0;
 
   for (const folder of folders) {
-    const folderPath = path.join(commandsPath, folder);
-    const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.js'));
+
+    const folderPath =
+      path.join(commandsPath, folder);
+
+    const files =
+      fs.readdirSync(folderPath)
+
+        .filter(f =>
+          f.endsWith('.js')
+        );
 
     for (const file of files) {
+
       try {
-        const filePath = path.join(folderPath, file);
 
-        delete require.cache[require.resolve(filePath)];
+        const filePath =
+          path.join(folderPath, file);
 
-        const command = require(filePath);
+        delete require.cache[
+          require.resolve(filePath)
+        ];
 
-        if (!command.data || !command.execute) {
-          console.log(`âš ï¸ Skipped ${file}`);
+        const command =
+          require(filePath);
+
+        if (
+          !command.data ||
+          !command.execute
+        ) {
+
+          console.warn(
+            `⚠️ Skipped invalid command ${file}`
+          );
+
           continue;
         }
 
-        client.commands.set(command.data.name, command);
+        client.commands.set(
+          command.data.name,
+          command
+        );
+
+        loaded++;
 
       } catch (err) {
-        console.error(`âŒ Failed loading ${file}:`, err);
+
+        console.error(
+
+          `❌ Failed loading ${file}:`,
+
+          err
+        );
       }
     }
   }
 
-  console.log(`âœ… Loaded ${client.commands.size} commands`);
+  console.log(
+    `✅ Loaded ${loaded} commands`
+  );
 }
 
-// ========================
-// ðŸ“‚ EVENTS
-// ========================
+// ==================================================
+// 📂 LOAD EVENTS
+// ==================================================
 function loadEvents() {
-  const eventsPath = path.join(__dirname, 'events');
 
-  if (!fs.existsSync(eventsPath)) return;
+  const eventsPath =
+    path.join(__dirname, 'events');
 
-  const files = fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'));
+  if (
+    !fs.existsSync(eventsPath)
+  ) {
 
-  for (const file of files) {
-    try {
-      const filePath = path.join(eventsPath, file);
+    console.warn(
+      '⚠️ Events folder missing'
+    );
 
-      delete require.cache[require.resolve(filePath)];
-
-      const event = require(filePath);
-
-      if (!event.name || !event.execute) continue;
-
-      if (event.once) {
-        client.once(event.name, (...args) => event.execute(...args, client));
-      } else {
-        client.on(event.name, (...args) => event.execute(...args, client));
-      }
-
-    } catch (err) {
-      console.error(`âŒ Failed loading event ${file}:`, err);
-    }
+    return;
   }
 
-  console.log(`âœ… Loaded ${files.length} events`);
-}
+  const files =
+    fs.readdirSync(eventsPath)
 
-// ========================
-// ðŸ”Š AUTO UNMUTE SYSTEM
-// ========================
-function startMuteLoop() {
-  setInterval(async () => {
-    try {
-      const now = Date.now();
-
-      const expired = all(
-        `SELECT * FROM mutes WHERE endTime <= ? LIMIT 50`,
-        [now]
+      .filter(f =>
+        f.endsWith('.js')
       );
 
-      if (!expired.length) return;
+  let loaded = 0;
 
-      for (const mute of expired) {
-        const guild = client.guilds.cache.get(mute.guildId);
-        if (!guild) continue;
+  for (const file of files) {
 
-        const member = await guild.members.fetch(mute.userId).catch(() => null);
-        const role = guild.roles.cache.find(r => r.name === 'Muted');
+    try {
 
-        if (member && role && member.roles.cache.has(role.id)) {
-          await member.roles.remove(role).catch(() => {});
-        }
+      const filePath =
+        path.join(eventsPath, file);
 
-        run(
-          `DELETE FROM mutes WHERE guildId=? AND userId=?`,
-          [mute.guildId, mute.userId]
+      delete require.cache[
+        require.resolve(filePath)
+      ];
+
+      const event =
+        require(filePath);
+
+      if (
+        !event.name ||
+        !event.execute
+      ) {
+
+        console.warn(
+          `⚠️ Invalid event ${file}`
+        );
+
+        continue;
+      }
+
+      if (event.once) {
+
+        client.once(
+
+          event.name,
+
+          (...args) =>
+            event.execute(
+              ...args,
+              client
+            )
+        );
+
+      } else {
+
+        client.on(
+
+          event.name,
+
+          (...args) =>
+            event.execute(
+              ...args,
+              client
+            )
         );
       }
 
-      console.log(`ðŸ”Š Processed ${expired.length} expired mutes`);
+      loaded++;
 
     } catch (err) {
-      console.error('âŒ Auto-unmute error:', err);
+
+      console.error(
+
+        `❌ Failed loading event ${file}:`,
+
+        err
+      );
     }
-  }, 15000);
+  }
+
+  console.log(
+    `✅ Loaded ${loaded} events`
+  );
 }
 
-// ========================
-// ðŸš€ READY
-// ========================
-client.once('clientReady', async () => {
-  console.log(`ðŸš€ Logged in as ${client.user.tag}`);
+// ==================================================
+// 🚀 READY
+// ==================================================
+client.once(
 
-  await new Promise(res => setTimeout(res, 3000));
+  'clientReady',
 
-  console.log('âœ… Systems initialized');
+  async () => {
 
-  startMuteLoop();
+    console.log('━━━━━━━━━━━━━━━━━━━━━━');
+
+    console.log(
+      `✅ Logged in as ${client.user.tag}`
+    );
+
+    console.log(
+      `🏗 Build: ${BOT_BUILD}`
+    );
+
+    console.log(
+      `🌍 Servers: ${client.guilds.cache.size}`
+    );
+
+    console.log(
+      `👥 Users: ${client.users.cache.size}`
+    );
+
+    console.log(
+      `📦 Commands: ${client.commands.size}`
+    );
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━');
+
+    // ==========================================
+    // ⏳ STARTUP DELAY
+    // ==========================================
+    await new Promise(res =>
+      setTimeout(res, 3000)
+    );
+
+    // ==========================================
+    // 🎮 PRESENCE
+    // ==========================================
+    client.user.setPresence({
+
+      activities: [
+
+        {
+
+          name:
+            'tickets & moderation',
+
+          type:
+            ActivityType.Watching
+        }
+      ],
+
+      status: 'online'
+    });
+
+    console.log(
+      '✅ Systems initialized'
+    );
+  }
+);
+
+// ==================================================
+// ❌ GLOBAL ERROR HANDLING
+// ==================================================
+process.on(
+
+  'unhandledRejection',
+
+  err => {
+
+    console.error(
+      '❌ Unhandled Rejection:',
+      err
+    );
+  }
+);
+
+process.on(
+
+  'uncaughtException',
+
+  err => {
+
+    console.error(
+      '❌ Uncaught Exception:',
+      err
+    );
+  }
+);
+
+// ==================================================
+// 🛑 GRACEFUL SHUTDOWN
+// ==================================================
+process.on('SIGINT', () => {
+
+  console.log(
+    '🛑 Shutting down bot...'
+  );
+
+  client.destroy();
+
+  process.exit(0);
 });
 
-// ========================
-// âŒ GLOBAL ERROR HANDLING
-// ========================
-process.on('unhandledRejection', err => {
-  console.error('âŒ Unhandled Promise Rejection:', err);
+process.on('SIGTERM', () => {
+
+  console.log(
+    '🛑 Process terminated'
+  );
+
+  client.destroy();
+
+  process.exit(0);
 });
 
-process.on('uncaughtException', err => {
-  console.error('âŒ Uncaught Exception:', err);
-});
-
-// ========================
-// ðŸ”§ INIT
-// ========================
+// ==================================================
+// 🔧 INIT
+// ==================================================
 loadCommands();
+
 loadEvents();
 
-// ========================
-// ðŸ”‘ LOGIN
-// ========================
-client.login(process.env.TOKEN || process.env.Token);
+// ==================================================
+// 🔑 LOGIN
+// ==================================================
+client.login(process.env.TOKEN);

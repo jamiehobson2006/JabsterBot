@@ -7,199 +7,462 @@ const {
 const { run } = require('../../database');
 const { sendLog, createLogEmbed } = require('../../utils/logger');
 
-// ⏱ Parse duration (supports 1h30m etc.)
+// ========================
+// ⏱ PARSE DURATION
+// Supports:
+// 10s
+// 5m
+// 1h
+// 1d
+// 1w
+// 1h30m
+// 2w3d4h
+// ========================
 function parseDuration(input) {
-  const regex = /(\d+)(s|m|h|d)/g;
+
+  if (!input) return null;
+
+  input = input.toLowerCase().replace(/\s+/g, '');
+
+  // ✅ FULL validation
+  const valid = /^(\d+(s|m|h|d|w))+$/;
+
+  if (!valid.test(input)) return null;
+
+  const regex = /(\d+)(s|m|h|d|w)/g;
+
   let match;
   let total = 0;
 
   const multipliers = {
+
     s: 1000,
     m: 60000,
     h: 3600000,
-    d: 86400000
+    d: 86400000,
+    w: 604800000
+
   };
 
   while ((match = regex.exec(input)) !== null) {
+
     const value = parseInt(match[1]);
     const unit = match[2];
+
     total += value * multipliers[unit];
   }
 
   return total || null;
 }
 
-// ⏱ Pretty format
+// ========================
+// 🕒 FORMAT DURATION
+// ========================
 function formatDuration(ms) {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  const h = Math.floor(m / 60);
-  const d = Math.floor(h / 24);
 
-  if (d > 0) return `${d}d`;
-  if (h > 0) return `${h}h`;
-  if (m > 0) return `${m}m`;
-  return `${s}s`;
+  const units = [
+
+    ['w', 604800000],
+    ['d', 86400000],
+    ['h', 3600000],
+    ['m', 60000],
+    ['s', 1000]
+
+  ];
+
+  const parts = [];
+
+  for (const [label, value] of units) {
+
+    const amount = Math.floor(ms / value);
+
+    if (amount > 0) {
+
+      parts.push(`${amount}${label}`);
+
+      ms -= amount * value;
+    }
+  }
+
+  return parts.join(' ');
 }
 
 module.exports = {
+
+  cooldown: 5000,
+
   data: new SlashCommandBuilder()
+
     .setName('mute')
+
     .setDescription('Timeout (mute) a user')
+
     .addUserOption(option =>
-      option.setName('user').setDescription('User to mute').setRequired(true)
+      option
+        .setName('user')
+        .setDescription('User to mute')
+        .setRequired(true)
     )
+
     .addStringOption(option =>
-      option.setName('duration').setDescription('e.g. 10m, 1h, 1h30m').setRequired(true)
+      option
+        .setName('duration')
+        .setDescription('Examples: 10m, 1h, 1d, 1w, 1h30m')
+        .setRequired(true)
+        .setMaxLength(50)
     )
+
     .addStringOption(option =>
-      option.setName('reason').setDescription('Reason').setMaxLength(300)
+      option
+        .setName('reason')
+        .setDescription('Reason for muting')
+        .setMaxLength(300)
     ),
 
   async execute(interaction) {
+
     try {
 
-      // 🔐 User permission
-      if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+      // ========================
+      // 🔐 USER PERMISSION
+      // ========================
+      if (
+        !interaction.memberPermissions.has(
+          PermissionsBitField.Flags.ModerateMembers
+        )
+      ) {
+
         return interaction.editReply({
-          content: '❌ You need **Moderate Members** permission.'
+          content:
+            '❌ You need **Moderate Members** permission.'
         });
       }
 
-      const botMember = interaction.guild.members.me;
+      const botMember =
+        interaction.guild.members.me;
 
-      // ❌ Bot permission check
-      if (!botMember.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+      // ========================
+      // 🤖 BOT PERMISSION
+      // ========================
+      if (
+        !botMember.permissions.has(
+          PermissionsBitField.Flags.ModerateMembers
+        )
+      ) {
+
         return interaction.editReply({
-          content: '❌ I do not have permission to timeout members.'
+          content:
+            '❌ I do not have permission to timeout members.'
         });
       }
 
-      const user = interaction.options.getUser('user', true);
-      const durationInput = interaction.options.getString('duration', true);
-      const reason = interaction.options.getString('reason') || 'No reason provided';
+      const user =
+        interaction.options.getUser(
+          'user',
+          true
+        );
 
-      const duration = parseDuration(durationInput);
+      const durationInput =
+        interaction.options.getString(
+          'duration',
+          true
+        );
+
+      const reason =
+        interaction.options.getString(
+          'reason'
+        ) || 'No reason provided';
+
+      // ========================
+      // ⏱ PARSE DURATION
+      // ========================
+      const duration =
+        parseDuration(durationInput);
 
       if (!duration) {
+
         return interaction.editReply({
-          content: '❌ Invalid duration. Use `10m`, `1h`, `1h30m`.'
+          content:
+            '❌ Invalid duration.\nExamples: `10m`, `1h`, `1w`, `1h30m`'
         });
       }
 
-      const max = 28 * 24 * 60 * 60 * 1000;
+      // ========================
+      // ⛔ MINIMUM
+      // ========================
+      if (duration < 5000) {
+
+        return interaction.editReply({
+          content:
+            '❌ Minimum timeout duration is **5 seconds**.'
+        });
+      }
+
+      // ========================
+      // ⛔ MAXIMUM
+      // ========================
+      const max =
+        28 * 24 * 60 * 60 * 1000;
+
       if (duration > max) {
+
         return interaction.editReply({
-          content: '❌ Maximum timeout is **28 days**.'
+          content:
+            '❌ Maximum timeout duration is **28 days**.'
         });
       }
 
-      // 🚫 Checks
-      if (user.id === interaction.user.id)
-        return interaction.editReply({ content: '❌ You cannot mute yourself.' });
+      // ========================
+      // 🚫 BASIC CHECKS
+      // ========================
+      if (user.id === interaction.user.id) {
 
-      if (user.id === interaction.client.user.id)
-        return interaction.editReply({ content: '❌ You cannot mute the bot.' });
-
-      if (user.id === interaction.guild.ownerId)
-        return interaction.editReply({ content: '❌ You cannot mute the server owner.' });
-
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-
-      if (!member)
-        return interaction.editReply({ content: '❌ User not found.' });
-
-      // 🔼 Hierarchy
-      if (member.roles.highest.position >= interaction.member.roles.highest.position) {
         return interaction.editReply({
-          content: '❌ You cannot mute this user (role hierarchy).'
+          content:
+            '❌ You cannot mute yourself.'
         });
       }
 
+      if (user.id === interaction.client.user.id) {
+
+        return interaction.editReply({
+          content:
+            '❌ You cannot mute the bot.'
+        });
+      }
+
+      if (user.id === interaction.guild.ownerId) {
+
+        return interaction.editReply({
+          content:
+            '❌ You cannot mute the server owner.'
+        });
+      }
+
+      const member =
+        await interaction.guild.members
+          .fetch(user.id)
+          .catch(() => null);
+
+      if (!member) {
+
+        return interaction.editReply({
+          content:
+            '❌ User not found.'
+        });
+      }
+
+      // ========================
+      // 🚫 ADMIN CHECK
+      // ========================
+      if (
+        member.permissions.has(
+          PermissionsBitField.Flags.Administrator
+        )
+      ) {
+
+        return interaction.editReply({
+          content:
+            '❌ You cannot mute administrators.'
+        });
+      }
+
+      // ========================
+      // 🔼 HIERARCHY
+      // ========================
+      if (
+        member.roles.highest.position >=
+        interaction.member.roles.highest.position
+      ) {
+
+        return interaction.editReply({
+          content:
+            '❌ You cannot mute this user due to role hierarchy.'
+        });
+      }
+
+      // ========================
+      // 🤖 BOT HIERARCHY
+      // ========================
       if (!member.moderatable) {
+
         return interaction.editReply({
-          content: '❌ I cannot mute this user.'
+          content:
+            '❌ I cannot mute this user.'
         });
       }
 
-      // ⚠️ Already muted check
-      if (member.communicationDisabledUntilTimestamp > Date.now()) {
+      // ========================
+      // ⚠️ ALREADY MUTED
+      // ========================
+      if (
+        member.communicationDisabledUntilTimestamp >
+        Date.now()
+      ) {
+
         return interaction.editReply({
-          content: '⚠️ This user is already muted.'
+          content:
+            '⚠️ This user is already muted.'
         });
       }
 
-      // 🔇 Apply timeout
-      await member.timeout(duration, `${reason} | By ${interaction.user.tag}`);
-
-      const pretty = formatDuration(duration);
-
-      // 📩 DM (optional)
-      try {
-        await user.send({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(0xED4245)
-              .setTitle(`You were muted in ${interaction.guild.name}`)
-              .setDescription(`Reason: ${reason}\nDuration: ${pretty}`)
-          ]
-        });
-      } catch {}
-
-      // 📁 Case
-      const result = await run(
-        `INSERT INTO cases (guildId, userId, moderatorId, action, reason, timestamp)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          interaction.guild.id,
-          user.id,
-          interaction.user.id,
-          'MUTE',
-          `${reason} | ${pretty}`,
-          Date.now()
-        ]
+      // ========================
+      // 🔇 APPLY TIMEOUT
+      // ========================
+      await member.timeout(
+        duration,
+        `${reason} | By ${interaction.user.tag}`
       );
 
-      const caseId = result?.lastInsertRowid ?? 'N/A';
+      const pretty =
+        formatDuration(duration);
 
-      // ✅ Response
+      // ========================
+      // 📩 DM USER
+      // ========================
+      try {
+
+        await user.send({
+
+          embeds: [
+
+            new EmbedBuilder()
+
+              .setColor(0xED4245)
+
+              .setTitle(
+                `You were muted in ${interaction.guild.name}`
+              )
+
+              .setDescription(
+
+                `📄 Reason: ${reason}\n` +
+
+                `⏱ Duration: ${pretty}`
+              )
+
+              .setTimestamp()
+          ]
+        });
+
+      } catch {}
+
+      // ========================
+      // 💾 SAVE CASE
+      // ========================
+      const result =
+        run(
+
+          `INSERT INTO cases
+          (guildId, userId, moderatorId, action, reason, createdAt)
+
+          VALUES (?, ?, ?, ?, ?, ?)`,
+
+          [
+            interaction.guild.id,
+            user.id,
+            interaction.user.id,
+            'MUTE',
+            `${reason} | Duration: ${pretty}`,
+            Date.now()
+          ]
+        );
+
+      const caseId =
+        result?.lastInsertRowid || 'N/A';
+
+      // ========================
+      // ✅ RESPONSE
+      // ========================
       await interaction.editReply({
+
         embeds: [
+
           new EmbedBuilder()
+
             .setColor(0xED4245)
-            .setTitle('User Muted')
-            .setDescription(`🔇 **${user.tag}** has been muted`)
-            .addFields(
-              { name: 'Duration', value: pretty, inline: true },
-              { name: 'Case', value: `#${caseId}`, inline: true }
+
+            .setTitle('🔇 User Muted')
+
+            .setDescription(
+              `Successfully muted ${user}`
             )
+
+            .addFields(
+
+              {
+                name: '⏱ Duration',
+                value: pretty,
+                inline: true
+              },
+
+              {
+                name: '📄 Case',
+                value: `#${caseId}`,
+                inline: true
+              },
+
+              {
+                name: '📝 Reason',
+                value: reason
+              }
+            )
+
+            .setFooter({
+              text:
+                `Muted by ${interaction.user.tag}`
+            })
+
+            .setTimestamp()
         ]
       });
 
-      // 📜 Log
-      const logEmbed = createLogEmbed({
-        action: 'MUTE',
-        user,
-        moderator: interaction.user,
-        reason: `${reason}\nDuration: ${pretty}`,
-        caseId
-      });
+      // ========================
+      // 📜 LOG
+      // ========================
+      const logEmbed =
+        createLogEmbed({
 
-      await sendLog(interaction.client, interaction.guild.id, logEmbed);
+          action: 'MUTE',
+
+          user,
+
+          moderator: interaction.user,
+
+          reason:
+            `${reason}\nDuration: ${pretty}`,
+
+          caseId
+        });
+
+      await sendLog(
+        interaction.client,
+        interaction.guild.id,
+        logEmbed
+      );
 
     } catch (err) {
+
       console.error('Mute Error:', err);
 
-      if (interaction.deferred || interaction.replied) {
+      if (
+        interaction.deferred ||
+        interaction.replied
+      ) {
+
         return interaction.editReply({
-          content: '❌ Failed to execute mute.'
-        });
-      } else {
-        return interaction.reply({
-          content: '❌ Failed to execute mute.',
-          flags: 64
+          content:
+            '❌ Failed to execute mute.'
         });
       }
+
+      return interaction.reply({
+
+        content:
+          '❌ Failed to execute mute.',
+
+        ephemeral: true
+      });
     }
   }
 };

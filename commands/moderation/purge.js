@@ -4,11 +4,19 @@ const {
   SlashCommandBuilder
 } = require('discord.js');
 
-const { sendLog, createLogEmbed } = require('../../utils/logger');
+const {
+  sendLog,
+  createLogEmbed
+} = require('../../utils/logger');
 
 module.exports = {
+
+  cooldown: 5000,
+
   data: new SlashCommandBuilder()
+
     .setName('purge')
+
     .setDescription('Delete multiple messages')
 
     .addIntegerOption(option =>
@@ -31,137 +39,293 @@ module.exports = {
         .setName('type')
         .setDescription('Filter message type')
         .addChoices(
-          { name: 'Humans', value: 'humans' },
-          { name: 'Bots', value: 'bots' }
+
+          {
+            name: 'Humans',
+            value: 'humans'
+          },
+
+          {
+            name: 'Bots',
+            value: 'bots'
+          }
         )
     ),
 
   async execute(interaction) {
+
     try {
 
-      // 🔐 User permission
-      if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageMessages)) {
+      // ========================
+      // 🔐 USER PERMISSION
+      // ========================
+      if (
+        !interaction.memberPermissions.has(
+          PermissionsBitField.Flags.ManageMessages
+        )
+      ) {
+
         return interaction.editReply({
-          content: '❌ You need **Manage Messages** permission.'
+          content:
+            '❌ You need **Manage Messages** permission.'
         });
       }
 
-      const botMember = interaction.guild.members.me;
+      const botMember =
+        interaction.guild.members.me;
 
-      // ❌ Bot permission
-      if (!botMember.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+      // ========================
+      // 🤖 BOT PERMISSION
+      // ========================
+      if (
+        !botMember.permissions.has(
+          PermissionsBitField.Flags.ManageMessages
+        )
+      ) {
+
         return interaction.editReply({
-          content: '❌ I do not have permission to delete messages.'
+          content:
+            '❌ I do not have permission to delete messages.'
         });
       }
 
-      const amount = interaction.options.getInteger('amount', true);
-      const target = interaction.options.getUser('user');
-      const type = interaction.options.getString('type');
+      // ========================
+      // 📥 OPTIONS
+      // ========================
+      const amount =
+        interaction.options.getInteger(
+          'amount',
+          true
+        );
 
-      // 🚫 Prevent conflicting filters
+      const target =
+        interaction.options.getUser('user');
+
+      const type =
+        interaction.options.getString('type');
+
+      // ========================
+      // 🚫 FILTER CONFLICT
+      // ========================
       if (target && type) {
+
         return interaction.editReply({
-          content: '❌ You cannot use both **user** and **type** filters together.'
+          content:
+            '❌ You cannot use both **user** and **type** filters together.'
         });
       }
 
-      // 📥 Fetch ONLY what we need
-      const messages = await interaction.channel.messages.fetch({ limit: amount });
+      // ========================
+      // 📥 FETCH MESSAGES
+      // ========================
+      const fetched =
+        await interaction.channel.messages.fetch({
+          limit: 100
+        });
 
-      let filtered = messages;
+      let filtered = fetched;
 
-      // 👤 Filter by user
       if (target) {
-        filtered = filtered.filter(m => m.author.id === target.id);
+
+        filtered =
+          filtered.filter(
+            m => m.author.id === target.id
+          );
       }
 
-      // 🤖 Filter type
+      // ========================
+      // 🤖 TYPE FILTER
+      // ========================
       if (type === 'bots') {
-        filtered = filtered.filter(m => m.author.bot);
+
+        filtered =
+          filtered.filter(
+            m => m.author.bot
+          );
       }
 
       if (type === 'humans') {
-        filtered = filtered.filter(m => !m.author.bot);
+
+        filtered =
+          filtered.filter(
+            m => !m.author.bot
+          );
       }
 
-      const toDelete = filtered.first(amount);
+      // ========================
+      // 🧹 SAFE FILTERS
+      // ========================
+      filtered =
+        filtered.filter(m =>
+
+          !m.pinned &&
+          m.deletable &&
+          m.type === 0
+        );
+
+      // ========================
+      // ✂️ LIMIT
+      // ========================
+      const toDelete =
+        filtered.first(amount);
 
       if (!toDelete.length) {
+
         return interaction.editReply({
-          content: '❌ No messages found matching your filter.'
+          content:
+            '❌ No messages found matching your filter.'
         });
       }
 
-      // 🧹 Delete
-      const deleted = await interaction.channel.bulkDelete(toDelete, true);
+      // ========================
+      // 🧹 DELETE
+      // ========================
+      const deleted =
+        await interaction.channel.bulkDelete(
+          toDelete,
+          true
+        );
 
-      const deletedCount = deleted.size;
-      const skipped = toDelete.length - deletedCount;
+      const deletedCount =
+        deleted.size;
+
+      const skipped =
+        toDelete.length - deletedCount;
 
       if (!deletedCount) {
+
         return interaction.editReply({
-          content: '❌ Messages may be older than 14 days.'
+          content:
+            '❌ Messages may be older than 14 days.'
         });
       }
 
-      // 🎨 Public feedback
-      const embed = new EmbedBuilder()
-        .setColor(0xE67E22)
-        .setTitle('Messages Cleared')
-        .setDescription(
-          target
-            ? `Deleted **${deletedCount} messages** from ${target}`
-            : type === 'bots'
-              ? `Deleted **${deletedCount} bot messages**`
-              : type === 'humans'
-                ? `Deleted **${deletedCount} human messages**`
-                : `Deleted **${deletedCount} messages**`
-        )
-        .addFields(
-          skipped > 0
-            ? { name: 'Skipped', value: `${skipped} (older than 14 days)`, inline: true }
-            : { name: '\u200b', value: '\u200b', inline: true }
-        )
-        .setFooter({ text: `By ${interaction.user.tag}` })
-        .setTimestamp();
+      // ========================
+      // 🎨 RESPONSE
+      // ========================
+      const embed =
+        new EmbedBuilder()
 
-      const msg = await interaction.channel.send({ embeds: [embed] });
+          .setColor(0xE67E22)
 
-      // 🧹 Auto delete public log
-      setTimeout(() => {
-        msg.delete().catch(() => {});
-      }, 5000);
+          .setTitle('🧹 Messages Cleared')
 
-      // ✅ Private confirmation
+          .setDescription(
+
+            target
+
+              ? `Deleted **${deletedCount} messages** from ${target}`
+
+              : type === 'bots'
+
+                ? `Deleted **${deletedCount} bot messages**`
+
+                : type === 'humans'
+
+                  ? `Deleted **${deletedCount} human messages**`
+
+                  : `Deleted **${deletedCount} messages**`
+          )
+
+          .setFooter({
+            text:
+              `By ${interaction.user.tag}`
+          })
+
+          .setTimestamp();
+
+      // ========================
+      // ⚠️ SKIPPED
+      // ========================
+      if (skipped > 0) {
+
+        embed.addFields({
+
+          name: '⚠️ Skipped',
+
+          value:
+            `${skipped} messages were older than 14 days`
+        });
+      }
+
+      // ========================
+      // ✅ RESPONSE
+      // ========================
       await interaction.editReply({
-        content: `✅ Deleted ${deletedCount} messages.${skipped ? ` (${skipped} skipped)` : ''}`
+        embeds: [embed]
       });
 
-      // 📜 Log system (your system 🔥)
-      const logEmbed = createLogEmbed({
-        action: 'PURGE',
-        user: { id: 'CHANNEL', tag: interaction.channel.name },
-        moderator: interaction.user,
-        reason: `Deleted ${deletedCount} messages`,
-        caseId: null
-      });
+      // ========================
+      // 🗑 AUTO DELETE REPLY
+      // ========================
+      setTimeout(() => {
 
-      await sendLog(interaction.client, interaction.guild.id, logEmbed);
+        interaction.deleteReply()
+          .catch(() => {});
+
+      }, 2000);
+
+      // ========================
+      // 📜 LOG
+      // ========================
+      const logEmbed =
+        createLogEmbed({
+
+          action: 'PURGE',
+
+          user: {
+            id: 'CHANNEL',
+            tag: interaction.channel.name
+          },
+
+          moderator: interaction.user,
+
+          reason:
+            target
+
+              ? `Deleted ${deletedCount} messages from ${target.tag}`
+
+              : type === 'bots'
+
+                ? `Deleted ${deletedCount} bot messages`
+
+                : type === 'humans'
+
+                  ? `Deleted ${deletedCount} human messages`
+
+                  : `Deleted ${deletedCount} messages`,
+
+          caseId: null
+        });
+
+      await sendLog(
+        interaction.client,
+        interaction.guild.id,
+        logEmbed
+      );
 
     } catch (err) {
+
       console.error('Purge Error:', err);
 
-      if (interaction.deferred || interaction.replied) {
+      if (
+        interaction.deferred ||
+        interaction.replied
+      ) {
+
         return interaction.editReply({
-          content: '❌ Failed to purge messages.'
-        });
-      } else {
-        return interaction.reply({
-          content: '❌ Failed to purge messages.',
-          flags: 64
+          content:
+            '❌ Failed to purge messages.'
         });
       }
+
+      return interaction.reply({
+
+        content:
+          '❌ Failed to purge messages.',
+
+        ephemeral: true
+      });
     }
   }
 };
