@@ -57,9 +57,15 @@ console.log(
     : 'Global'
 );
 
-console.log(
-  '━━━━━━━━━━━━━━━━━━━━━━'
-);
+if (DEV_GUILD_ID) {
+
+  console.log(
+    'Dev Guild:',
+    DEV_GUILD_ID
+  );
+}
+
+console.log('━━━━━━━━━━━━━━━━━━━━━━');
 
 // ==================================================
 // 🔐 DEFAULT PERMISSIONS
@@ -150,12 +156,6 @@ const permissionDefaults = {
   ticketsetup:
     PermissionFlagsBits.Administrator,
 
-  ticketpanelv3:
-    PermissionFlagsBits.Administrator,
-
-  ticketdebug:
-    PermissionFlagsBits.Administrator,
-
   ticketstats:
     PermissionFlagsBits.Administrator
 };
@@ -165,21 +165,32 @@ const permissionDefaults = {
 // ==================================================
 const commands = [];
 
-const loadedNames = new Set();
+const loadedNames =
+  new Set();
 
 const foldersPath =
-  path.join(__dirname, 'commands');
+  path.join(
+    __dirname,
+    'commands'
+  );
 
 const commandFolders =
-  fs.readdirSync(foldersPath);
+  fs.readdirSync(
+    foldersPath
+  );
 
 for (const folder of commandFolders) {
 
   const commandsPath =
-    path.join(foldersPath, folder);
+    path.join(
+      foldersPath,
+      folder
+    );
 
   const commandFiles =
-    fs.readdirSync(commandsPath)
+    fs.readdirSync(
+      commandsPath
+    )
 
       .filter(file =>
         file.endsWith('.js')
@@ -190,22 +201,28 @@ for (const folder of commandFolders) {
     try {
 
       const filePath =
-        path.join(commandsPath, file);
+        path.join(
+          commandsPath,
+          file
+        );
+
+      delete require.cache[
+        require.resolve(filePath)
+      ];
 
       const command =
         require(filePath);
 
-      // ========================
+      // ==========================================
       // 🛡 VALIDATION
-      // ========================
+      // ==========================================
       if (
-        !('data' in command) ||
-        !('execute' in command)
+        !command.data ||
+        !command.execute
       ) {
 
         console.warn(
-
-          `⚠️ Invalid command: ${file}`
+          `⚠️ Invalid command skipped: ${file}`
         );
 
         continue;
@@ -214,9 +231,9 @@ for (const folder of commandFolders) {
       const commandJson =
         command.data.toJSON();
 
-      // ========================
+      // ==========================================
       // 🚫 DUPLICATES
-      // ========================
+      // ==========================================
       if (
         loadedNames.has(
           commandJson.name
@@ -224,8 +241,7 @@ for (const folder of commandFolders) {
       ) {
 
         console.warn(
-
-          `⚠️ Duplicate command: ${commandJson.name}`
+          `⚠️ Duplicate command skipped: ${commandJson.name}`
         );
 
         continue;
@@ -235,17 +251,16 @@ for (const folder of commandFolders) {
         commandJson.name
       );
 
-      // ========================
-      // 🔐 DEFAULT PERMS
-      // ========================
+      // ==========================================
+      // 🔐 DEFAULT PERMISSIONS
+      // ==========================================
       const defaultPermission =
         permissionDefaults[
           commandJson.name
         ];
 
       if (
-        defaultPermission !==
-        undefined
+        defaultPermission !== undefined
       ) {
 
         commandJson.default_member_permissions =
@@ -263,9 +278,7 @@ for (const folder of commandFolders) {
     } catch (err) {
 
       console.error(
-
-        `❌ Failed loading ${file}:`,
-
+        `❌ Failed loading command ${file}:`,
         err
       );
     }
@@ -273,7 +286,7 @@ for (const folder of commandFolders) {
 }
 
 // ==================================================
-// 🛡 EMPTY CHECK
+// 🚫 NO COMMANDS
 // ==================================================
 if (!commands.length) {
 
@@ -283,12 +296,18 @@ if (!commands.length) {
 }
 
 // ==================================================
-// 🚀 DEPLOY
+// 🚀 REST
 // ==================================================
 const rest =
-  new REST({ version: '10' })
-    .setToken(TOKEN);
+  new REST({
 
+    version: '10'
+
+  }).setToken(TOKEN);
+
+// ==================================================
+// 🚀 DEPLOY
+// ==================================================
 (async () => {
 
   try {
@@ -296,19 +315,43 @@ const rest =
     console.log('━━━━━━━━━━━━━━━━━━━━━━');
 
     console.log(
-
       `📦 Deploying ${commands.length} commands...`
     );
 
     // ==========================================
-    // ⚡ DEV DEPLOY
+    // ⚡ DEVELOPMENT MODE
     // ==========================================
     if (DEV_GUILD_ID) {
+
+      // 🧹 Clear old global commands
+      console.log(
+        '🧹 Clearing old global commands...'
+      );
+
+      await rest.put(
+
+        Routes.applicationCommands(
+          CLIENT_ID
+        ),
+
+        { body: [] }
+      );
+
+      console.log(
+        '✅ Old global commands cleared'
+      );
+
+      // 🚀 Deploy guild commands
+      console.log(
+        '⚡ Deploying guild commands...'
+      );
 
       await rest.put(
 
         Routes.applicationGuildCommands(
+
           CLIENT_ID,
+
           DEV_GUILD_ID
         ),
 
@@ -316,15 +359,18 @@ const rest =
       );
 
       console.log(
-
-        `✅ Deployed to DEV guild ${DEV_GUILD_ID}`
+        `✅ Commands deployed to guild ${DEV_GUILD_ID}`
       );
     }
 
     // ==========================================
-    // 🌍 GLOBAL DEPLOY
+    // 🌍 GLOBAL MODE
     // ==========================================
     else {
+
+      console.log(
+        '🌍 Deploying global commands...'
+      );
 
       await rest.put(
 

@@ -12,7 +12,9 @@ module.exports = {
 
     .setName('serverinfo')
 
-    .setDescription('View information about the server'),
+    .setDescription(
+      'View information about the server'
+    ),
 
   async execute(interaction) {
 
@@ -21,19 +23,35 @@ module.exports = {
       const guild =
         interaction.guild;
 
-      // ========================
+      if (!guild) {
+
+        return interaction.editReply({
+
+          content:
+            '❌ Guild not found.'
+        });
+      }
+
+      // ==========================================
       // 👑 OWNER
-      // ========================
-      const owner =
-        await guild.fetchOwner();
+      // ==========================================
+      let ownerTag = 'Unknown';
 
-      // ========================
-      // 👥 ACCURATE MEMBER FETCH
-      // ========================
-      await guild.members.fetch().catch(() => {});
+      try {
 
+        const owner =
+          await guild.fetchOwner();
+
+        ownerTag =
+          `<@${owner.id}>`;
+
+      } catch {}
+
+      // ==========================================
+      // 👥 MEMBERS
+      // ==========================================
       const totalMembers =
-        guild.memberCount;
+        guild.memberCount || 0;
 
       const botCount =
         guild.members.cache.filter(
@@ -43,160 +61,41 @@ module.exports = {
       const humanCount =
         totalMembers - botCount;
 
-      // ========================
-      // 💬 CHANNEL COUNTS
-      // ========================
+      // ==========================================
+      // 💬 CHANNELS
+      // ==========================================
       const channels =
         guild.channels.cache;
 
       const textChannels =
         channels.filter(
-          c => c.type === ChannelType.GuildText
+          c =>
+            c.type ===
+            ChannelType.GuildText
         ).size;
 
       const voiceChannels =
         channels.filter(
-          c => c.type === ChannelType.GuildVoice
+          c =>
+            c.type ===
+            ChannelType.GuildVoice
         ).size;
 
-      const categories =
-        channels.filter(
-          c => c.type === ChannelType.GuildCategory
-        ).size;
-
-      const stages =
-        channels.filter(
-          c => c.type === ChannelType.GuildStageVoice
-        ).size;
-
-      const forums =
-        channels.filter(
-          c => c.type === ChannelType.GuildForum
-        ).size;
-
-      const threads =
-        channels.filter(
-          c => c.isThread?.()
-        ).size;
-
-      // ========================
-      // 🎭 ROLES / EMOJIS
-      // ========================
-      const roleCount =
-        guild.roles.cache.size;
-
-      const emojiCount =
-        guild.emojis.cache.size;
-
-      const stickerCount =
-        guild.stickers.cache.size;
-
-      // ========================
-      // 🚀 BOOST INFO
-      // ========================
-      const boostLevel =
-        guild.premiumTier;
-
-      const boosts =
-        guild.premiumSubscriptionCount || 0;
-
-      // ========================
-      // 🛡 SETTINGS
-      // ========================
-      function formatText(text) {
-
-        return text
-          .toLowerCase()
-          .replace(/_/g, ' ')
-          .replace(/\b\w/g, l => l.toUpperCase());
-      }
-
-      const verification =
-        formatText(
-          guild.verificationLevel
-        );
-
-      const nsfwLevel =
-        formatText(
-          guild.nsfwLevel
-        );
-
-      // ========================
-      // ✨ FEATURES
-      // ========================
-      const features =
-        guild.features.length
-
-          ? guild.features
-
-              .slice(0, 8)
-
-              .map(f =>
-                formatText(f)
-              )
-
-              .join(', ')
-
-          : 'None';
-
-      // ========================
-      // 🔗 VANITY URL
-      // ========================
-      const vanity =
-        guild.vanityURLCode
-
-          ? `https://discord.gg/${guild.vanityURLCode}`
-
-          : 'None';
-
-      // ========================
-      // 📡 SYSTEM CHANNEL
-      // ========================
-      const systemChannel =
-        guild.systemChannel
-
-          ? `<#${guild.systemChannel.id}>`
-
-          : 'None';
-
-      // ========================
-      // 🌙 AFK CHANNEL
-      // ========================
-      const afkChannel =
-        guild.afkChannel
-
-          ? `<#${guild.afkChannel.id}>`
-
-          : 'None';
-
-      // ========================
+      // ==========================================
       // 🎨 EMBED
-      // ========================
+      // ==========================================
       const embed =
         new EmbedBuilder()
 
           .setColor(0x5865F2)
 
-          .setTitle(`📊 ${guild.name}`)
-
-          .setDescription(
-
-            `A thriving community with **${totalMembers.toLocaleString()} members** ` +
-
-            `across **${channels.size} channels**.`
+          .setTitle(
+            `📊 ${guild.name}`
           )
 
           .setThumbnail(
             guild.iconURL({
-              dynamic: true,
-              size: 512
-            })
-          )
-
-          // ✅ SERVER BANNER
-          .setImage(
-            guild.bannerURL({
-              size: 1024
+              dynamic: true
             })
           )
 
@@ -205,8 +104,7 @@ module.exports = {
             {
               name: '👑 Owner',
 
-              value:
-                `<@${owner.id}>`,
+              value: ownerTag,
 
               inline: true
             },
@@ -216,20 +114,11 @@ module.exports = {
 
               value:
 
-                `🧑 Humans • ${humanCount.toLocaleString()}\n` +
-                `🤖 Bots • ${botCount.toLocaleString()}\n` +
-                `📦 Total • ${totalMembers.toLocaleString()}`,
+                `🧑 Humans: ${humanCount}\n` +
 
-              inline: true
-            },
+                `🤖 Bots: ${botCount}\n` +
 
-            {
-              name: '🚀 Boost Status',
-
-              value:
-
-                `Level ${boostLevel}\n` +
-                `${boosts} Boosts`,
+                `📦 Total: ${totalMembers}`,
 
               inline: true
             },
@@ -239,68 +128,15 @@ module.exports = {
 
               value:
 
-                `💬 Text • ${textChannels}\n` +
-                `🔊 Voice • ${voiceChannels}\n` +
-                `🎤 Stage • ${stages}\n` +
-                `🧵 Threads • ${threads}\n` +
-                `📁 Categories • ${categories}\n` +
-                `🗨 Forums • ${forums}`,
+                `💬 Text: ${textChannels}\n` +
+
+                `🔊 Voice: ${voiceChannels}`,
 
               inline: true
             },
 
             {
-              name: '🎭 Server Assets',
-
-              value:
-
-                `🎭 Roles • ${roleCount}\n` +
-                `😄 Emojis • ${emojiCount}\n` +
-                `🧩 Stickers • ${stickerCount}`,
-
-              inline: true
-            },
-
-            {
-              name: '🛡 Security',
-
-              value:
-
-                `Verification • ${verification}\n` +
-                `NSFW Level • ${nsfwLevel}`,
-
-              inline: true
-            },
-
-            {
-              name: '📡 System Channels',
-
-              value:
-
-                `📢 System • ${systemChannel}\n` +
-                `🌙 AFK • ${afkChannel}`,
-
-              inline: false
-            },
-
-            {
-              name: '✨ Features',
-
-              value: features,
-
-              inline: false
-            },
-
-            {
-              name: '🔗 Vanity URL',
-
-              value: vanity,
-
-              inline: false
-            },
-
-            {
-              name: '📅 Server Created',
+              name: '📅 Created',
 
               value:
                 `<t:${Math.floor(guild.createdTimestamp / 1000)}:F>`,
@@ -310,40 +146,29 @@ module.exports = {
           )
 
           .setFooter({
+
             text:
               `Server ID: ${guild.id}`
           })
 
           .setTimestamp();
 
-      await interaction.editReply({
+      return interaction.editReply({
+
         embeds: [embed]
       });
 
     } catch (err) {
 
       console.error(
-        'ServerInfo Error:',
+        'SERVERINFO FULL ERROR:',
         err
       );
 
-      if (
-        interaction.deferred ||
-        interaction.replied
-      ) {
-
-        return interaction.editReply({
-          content:
-            '❌ Failed to fetch server info.'
-        });
-      }
-
-      return interaction.reply({
+      return interaction.editReply({
 
         content:
-          '❌ Failed to fetch server info.',
-
-        ephemeral: true
+          `❌ Error:\n\`\`\`${err.message}\`\`\``
       });
     }
   }
