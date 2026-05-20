@@ -17,8 +17,11 @@ function getWarningStatus(count) {
   if (count >= 5) {
 
     return {
+
       color: 0xED4245,
+
       status: '⛔ High Risk',
+
       emoji: '🔴'
     };
   }
@@ -26,8 +29,11 @@ function getWarningStatus(count) {
   if (count >= 3) {
 
     return {
+
       color: 0xFEE75C,
+
       status: '⚠️ At Risk',
+
       emoji: '🟡'
     };
   }
@@ -35,8 +41,11 @@ function getWarningStatus(count) {
   if (count >= 1) {
 
     return {
+
       color: 0xFAA61A,
+
       status: '⚠️ Minor Warnings',
+
       emoji: '🟠'
     };
   }
@@ -44,7 +53,9 @@ function getWarningStatus(count) {
   return {
 
     color: 0x57F287,
+
     status: '✅ Clean Record',
+
     emoji: '🟢'
   };
 }
@@ -55,6 +66,7 @@ function getWarningStatus(count) {
 function trim(text, max = 120) {
 
   if (!text) {
+
     return 'No reason provided';
   }
 
@@ -65,32 +77,60 @@ function trim(text, max = 120) {
     : text;
 }
 
+// ========================
+// 📊 WARNING BAR
+// ========================
+function createBar(count) {
+
+  const max =
+    Math.max(
+      Math.min(count, 10),
+      0
+    );
+
+  const empty =
+    10 - max;
+
+  return (
+    '🟥'.repeat(max) +
+    '⬛'.repeat(empty)
+  );
+}
+
 module.exports = {
 
   cooldown: 3000,
 
-  data: new SlashCommandBuilder()
+  data:
+    new SlashCommandBuilder()
 
-    .setName('warnings')
+      .setName('warnings')
 
-    .setDescription(
-      'View warnings for a user'
-    )
+      .setDescription(
+        'View warnings for a user'
+      )
 
-    .addUserOption(option =>
-      option
-        .setName('user')
-        .setDescription(
-          'User to check warnings for'
-        )
-    ),
+      .addUserOption(option =>
+
+        option
+
+          .setName('user')
+
+          .setDescription(
+            'User to check warnings for'
+          )
+      ),
 
   async execute(interaction) {
 
     try {
 
+      // ========================
+      // 👤 TARGET
+      // ========================
       const target =
         interaction.options.getUser('user') ||
+
         interaction.user;
 
       const guildId =
@@ -105,11 +145,14 @@ module.exports = {
         );
 
       if (
+
         target.id !== interaction.user.id &&
+
         !hasPerms
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ You can only view your own warnings.'
         });
@@ -128,7 +171,9 @@ module.exports = {
           AND userId = ?`,
 
           [
+
             guildId,
+
             target.id
           ]
         );
@@ -153,7 +198,9 @@ module.exports = {
           LIMIT 10`,
 
           [
+
             guildId,
+
             target.id
           ]
         );
@@ -165,49 +212,86 @@ module.exports = {
         getWarningStatus(warns);
 
       // ========================
-      // 📊 WARNING BAR
+      // 📊 BAR
       // ========================
-      const filled =
-        Math.min(warns, 10);
-
-      const empty =
-        10 - filled;
-
       const progressBar =
-        '🟥'.repeat(filled) +
-        '⬛'.repeat(empty);
+        createBar(warns);
 
       // ========================
-      // 📜 HISTORY FORMAT
+      // 📜 HISTORY
       // ========================
       let history =
         'No warnings found.';
 
       if (recent.length > 0) {
 
-        history =
-          recent.map(c => {
+        const lines = [];
 
-            return (
+        let totalLength = 0;
 
-              `**#${c.id}** • ` +
-              `<t:${Math.floor(c.timestamp / 1000)}:R>\n` +
+        for (const c of recent) {
 
-              `👮 Moderator: ` +
-              `${c.moderatorId ? `<@${c.moderatorId}>` : '`Unknown`'}\n` +
+          // ====================
+          // 🕒 SAFE TIMESTAMP
+          // ====================
+          const time =
+            c.createdAt ||
 
-              `📄 ${trim(c.reason)}`
+            c.timestamp ||
+
+            Date.now();
+
+          const entry = (
+
+            `**#${c.id}** • ` +
+
+            `<t:${Math.floor(time / 1000)}:R>\n` +
+
+            `👮 Moderator: ` +
+
+            `${
+              c.moderatorId
+
+                ? `<@${c.moderatorId}>`
+
+                : '`Unknown`'
+            }\n` +
+
+            `📄 ${trim(c.reason)}`
+          );
+
+          // ====================
+          // 🛡 EMBED LIMIT
+          // ====================
+          if (
+            totalLength + entry.length > 900
+          ) {
+
+            lines.push(
+              `\n+ ${recent.length - lines.length} more warning(s)...`
             );
 
-          }).join('\n\n');
+            break;
+          }
+
+          lines.push(entry);
+
+          totalLength +=
+            entry.length;
+        }
+
+        history =
+          lines.join('\n\n');
       }
 
       // ========================
-      // 🧠 MEMBER INFO
+      // 👤 MEMBER
       // ========================
       const member =
         await interaction.guild.members
+
           .fetch(target.id)
+
           .catch(() => null);
 
       // ========================
@@ -217,7 +301,7 @@ module.exports = {
         new EmbedBuilder()
 
           .setTitle(
-            `⚠️ Warning History`
+            '⚠️ Warning History'
           )
 
           .setColor(
@@ -225,8 +309,11 @@ module.exports = {
           )
 
           .setThumbnail(
+
             target.displayAvatarURL({
+
               dynamic: true,
+
               size: 512
             })
           )
@@ -234,6 +321,7 @@ module.exports = {
           .setDescription(
 
             `${target} currently has ` +
+
             `**${warns} warning(s)**.\n\n` +
 
             `${progressBar}\n` +
@@ -244,7 +332,9 @@ module.exports = {
           .addFields(
 
             {
-              name: '👤 User',
+
+              name:
+                '👤 User',
 
               value:
                 `${target.tag}`,
@@ -253,7 +343,9 @@ module.exports = {
             },
 
             {
-              name: '🆔 User ID',
+
+              name:
+                '🆔 User ID',
 
               value:
                 `\`${target.id}\``,
@@ -262,7 +354,9 @@ module.exports = {
             },
 
             {
-              name: '📊 Total Warnings',
+
+              name:
+                '📊 Total Warnings',
 
               value:
                 `\`${warns}\``,
@@ -271,7 +365,9 @@ module.exports = {
             },
 
             {
-              name: '📅 Joined Server',
+
+              name:
+                '📅 Joined Server',
 
               value:
 
@@ -285,7 +381,9 @@ module.exports = {
             },
 
             {
-              name: '🤖 Bot',
+
+              name:
+                '🤖 Bot',
 
               value:
                 target.bot ? 'Yes' : 'No',
@@ -294,7 +392,9 @@ module.exports = {
             },
 
             {
-              name: '🛡 Moderation Status',
+
+              name:
+                '🛡 Moderation Status',
 
               value:
                 warningData.status,
@@ -303,7 +403,9 @@ module.exports = {
             },
 
             {
-              name: '📜 Recent Warnings',
+
+              name:
+                '📜 Recent Warnings',
 
               value:
                 history,
@@ -313,13 +415,18 @@ module.exports = {
           )
 
           .setFooter({
+
             text:
               `Requested by ${interaction.user.tag}`
           })
 
           .setTimestamp();
 
+      // ========================
+      // ✅ RESPONSE
+      // ========================
       return interaction.editReply({
+
         embeds: [embed]
       });
 
@@ -331,11 +438,14 @@ module.exports = {
       );
 
       if (
+
         interaction.deferred ||
+
         interaction.replied
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ Failed to fetch warnings.'
         });

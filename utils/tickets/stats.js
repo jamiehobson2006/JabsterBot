@@ -5,12 +5,63 @@ const {
 } = require('../../database');
 
 // ==================================================
+// 🧠 SAFE NUMBER
+// ==================================================
+function safeNumber(
+  value,
+  minimum = 0
+) {
+
+  const parsed =
+    Number(value);
+
+  if (
+    Number.isNaN(parsed) ||
+    !Number.isFinite(parsed)
+  ) {
+
+    return minimum;
+  }
+
+  return Math.max(
+    parsed,
+    minimum
+  );
+}
+
+// ==================================================
+// 🧠 SAFE LIMIT
+// ==================================================
+function safeLimit(
+  value
+) {
+
+  return Math.min(
+
+    Math.max(
+      safeNumber(value, 10),
+      1
+    ),
+
+    100
+  );
+}
+
+// ==================================================
 // 👮 CREATE STAFF ENTRY
 // ==================================================
 function ensureStaffEntry(
   guildId,
   userId
 ) {
+
+  if (
+    !guildId ||
+    !userId
+  ) {
+
+    return false;
+  }
 
   run(
 
@@ -31,10 +82,13 @@ function ensureStaffEntry(
      DO NOTHING`,
 
     [
+
       guildId,
       userId
     ]
   );
+
+  return true;
 }
 
 // ==================================================
@@ -45,10 +99,15 @@ function addClaim(
   userId
 ) {
 
-  ensureStaffEntry(
-    guildId,
-    userId
-  );
+  if (
+    !ensureStaffEntry(
+      guildId,
+      userId
+    )
+  ) {
+
+    return false;
+  }
 
   run(
 
@@ -60,10 +119,13 @@ function addClaim(
      AND userId = ?`,
 
     [
+
       guildId,
       userId
     ]
   );
+
+  return true;
 }
 
 // ==================================================
@@ -74,10 +136,15 @@ function addClose(
   userId
 ) {
 
-  ensureStaffEntry(
-    guildId,
-    userId
-  );
+  if (
+    !ensureStaffEntry(
+      guildId,
+      userId
+    )
+  ) {
+
+    return false;
+  }
 
   run(
 
@@ -89,10 +156,13 @@ function addClose(
      AND userId = ?`,
 
     [
+
       guildId,
       userId
     ]
   );
+
+  return true;
 }
 
 // ==================================================
@@ -103,10 +173,15 @@ function addMessage(
   userId
 ) {
 
-  ensureStaffEntry(
-    guildId,
-    userId
-  );
+  if (
+    !ensureStaffEntry(
+      guildId,
+      userId
+    )
+  ) {
+
+    return false;
+  }
 
   run(
 
@@ -118,25 +193,40 @@ function addMessage(
      AND userId = ?`,
 
     [
+
       guildId,
       userId
     ]
   );
+
+  return true;
 }
 
 // ==================================================
 // ⏱ ADD HANDLE TIME
 // ==================================================
 function addHandleTime(
+
   guildId,
   userId,
   milliseconds
+
 ) {
 
-  ensureStaffEntry(
-    guildId,
-    userId
-  );
+  if (
+    !ensureStaffEntry(
+      guildId,
+      userId
+    )
+  ) {
+
+    return false;
+  }
+
+  const safeMs =
+    safeNumber(
+      milliseconds
+    );
 
   run(
 
@@ -149,11 +239,16 @@ function addHandleTime(
      AND userId = ?`,
 
     [
-      milliseconds,
+
+      safeMs,
+
       guildId,
+
       userId
     ]
   );
+
+  return true;
 }
 
 // ==================================================
@@ -164,33 +259,97 @@ function getStaffStats(
   userId
 ) {
 
+  if (
+    !guildId ||
+    !userId
+  ) {
+
+    return null;
+  }
+
   ensureStaffEntry(
     guildId,
     userId
   );
 
-  return get(
+  const stats =
+    get(
 
-    `SELECT *
-     FROM ticket_stats
+      `SELECT *
+       FROM ticket_stats
 
-     WHERE guildId = ?
-     AND userId = ?`,
+       WHERE guildId = ?
+       AND userId = ?`,
 
-    [
-      guildId,
-      userId
-    ]
-  );
+      [
+
+        guildId,
+        userId
+      ]
+    );
+
+  if (!stats) {
+
+    return null;
+  }
+
+  // ==============================================
+  // 📈 CALCULATED DATA
+  // ==============================================
+  const closes =
+    safeNumber(
+      stats.closes
+    );
+
+  const totalHandleTime =
+    safeNumber(
+      stats.totalHandleTime
+    );
+
+  return {
+
+    ...stats,
+
+    claims:
+      safeNumber(
+        stats.claims
+      ),
+
+    closes,
+
+    messages:
+      safeNumber(
+        stats.messages
+      ),
+
+    totalHandleTime,
+
+    averageHandleTime:
+
+      closes > 0
+
+        ? Math.floor(
+            totalHandleTime / closes
+          )
+
+        : 0
+  };
 }
 
 // ==================================================
 // 🏆 GET LEADERBOARD
 // ==================================================
 function getLeaderboard(
+
   guildId,
   limit = 10
+
 ) {
+
+  if (!guildId) {
+
+    return [];
+  }
 
   return all(
 
@@ -207,8 +366,10 @@ function getLeaderboard(
      LIMIT ?`,
 
     [
+
       guildId,
-      limit
+
+      safeLimit(limit)
     ]
   );
 }
@@ -220,13 +381,21 @@ function formatHandleTime(
   milliseconds
 ) {
 
-  if (!milliseconds) {
+  const ms =
+    safeNumber(
+      milliseconds
+    );
+
+  if (
+    ms <= 0
+  ) {
+
     return '0m';
   }
 
   const totalSeconds =
     Math.floor(
-      milliseconds / 1000
+      ms / 1000
     );
 
   const days =
@@ -244,24 +413,127 @@ function formatHandleTime(
       (totalSeconds % 3600) / 60
     );
 
+  const seconds =
+    Math.floor(
+      totalSeconds % 60
+    );
+
   const parts = [];
 
   if (days) {
-    parts.push(`${days}d`);
+
+    parts.push(
+      `${days}d`
+    );
   }
 
   if (hours) {
-    parts.push(`${hours}h`);
+
+    parts.push(
+      `${hours}h`
+    );
   }
 
   if (minutes) {
-    parts.push(`${minutes}m`);
+
+    parts.push(
+      `${minutes}m`
+    );
   }
 
-  return parts.join(' ') || '0m';
+  // ==============================================
+  // ⏱ UNDER 1 MINUTE
+  // ==============================================
+  if (
+
+    !days &&
+    !hours &&
+    !minutes
+  ) {
+
+    parts.push(
+      `${seconds}s`
+    );
+  }
+
+  return parts.join(' ') ||
+    '0m';
+}
+
+// ==================================================
+// 🧹 RESET STAFF STATS
+// ==================================================
+function resetStaffStats(
+  guildId,
+  userId
+) {
+
+  if (
+    !guildId ||
+    !userId
+  ) {
+
+    return false;
+  }
+
+  run(
+
+    `UPDATE ticket_stats
+
+     SET
+       claims = 0,
+       closes = 0,
+       messages = 0,
+       totalHandleTime = 0
+
+     WHERE guildId = ?
+     AND userId = ?`,
+
+    [
+
+      guildId,
+      userId
+    ]
+  );
+
+  return true;
+}
+
+// ==================================================
+// 📊 GET GLOBAL TICKET STATS
+// ==================================================
+function getGlobalStats(
+  guildId
+) {
+
+  if (!guildId) {
+
+    return null;
+  }
+
+  return get(
+
+    `SELECT
+
+      SUM(claims) AS claims,
+      SUM(closes) AS closes,
+      SUM(messages) AS messages,
+      SUM(totalHandleTime) AS totalHandleTime
+
+     FROM ticket_stats
+
+     WHERE guildId = ?`,
+
+    [
+
+      guildId
+    ]
+  );
 }
 
 module.exports = {
+
+  ensureStaffEntry,
 
   addClaim,
 
@@ -275,5 +547,11 @@ module.exports = {
 
   getLeaderboard,
 
-  formatHandleTime
+  formatHandleTime,
+
+  resetStaffStats,
+
+  getGlobalStats,
+
+  safeNumber
 };

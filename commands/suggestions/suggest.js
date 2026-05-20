@@ -1,44 +1,103 @@
 ﻿const {
+
   EmbedBuilder,
+
   ActionRowBuilder,
+
   ButtonBuilder,
+
   ButtonStyle,
+
   PermissionsBitField,
-  SlashCommandBuilder
+
+  SlashCommandBuilder,
+
+  ChannelType
+
 } = require('discord.js');
 
 const {
+
   get,
+
   run
+
 } = require('../../database');
 
 module.exports = {
 
   cooldown: 5000,
 
-  data: new SlashCommandBuilder()
+  data:
+    new SlashCommandBuilder()
 
-    .setName('suggest')
+      .setName('suggest')
 
-    .setDescription('Submit a suggestion')
+      .setDescription(
+        'Submit a suggestion'
+      )
 
-    .addStringOption(option =>
-      option
-        .setName('text')
-        .setDescription('Your suggestion')
-        .setRequired(true)
-        .setMaxLength(500)
-    ),
+      .addStringOption(option =>
+
+        option
+
+          .setName('text')
+
+          .setDescription(
+            'Your suggestion'
+          )
+
+          .setRequired(true)
+
+          .setMaxLength(500)
+      ),
 
   async execute(interaction) {
 
     try {
 
+      // ========================
+      // 📥 INPUT
+      // ========================
       const text =
-        interaction.options.getString(
-          'text',
-          true
-        );
+        interaction.options
+
+          .getString(
+            'text',
+            true
+          )
+
+          .trim();
+
+      // ========================
+      // 🚫 EMPTY CHECK
+      // ========================
+      if (!text.length) {
+
+        return interaction.editReply({
+
+          content:
+            '❌ Suggestion cannot be empty.'
+        });
+      }
+
+      // ========================
+      // 🚫 MASS MENTION FILTER
+      // ========================
+      if (
+
+        text.includes('@everyone') ||
+
+        text.includes('@here')
+      ) {
+
+        return interaction.editReply({
+
+          content:
+
+            '❌ Suggestions cannot contain mass mentions.'
+        });
+      }
 
       // ========================
       // 🔄 GET SETTINGS
@@ -47,31 +106,50 @@ module.exports = {
         get(
 
           `SELECT suggestionChannelId
-          FROM guild_settings
-          WHERE guildId = ?`,
 
-          [interaction.guild.id]
+           FROM guild_settings
+
+           WHERE guildId = ?`,
+
+          [
+
+            interaction.guild.id
+          ]
         );
 
-      if (!settings?.suggestionChannelId) {
+      if (
+
+        !settings?.suggestionChannelId
+      ) {
 
         return interaction.editReply({
+
           content:
             '❌ Suggestion channel not set.'
         });
       }
 
+      // ========================
+      // 📺 FETCH CHANNEL
+      // ========================
       const channel =
         interaction.guild.channels.cache.get(
+
           settings.suggestionChannelId
         );
 
       if (
+
         !channel ||
-        !channel.isTextBased()
+
+        !channel.isTextBased() ||
+
+        channel.type ===
+        ChannelType.GuildVoice
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ Suggestion channel is invalid.'
         });
@@ -82,23 +160,30 @@ module.exports = {
       // ========================
       const perms =
         channel.permissionsFor(
+
           interaction.guild.members.me
         );
 
       if (
-        !perms.has([
+
+        !perms?.has([
 
           PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.EmbedLinks,
-          PermissionsBitField.Flags.AddReactions,
-          PermissionsBitField.Flags.ReadMessageHistory
 
+          PermissionsBitField.Flags.SendMessages,
+
+          PermissionsBitField.Flags.EmbedLinks,
+
+          PermissionsBitField.Flags.AddReactions,
+
+          PermissionsBitField.Flags.ReadMessageHistory
         ])
       ) {
 
         return interaction.editReply({
+
           content:
+
             '❌ I am missing permissions in the suggestion channel.'
         });
       }
@@ -109,27 +194,61 @@ module.exports = {
       const recent =
         get(
 
-          `SELECT * FROM suggestions
-          WHERE guildId = ?
-          AND userId = ?
-          AND content = ?
-          AND timestamp > ?`,
+          `SELECT *
+
+           FROM suggestions
+
+           WHERE guildId = ?
+           AND userId = ?
+           AND content = ?
+           AND timestamp > ?`,
 
           [
+
             interaction.guild.id,
+
             interaction.user.id,
+
             text,
-            Date.now() - (5 * 60 * 1000)
+
+            Date.now() -
+            (5 * 60 * 1000)
           ]
         );
 
       if (recent) {
 
         return interaction.editReply({
+
           content:
+
             '⚠️ You already submitted this suggestion recently.'
         });
       }
+
+      // ========================
+      // 📊 USER STATS
+      // ========================
+      const stats =
+        get(
+
+          `SELECT COUNT(*) as total
+
+           FROM suggestions
+
+           WHERE guildId = ?
+           AND userId = ?`,
+
+          [
+
+            interaction.guild.id,
+
+            interaction.user.id
+          ]
+        );
+
+      const suggestionNumber =
+        (stats?.total || 0) + 1;
 
       // ========================
       // 🎨 EMBED
@@ -137,34 +256,69 @@ module.exports = {
       const embed =
         new EmbedBuilder()
 
-          .setColor(0x5865F2)
+          .setColor(
+            0x5865F2
+          )
 
-          .setTitle('💡 New Suggestion')
+          .setTitle(
+            '💡 New Suggestion'
+          )
 
           .setDescription(text)
 
           .addFields(
 
             {
+
               name: '👤 Author',
-              value: `${interaction.user}`,
+
+              value:
+                `${interaction.user}`,
+
               inline: true
             },
 
             {
+
               name: '📊 Status',
-              value: '⏳ Pending',
+
+              value:
+                '⏳ Pending',
+
               inline: true
             },
 
             {
+
               name: '👍 Votes',
-              value: '✅ 0 • ❌ 0',
+
+              value:
+                '✅ 0 • ❌ 0',
+
+              inline: true
+            },
+
+            {
+
+              name: '🆔 Suggestion ID',
+
+              value:
+                `#${suggestionNumber}`,
+
               inline: true
             }
           )
 
+          .setThumbnail(
+
+            interaction.user.displayAvatarURL({
+
+              dynamic: true
+            })
+          )
+
           .setFooter({
+
             text:
               `User ID: ${interaction.user.id}`
           })
@@ -185,7 +339,11 @@ module.exports = {
 
               .setLabel('Accept')
 
-              .setStyle(ButtonStyle.Success),
+              .setEmoji('✅')
+
+              .setStyle(
+                ButtonStyle.Success
+              ),
 
             new ButtonBuilder()
 
@@ -193,7 +351,11 @@ module.exports = {
 
               .setLabel('Deny')
 
-              .setStyle(ButtonStyle.Danger)
+              .setEmoji('❌')
+
+              .setStyle(
+                ButtonStyle.Danger
+              )
           );
 
       // ========================
@@ -214,27 +376,41 @@ module.exports = {
       await msg.react('❌');
 
       // ========================
-      // 💾 SAVE DB
+      // 💾 SAVE DATABASE
       // ========================
       run(
 
         `INSERT INTO suggestions
-        (guildId, messageId, userId, content, status, timestamp)
 
-        VALUES (?, ?, ?, ?, ?, ?)`,
+         (
+           guildId,
+           messageId,
+           userId,
+           content,
+           status,
+           timestamp
+         )
+
+         VALUES (?, ?, ?, ?, ?, ?)`,
 
         [
+
           interaction.guild.id,
+
           msg.id,
+
           interaction.user.id,
+
           text,
+
           'PENDING',
+
           Date.now()
         ]
       );
 
       // ========================
-      // ⏳ AUTO VOTE UPDATER
+      // ⏳ UPDATE VOTES
       // ========================
       setTimeout(async () => {
 
@@ -251,18 +427,23 @@ module.exports = {
 
           const upvotes =
             Math.max(
+
               (upvote?.count || 1) - 1,
+
               0
             );
 
           const downvotes =
             Math.max(
+
               (downvote?.count || 1) - 1,
+
               0
             );
 
           const updatedEmbed =
             EmbedBuilder.from(
+
               fetched.embeds[0]
             );
 
@@ -270,10 +451,13 @@ module.exports = {
             updatedEmbed.data.fields.map(field => {
 
               if (
-                field.name === '👍 Votes'
+
+                field.name ===
+                '👍 Votes'
               ) {
 
                 field.value =
+
                   `✅ ${upvotes} • ❌ ${downvotes}`;
               }
 
@@ -281,6 +465,7 @@ module.exports = {
             });
 
           await fetched.edit({
+
             embeds: [updatedEmbed]
           });
 
@@ -292,8 +477,54 @@ module.exports = {
       // ========================
       await interaction.editReply({
 
-        content:
-          `✅ Suggestion submitted successfully.\n${msg.url}`
+        embeds: [
+
+          new EmbedBuilder()
+
+            .setColor(
+              0x57F287
+            )
+
+            .setTitle(
+              '✅ Suggestion Submitted'
+            )
+
+            .setDescription(
+
+              `Your suggestion has been posted in ${channel}`
+            )
+
+            .addFields(
+
+              {
+
+                name: '🆔 Suggestion ID',
+
+                value:
+                  `#${suggestionNumber}`,
+
+                inline: true
+              },
+
+              {
+
+                name: '🔗 Message',
+
+                value:
+                  `[Jump to Suggestion](${msg.url})`,
+
+                inline: true
+              }
+            )
+
+            .setFooter({
+
+              text:
+                `${interaction.guild.name} Suggestions`
+            })
+
+            .setTimestamp()
+        ]
       });
 
       // ========================
@@ -301,9 +532,14 @@ module.exports = {
       // ========================
       setTimeout(() => {
 
-        interaction
-          .deleteReply()
-          .catch(() => {});
+        if (!interaction.ephemeral) {
+
+          interaction
+
+            .deleteReply()
+
+            .catch(() => {});
+        }
 
       }, 4000);
 
@@ -315,11 +551,14 @@ module.exports = {
       );
 
       if (
+
         interaction.deferred ||
+
         interaction.replied
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ Failed to submit suggestion.'
         });

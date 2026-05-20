@@ -1,41 +1,66 @@
 const {
+
   EmbedBuilder,
+
   SlashCommandBuilder
+
 } = require('discord.js');
 
-// 🔁 Fetch meme safely
+// ==================================================
+// 😂 FETCH MEME
+// ==================================================
 async function fetchMeme() {
 
   for (let i = 0; i < 3; i++) {
 
     try {
 
-      const controller = new AbortController();
+      const controller =
+        new AbortController();
 
-      const timeout = setTimeout(() => {
-        controller.abort();
-      }, 5000);
+      const timeout =
+        setTimeout(() => {
 
-      const res = await fetch(
-        'https://meme-api.com/gimme',
-        {
-          signal: controller.signal
-        }
-      );
+          controller.abort();
+
+        }, 5000);
+
+      const res =
+        await fetch(
+
+          'https://meme-api.com/gimme',
+
+          {
+
+            signal:
+              controller.signal
+          }
+        );
 
       clearTimeout(timeout);
 
-      if (!res.ok) continue;
+      if (!res.ok) {
 
-      const data = await res.json();
+        continue;
+      }
 
-      // 🛡 Filter bad posts
+      const data =
+        await res.json();
+
+      // ==========================================
+      // 🛡 VALIDATION
+      // ==========================================
       if (
+
         !data ||
+
         !data.url ||
+
         data.nsfw ||
-        !data.url.match(/\.(jpg|jpeg|png|gif)$/i)
+
+        !data.url.startsWith('http')
       ) {
+
         continue;
       }
 
@@ -43,7 +68,10 @@ async function fetchMeme() {
 
     } catch (err) {
 
-      console.error('Meme fetch error:', err);
+      console.error(
+        'Meme Fetch Error:',
+        err
+      );
     }
   }
 
@@ -54,69 +82,130 @@ module.exports = {
 
   cooldown: 4000,
 
-  data: new SlashCommandBuilder()
-    .setName('meme')
-    .setDescription('Get a random meme'),
+  data:
+    new SlashCommandBuilder()
+
+      .setName('meme')
+
+      .setDescription(
+        'Get a random meme'
+      ),
 
   async execute(interaction) {
 
     try {
 
-      // ⚡ Fast UX feedback
+      // ==========================================
+      // ⚡ LOADING
+      // ==========================================
       await interaction.editReply({
-        content: '📡 Fetching meme...'
+
+        content:
+          '😂 Fetching a fresh meme...'
       });
 
-      const data = await fetchMeme();
+      // ==========================================
+      // 📥 FETCH
+      // ==========================================
+      const data =
+        await fetchMeme();
 
       if (!data) {
 
         return interaction.editReply({
-          content: '❌ Failed to fetch a meme.'
+
+          content:
+            '❌ Failed to fetch a meme.'
         });
       }
 
-      // 🎨 Embed
-      const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle(data.title || '😂 Meme')
-        .setURL(data.postLink || null)
-        .setImage(data.url)
-        .addFields(
-          {
-            name: '📍 Subreddit',
-            value: `r/${data.subreddit}`,
-            inline: true
-          },
-          {
-            name: '⬆️ Upvotes',
-            value: `${data.ups || 0}`,
-            inline: true
-          }
-        )
-        .setFooter({
-          text: 'Powered by meme-api'
-        })
-        .setTimestamp();
+      // ==========================================
+      // 🎨 EMBED
+      // ==========================================
+      const embed =
+        new EmbedBuilder()
 
+          .setColor(0x5865F2)
+
+          .setTitle(
+            data.title || '😂 Meme'
+          )
+
+          .setURL(
+            data.postLink || null
+          )
+
+          .setImage(
+            data.url
+          )
+
+          .addFields(
+
+            {
+
+              name: '📍 Subreddit',
+
+              value:
+                `r/${data.subreddit}`,
+
+              inline: true
+            },
+
+            {
+
+              name: '⬆️ Upvotes',
+
+              value:
+                `${data.ups || 0}`,
+
+              inline: true
+            }
+          )
+
+          .setFooter({
+
+            text:
+              'Powered by meme-api'
+          })
+
+          .setTimestamp();
+
+      // ==========================================
+      // 📤 RESPONSE
+      // ==========================================
       return interaction.editReply({
+
         content: '',
+
         embeds: [embed]
       });
 
     } catch (err) {
 
-      console.error('Meme Command Error:', err);
+      console.error(
+        'Meme Command Error:',
+        err
+      );
 
-      if (interaction.deferred || interaction.replied) {
+      if (
+
+        interaction.deferred ||
+
+        interaction.replied
+      ) {
 
         return interaction.editReply({
-          content: '❌ Error fetching meme.'
+
+          content:
+            '❌ Error fetching meme.'
         });
       }
 
       return interaction.reply({
-        content: '❌ Error fetching meme.',
+
+        content:
+          '❌ Error fetching meme.',
+
         ephemeral: true
       });
     }

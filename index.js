@@ -8,19 +8,33 @@
 
   Partials,
 
-  ActivityType
+  ActivityType,
+
+  Options
 
 } = require('discord.js');
 
-const fs = require('fs');
-const path = require('path');
+const fs =
+  require('fs');
+
+const path =
+  require('path');
 
 require('dotenv').config();
 
+require('./database');
+
 const {
-  all,
-  run
-} = require('./database');
+
+  startGiveawayLoop
+
+} = require('./utils/giveaways/giveawayLoop');
+
+const {
+
+  loadGuildInvites
+
+} = require('./utils/cache');
 
 // ==================================================
 // 🔐 TOKEN CHECK
@@ -41,55 +55,69 @@ const BOT_BUILD =
 // ==================================================
 // 🤖 CLIENT
 // ==================================================
-const client = new Client({
+const client =
+  new Client({
 
-  intents: [
+    intents: [
 
-    GatewayIntentBits.Guilds,
+      GatewayIntentBits.Guilds,
 
-    GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildMembers,
 
-    GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.GuildMessages,
 
-    GatewayIntentBits.MessageContent,
+      GatewayIntentBits.MessageContent,
 
-    GatewayIntentBits.GuildModeration,
+      GatewayIntentBits.GuildModeration,
 
-    GatewayIntentBits.GuildMessageReactions,
+      GatewayIntentBits.GuildMessageReactions,
 
-    GatewayIntentBits.GuildVoiceStates,
+      GatewayIntentBits.GuildVoiceStates,
 
-    GatewayIntentBits.GuildPresences
-  ],
+      GatewayIntentBits.GuildPresences,
 
-  partials: [
+      GatewayIntentBits.GuildInvites
+    ],
 
-    Partials.Message,
+    partials: [
 
-    Partials.Channel,
+      Partials.Message,
 
-    Partials.User,
+      Partials.Channel,
 
-    Partials.Reaction
-  ],
+      Partials.User,
 
-  sweepers: {
+      Partials.Reaction,
 
-    messages: {
+      Partials.GuildMember
+    ],
 
-      interval: 300,
+    makeCache:
+      Options.cacheWithLimits({
 
-      lifetime: 600
-    },
+        MessageManager: 200,
 
-    users: {
+        PresenceManager: 50
+      }),
 
-      interval: 3600,
+    sweepers: {
 
-      filter: () => user => user.bot
+      messages: {
+
+        interval: 300,
+
+        lifetime: 600
+      },
+
+      users: {
+
+        interval: 3600,
+
+        filter: () =>
+          user => user.bot
+      }
     }
-  }
-});
+  });
 
 // ==================================================
 // 📦 COMMAND COLLECTION
@@ -98,15 +126,57 @@ client.commands =
   new Collection();
 
 // ==================================================
+// 📂 SAFE FILES
+// ==================================================
+function getJsFiles(
+  folderPath
+) {
+
+  try {
+
+    if (
+      !fs.existsSync(
+        folderPath
+      )
+    ) {
+
+      return [];
+    }
+
+    return fs.readdirSync(
+      folderPath
+    )
+
+      .filter(file =>
+        file.endsWith('.js')
+      );
+
+  } catch (err) {
+
+    console.error(
+      `Failed reading folder ${folderPath}:`,
+      err
+    );
+
+    return [];
+  }
+}
+
+// ==================================================
 // 📦 LOAD COMMANDS
 // ==================================================
 function loadCommands() {
 
   const commandsPath =
-    path.join(__dirname, 'commands');
+    path.join(
+      __dirname,
+      'commands'
+    );
 
   if (
-    !fs.existsSync(commandsPath)
+    !fs.existsSync(
+      commandsPath
+    )
   ) {
 
     console.warn(
@@ -117,60 +187,126 @@ function loadCommands() {
   }
 
   const folders =
-    fs.readdirSync(commandsPath);
+    fs.readdirSync(
+      commandsPath
+    );
 
   let loaded = 0;
 
-  for (const folder of folders) {
+  let failed = 0;
+
+  for (
+    const folder of folders
+  ) {
 
     const folderPath =
-      path.join(commandsPath, folder);
+      path.join(
+        commandsPath,
+        folder
+      );
+
+    // ==========================================
+    // 🚫 SKIP NON-FOLDERS
+    // ==========================================
+    if (
+
+      !fs.statSync(
+        folderPath
+      ).isDirectory()
+    ) {
+
+      continue;
+    }
 
     const files =
-      fs.readdirSync(folderPath)
+      getJsFiles(
+        folderPath
+      );
 
-        .filter(f =>
-          f.endsWith('.js')
-        );
-
-    for (const file of files) {
+    for (
+      const file of files
+    ) {
 
       try {
 
         const filePath =
-          path.join(folderPath, file);
+          path.join(
+            folderPath,
+            file
+          );
 
         delete require.cache[
-          require.resolve(filePath)
+          require.resolve(
+            filePath
+          )
         ];
 
         const command =
           require(filePath);
 
+        // ======================================
+        // 🛡 VALIDATION
+        // ======================================
         if (
+
+          !command ||
+
           !command.data ||
+
           !command.execute
         ) {
 
           console.warn(
+
             `⚠️ Skipped invalid command ${file}`
           );
+
+          failed++;
+
+          continue;
+        }
+
+        // ======================================
+        // 🚫 DUPLICATE
+        // ======================================
+        if (
+
+          client.commands.has(
+            command.data.name
+          )
+        ) {
+
+          console.warn(
+
+            `⚠️ Duplicate command skipped: ${command.data.name}`
+          );
+
+          failed++;
 
           continue;
         }
 
         client.commands.set(
+
           command.data.name,
+
           command
         );
 
         loaded++;
 
+        console.log(
+
+          `✅ Loaded command /${command.data.name}`
+        );
+
       } catch (err) {
+
+        failed++;
 
         console.error(
 
-          `❌ Failed loading ${file}:`,
+          `❌ Failed loading command ${file}:`,
 
           err
         );
@@ -181,6 +317,15 @@ function loadCommands() {
   console.log(
     `✅ Loaded ${loaded} commands`
   );
+
+  if (
+    failed > 0
+  ) {
+
+    console.log(
+      `⚠️ Failed ${failed} command(s)`
+    );
+  }
 }
 
 // ==================================================
@@ -189,10 +334,15 @@ function loadCommands() {
 function loadEvents() {
 
   const eventsPath =
-    path.join(__dirname, 'events');
+    path.join(
+      __dirname,
+      'events'
+    );
 
   if (
-    !fs.existsSync(eventsPath)
+    !fs.existsSync(
+      eventsPath
+    )
   ) {
 
     console.warn(
@@ -203,40 +353,60 @@ function loadEvents() {
   }
 
   const files =
-    fs.readdirSync(eventsPath)
-
-      .filter(f =>
-        f.endsWith('.js')
-      );
+    getJsFiles(
+      eventsPath
+    );
 
   let loaded = 0;
 
-  for (const file of files) {
+  let failed = 0;
+
+  for (
+    const file of files
+  ) {
 
     try {
 
       const filePath =
-        path.join(eventsPath, file);
+        path.join(
+          eventsPath,
+          file
+        );
 
       delete require.cache[
-        require.resolve(filePath)
+        require.resolve(
+          filePath
+        )
       ];
 
       const event =
         require(filePath);
 
+      // ========================================
+      // 🛡 VALIDATION
+      // ========================================
       if (
+
+        !event ||
+
         !event.name ||
+
         !event.execute
       ) {
 
         console.warn(
+
           `⚠️ Invalid event ${file}`
         );
+
+        failed++;
 
         continue;
       }
 
+      // ========================================
+      // 📡 REGISTER
+      // ========================================
       if (event.once) {
 
         client.once(
@@ -244,6 +414,7 @@ function loadEvents() {
           event.name,
 
           (...args) =>
+
             event.execute(
               ...args,
               client
@@ -257,6 +428,7 @@ function loadEvents() {
           event.name,
 
           (...args) =>
+
             event.execute(
               ...args,
               client
@@ -266,7 +438,13 @@ function loadEvents() {
 
       loaded++;
 
+      console.log(
+        `✅ Loaded event ${event.name}`
+      );
+
     } catch (err) {
+
+      failed++;
 
       console.error(
 
@@ -280,6 +458,15 @@ function loadEvents() {
   console.log(
     `✅ Loaded ${loaded} events`
   );
+
+  if (
+    failed > 0
+  ) {
+
+    console.log(
+      `⚠️ Failed ${failed} event(s)`
+    );
+  }
 }
 
 // ==================================================
@@ -291,60 +478,174 @@ client.once(
 
   async () => {
 
-    console.log('━━━━━━━━━━━━━━━━━━━━━━');
+    try {
 
-    console.log(
-      `✅ Logged in as ${client.user.tag}`
-    );
+      console.log('━━━━━━━━━━━━━━━━━━━━━━');
 
-    console.log(
-      `🏗 Build: ${BOT_BUILD}`
-    );
+      console.log(
 
-    console.log(
-      `🌍 Servers: ${client.guilds.cache.size}`
-    );
+        `✅ Logged in as ${client.user.tag}`
+      );
 
-    console.log(
-      `👥 Users: ${client.users.cache.size}`
-    );
+      console.log(
+        `🏗 Build: ${BOT_BUILD}`
+      );
 
-    console.log(
-      `📦 Commands: ${client.commands.size}`
-    );
+      console.log(
 
-    console.log('━━━━━━━━━━━━━━━━━━━━━━');
+        `🌍 Servers: ${client.guilds.cache.size}`
+      );
 
-    // ==========================================
-    // ⏳ STARTUP DELAY
-    // ==========================================
-    await new Promise(res =>
-      setTimeout(res, 3000)
-    );
+      console.log(
 
-    // ==========================================
-    // 🎮 PRESENCE
-    // ==========================================
-    client.user.setPresence({
+        `👥 Users: ${client.users.cache.size}`
+      );
 
-      activities: [
+      console.log(
 
-        {
+        `📦 Commands: ${client.commands.size}`
+      );
 
-          name:
-            'tickets & moderation',
+      console.log(
+        '━━━━━━━━━━━━━━━━━━━━━━'
+      );
 
-          type:
-            ActivityType.Watching
+      // ======================================
+      // ⏳ STARTUP DELAY
+      // ======================================
+      await new Promise(
+        resolve =>
+
+          setTimeout(
+            resolve,
+            3000
+          )
+      );
+
+      // ======================================
+      // 📨 LOAD INVITES
+      // ======================================
+      console.log(
+        '📨 Loading invite cache...'
+      );
+
+      let cachedGuilds = 0;
+
+      for (
+        const guild of
+        client.guilds.cache.values()
+      ) {
+
+        try {
+
+          const me =
+            guild.members.me;
+
+          if (
+
+            !me ||
+
+            !me.permissions.has(
+              GatewayIntentBits.GuildInvites
+            )
+          ) {
+
+            continue;
+          }
+
+          await loadGuildInvites(
+            guild
+          );
+
+          cachedGuilds++;
+
+        } catch (err) {
+
+          console.error(
+
+            `Failed caching invites for ${guild.name}:`,
+
+            err
+          );
         }
-      ],
+      }
 
-      status: 'online'
-    });
+      console.log(
 
-    console.log(
-      '✅ Systems initialized'
-    );
+        `✅ Invite cache loaded for ${cachedGuilds} guild(s)`
+      );
+
+      // ======================================
+      // 🎉 GIVEAWAY LOOP
+      // ======================================
+      startGiveawayLoop(
+        client
+      );
+
+      console.log(
+        '✅ Giveaway loop started'
+      );
+
+      // ======================================
+      // 🎮 ROTATING STATUS
+      // ======================================
+      const statuses = [
+
+        '🎟 Managing tickets',
+
+        '🎉 Hosting giveaways',
+
+        '📨 Tracking invites',
+
+        '🛡 Moderating servers',
+
+        `🌍 ${client.guilds.cache.size} servers`
+      ];
+
+      let index = 0;
+
+      setInterval(() => {
+
+        client.user.setPresence({
+
+          activities: [
+
+            {
+
+              name:
+                statuses[index],
+
+              type:
+                ActivityType.Watching
+            }
+          ],
+
+          status:
+            'online'
+        });
+
+        index++;
+
+        if (
+          index >= statuses.length
+        ) {
+
+          index = 0;
+        }
+
+      }, 15000);
+
+      console.log(
+        '✅ Systems initialized'
+      );
+
+    } catch (err) {
+
+      console.error(
+        'Ready event error:',
+        err
+      );
+    }
   }
 );
 
@@ -380,27 +681,32 @@ process.on(
 // ==================================================
 // 🛑 GRACEFUL SHUTDOWN
 // ==================================================
-process.on('SIGINT', () => {
+async function shutdown(
+  signal
+) {
 
   console.log(
-    '🛑 Shutting down bot...'
+    `🛑 ${signal} received`
   );
 
-  client.destroy();
+  try {
+
+    await client.destroy();
+
+  } catch {}
 
   process.exit(0);
-});
+}
 
-process.on('SIGTERM', () => {
+process.on(
+  'SIGINT',
+  () => shutdown('SIGINT')
+);
 
-  console.log(
-    '🛑 Process terminated'
-  );
-
-  client.destroy();
-
-  process.exit(0);
-});
+process.on(
+  'SIGTERM',
+  () => shutdown('SIGTERM')
+);
 
 // ==================================================
 // 🔧 INIT
@@ -412,4 +718,6 @@ loadEvents();
 // ==================================================
 // 🔑 LOGIN
 // ==================================================
-client.login(process.env.TOKEN);
+client.login(
+  process.env.TOKEN
+);

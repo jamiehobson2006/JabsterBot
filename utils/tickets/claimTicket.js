@@ -16,6 +16,25 @@ const {
 } = require('./stats');
 
 // ==================================================
+// 🧠 SAFE STRING
+// ==================================================
+function safeString(
+  value,
+  fallback = 'Unknown'
+) {
+
+  if (
+    typeof value !== 'string'
+  ) {
+
+    return fallback;
+  }
+
+  return value.trim() ||
+    fallback;
+}
+
+// ==================================================
 // 👮 CLAIM TICKET
 // ==================================================
 async function claimTicket({
@@ -24,17 +43,35 @@ async function claimTicket({
 }) {
 
   // ==============================================
+  // 🚫 INVALID INTERACTION
+  // ==============================================
+  if (
+    !interaction ||
+    !interaction.guild ||
+    !interaction.channel
+  ) {
+
+    throw new Error(
+      'Invalid interaction.'
+    );
+  }
+
+  // ==============================================
   // 🔍 FETCH TICKET
   // ==============================================
-  const ticket = get(
+  const ticket =
+    get(
 
-    `SELECT *
-     FROM tickets
-     WHERE channelId = ?
-     AND status = 'OPEN'`,
+      `SELECT *
+       FROM tickets
+       WHERE channelId = ?
+       AND status = 'OPEN'`,
 
-    [interaction.channel.id]
-  );
+      [
+
+        interaction.channel.id
+      ]
+    );
 
   if (!ticket) {
 
@@ -47,7 +84,7 @@ async function claimTicket({
   // 🔐 PERMISSION CHECK
   // ==============================================
   const allowed =
-    canClaimTicket({
+    await canClaimTicket({
 
       member:
         interaction.member,
@@ -69,7 +106,9 @@ async function claimTicket({
   // ==============================================
   // 🚫 ALREADY CLAIMED
   // ==============================================
-  if (ticket.claimedBy) {
+  if (
+    ticket.claimedBy
+  ) {
 
     // ==========================================
     // 👤 SAME USER
@@ -81,6 +120,7 @@ async function claimTicket({
     ) {
 
       throw new Error(
+
         'You already claimed this ticket.'
       );
     }
@@ -91,37 +131,63 @@ async function claimTicket({
   }
 
   // ==============================================
-  // 💾 SAVE CLAIM
+  // 🔒 CLAIM LOCK
   // ==============================================
-  run(
+  const lock =
+    run(
 
-    `UPDATE tickets
+      `UPDATE tickets
 
-     SET
-       claimedBy = ?,
-       claimedAt = ?
+       SET
+         claimedBy = ?,
+         claimedAt = ?
 
-     WHERE channelId = ?`,
+       WHERE channelId = ?
+       AND claimedBy IS NULL
+       AND status = 'OPEN'`,
 
-    [
+      [
 
-      interaction.user.id,
+        interaction.user.id,
 
-      Date.now(),
+        Date.now(),
 
-      interaction.channel.id
-    ]
-  );
+        interaction.channel.id
+      ]
+    );
 
   // ==============================================
-  // 📊 STATS
+  // 🚫 CLAIM FAILED
   // ==============================================
-  addClaim(
+  if (
+    !lock ||
+    lock.changes === 0
+  ) {
 
-    interaction.guild.id,
+    throw new Error(
+      'This ticket was claimed by someone else.'
+    );
+  }
 
-    interaction.user.id
-  );
+  // ==============================================
+  // 📊 UPDATE STAFF STATS
+  // ==============================================
+  try {
+
+    addClaim(
+
+      interaction.guild.id,
+
+      interaction.user.id
+    );
+
+  } catch (err) {
+
+    console.error(
+      'Ticket stats error:',
+      err
+    );
+  }
 
   // ==============================================
   // 🎨 EMBED
@@ -140,33 +206,122 @@ async function claimTicket({
         `${interaction.user} is now handling this ticket.`
       )
 
-      .addFields({
+      .addFields(
 
-        name: 'Staff Member',
+        {
 
-        value:
-          `${interaction.user}`,
+          name:
+            'Staff Member',
 
-        inline: true
-      })
+          value:
+            `${interaction.user}`,
+
+          inline: true
+        },
+
+        {
+
+          name:
+            'Ticket Type',
+
+          value:
+
+            `\`${safeString(ticket.type)}\``,
+
+          inline: true
+        }
+      )
 
       .setFooter({
 
         text:
-          `User ID: ${interaction.user.id}`
+
+          `Staff ID: ${interaction.user.id}`
       })
 
       .setTimestamp();
 
   // ==============================================
-  // 📤 SEND
+  // 🔘 UPDATE BUTTONS
+  // ==============================================
+  try {
+
+    const messages =
+      await interaction.channel.messages
+        .fetch({ limit: 10 });
+
+    const ticketMessage =
+      messages.find(
+
+        msg =>
+
+          msg.author.id ===
+          interaction.client.user.id &&
+
+          msg.components?.length
+      );
+
+    if (ticketMessage) {
+
+      const updatedComponents =
+        ticketMessage.components.map(
+          row => {
+
+            row.components.forEach(
+              component => {
+
+                // ==============================
+                // 🚫 DISABLE CLAIM BUTTON
+                // ==============================
+                if (
+
+                  component.customId ===
+                  'ticket_claim'
+                ) {
+
+                  component.data.disabled =
+                    true;
+
+                  component.data.label =
+                    'Claimed';
+                }
+              }
+            );
+
+            return row;
+          }
+        );
+
+      await ticketMessage.edit({
+
+        components:
+          updatedComponents
+      }).catch(() => {});
+    }
+
+  } catch (err) {
+
+    console.error(
+      'Ticket button update error:',
+      err
+    );
+  }
+
+  // ==============================================
+  // 📤 SEND CLAIM MESSAGE
   // ==============================================
   await interaction.channel.send({
 
     embeds: [embed]
   });
 
-  return true;
+  return {
+
+    success: true,
+
+    claimedBy:
+      interaction.user.id
+  };
 }
 
 module.exports = {

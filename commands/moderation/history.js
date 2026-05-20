@@ -1,205 +1,378 @@
 const {
+
   EmbedBuilder,
+
   PermissionsBitField,
+
   SlashCommandBuilder
+
 } = require('discord.js');
 
-const { all } = require('../../database');
+const {
+  all
+} = require('../../database');
 
-// 🧠 Clean reason
-function trim(text, max = 150) {
+// ==================================================
+// ✂ CLEAN REASON
+// ==================================================
+function trim(
+  text,
+  max = 150
+) {
 
-  if (!text) return 'No reason provided';
+  if (!text) {
+
+    return 'No reason provided';
+  }
 
   return text.length > max
+
     ? text.slice(0, max) + '...'
+
     : text;
 }
 
-// 🎨 Format action nicely
+// ==================================================
+// 🎨 FORMAT ACTION
+// ==================================================
 function formatAction(action) {
 
-  if (!action) return 'Unknown';
+  if (!action) {
+
+    return 'Unknown';
+  }
 
   const map = {
 
-    BAN: '🔨 Ban',
-    UNBAN: '🔓 Unban',
+    BAN:
+      '🔨 Ban',
 
-    KICK: '👢 Kick',
+    UNBAN:
+      '🔓 Unban',
 
-    MUTE: '🔇 Mute',
-    UNMUTE: '🔊 Unmute',
+    KICK:
+      '👢 Kick',
 
-    WARN: '⚠️ Warn',
-    CLEARWARNS: '🧹 Clear Warns',
+    MUTE:
+      '🔇 Mute',
 
-    LOCK: '🔒 Lock',
-    UNLOCK: '🔓 Unlock',
+    UNMUTE:
+      '🔊 Unmute',
 
-    ROLE_ADD: '➕ Role Added',
-    ROLE_REMOVE: '➖ Role Removed',
+    WARN:
+      '⚠️ Warn',
 
-    EDIT_CASE: '✏️ Edit Case'
+    CLEARWARNS:
+      '🧹 Clear Warns',
+
+    LOCK:
+      '🔒 Lock',
+
+    UNLOCK:
+      '🔓 Unlock',
+
+    ROLE_ADD:
+      '➕ Role Added',
+
+    ROLE_REMOVE:
+      '➖ Role Removed',
+
+    EDIT_CASE:
+      '✏️ Edit Case'
   };
 
-  return map[action.toUpperCase()] || action;
+  return map[
+    action.toUpperCase()
+  ] || action;
 }
 
 module.exports = {
 
   cooldown: 3000,
 
-  data: new SlashCommandBuilder()
-    .setName('history')
-    .setDescription('View moderation history for a user')
+  data:
+    new SlashCommandBuilder()
 
-    .addUserOption(option =>
-      option
-        .setName('user')
-        .setDescription('User to view history for')
-        .setRequired(true)
-    ),
+      .setName('history')
+
+      .setDescription(
+        'View moderation history for a user'
+      )
+
+      .addUserOption(option =>
+
+        option
+
+          .setName('user')
+
+          .setDescription(
+            'User to view history for'
+          )
+
+          .setRequired(true)
+      ),
 
   async execute(interaction) {
 
     try {
 
-      const user =
-        interaction.options.getUser('user', true);
+      // ==========================================
+      // 🔐 PERMISSION CHECK
+      // ==========================================
+      if (
 
-      // 🔐 Permission
-      if (!interaction.memberPermissions.has(
-        PermissionsBitField.Flags.ManageGuild
-      )) {
+        !interaction.memberPermissions.has(
+
+          PermissionsBitField.Flags.ManageGuild
+        )
+      ) {
 
         return interaction.editReply({
+
           content:
+
             '❌ You need **Manage Server** permission.'
         });
       }
 
-      // 📄 Fetch cases
-      const cases = all(
-        `SELECT * FROM cases
-         WHERE guildId=? AND userId=?
-         ORDER BY id DESC
-         LIMIT 20`,
-        [interaction.guild.id, user.id]
-      );
+      // ==========================================
+      // 👤 USER
+      // ==========================================
+      const user =
+        interaction.options.getUser(
 
-      // ❌ No history
+          'user',
+
+          true
+        );
+
+      // ==========================================
+      // 📄 FETCH CASES
+      // ==========================================
+      const cases =
+        all(
+
+          `SELECT *
+           FROM cases
+
+           WHERE guildId = ?
+           AND userId = ?
+
+           ORDER BY id DESC
+
+           LIMIT 20`,
+
+          [
+
+            interaction.guild.id,
+
+            user.id
+          ]
+        );
+
+      // ==========================================
+      // ❌ NO HISTORY
+      // ==========================================
       if (!cases.length) {
 
         return interaction.editReply({
+
           content:
+
             `ℹ️ No history found for ${user.tag}.`
         });
       }
 
-      // 📊 Stats
+      // ==========================================
+      // 📊 STATS
+      // ==========================================
       const stats = {};
 
       for (const c of cases) {
 
         const key =
-          c.action?.toUpperCase() || 'UNKNOWN';
 
-        stats[key] = (stats[key] || 0) + 1;
+          c.action?.toUpperCase()
+
+          || 'UNKNOWN';
+
+        stats[key] =
+
+          (stats[key] || 0) + 1;
       }
 
+      // ==========================================
+      // 📈 SUMMARY
+      // ==========================================
       const summary =
         Object.entries(stats)
 
-          .map(([k, v]) =>
-            `**${k}**: ${v}`
+          .map(
+
+            ([k, v]) =>
+
+              `**${k}**: ${v}`
           )
 
-          .join(' • ') ||
+          .join(' • ')
 
-        'No data';
+          || 'No data';
 
-      // 🎨 Embed
-      const embed = new EmbedBuilder()
+      // ==========================================
+      // 🎨 EMBED
+      // ==========================================
+      const embed =
+        new EmbedBuilder()
 
-        .setTitle(`📜 History for ${user.tag}`)
+          .setTitle(
 
-        .setColor(0x5865F2)
+            `📜 History for ${user.tag}`
+          )
 
-        .setThumbnail(
-          user.displayAvatarURL({
-            dynamic: true
+          .setColor(
+            0x5865F2
+          )
+
+          .setThumbnail(
+
+            user.displayAvatarURL({
+
+              dynamic: true
+            })
+          )
+
+          .setDescription(
+
+            `## Recent Activity\n` +
+
+            `${summary}`
+          )
+
+          .addFields({
+
+            name: '📊 Total Cases',
+
+            value:
+              `\`${cases.length}\``,
+
+            inline: true
           })
-        )
 
-        .setDescription(
-          `**Recent Activity**\n${summary}`
-        )
+          .setFooter({
 
-        .setFooter({
-          text:
-            `Showing latest ${Math.min(10, cases.length)} cases`
-        })
+            text:
 
-        .setTimestamp();
+              `Showing latest ${Math.min(
 
-      // 📜 Entries
+                10,
+
+                cases.length
+
+              )} cases`
+          })
+
+          .setTimestamp();
+
+      // ==========================================
+      // 📜 CASE ENTRIES
+      // ==========================================
       for (const c of cases.slice(0, 10)) {
 
         embed.addFields({
 
           name:
-            `#${c.id} • ${formatAction(c.action)}`,
+
+            `#${c.id} • ${formatAction(
+
+              c.action
+            )}`,
 
           value:
 
             `👮 Moderator: ${
+
               c.moderatorId
+
                 ? `<@${c.moderatorId}>`
+
                 : '`Unknown`'
             }\n` +
 
             `🕒 Time: ${
+
               c.createdAt
-                ? `<t:${Math.floor(c.createdAt / 1000)}:R>`
+
+                ? `<t:${Math.floor(
+
+                    c.createdAt / 1000
+
+                  )}:R>`
+
                 : '`Unknown`'
             }\n` +
 
-            `📄 Reason: ${trim(c.reason)}`,
+            `📄 Reason: ${trim(
+
+              c.reason
+            )}`,
 
           inline: false
         });
       }
 
-      // ➕ More indicator
+      // ==========================================
+      // ➕ MORE CASES
+      // ==========================================
       if (cases.length > 10) {
 
         embed.addFields({
-          name: 'More Cases',
+
+          name: '➕ More Cases',
+
           value:
-            `+ ${cases.length - 10} more case(s)`
+
+            `+ ${
+
+              cases.length - 10
+
+            } more case(s)`
         });
       }
 
+      // ==========================================
+      // 📤 RESPONSE
+      // ==========================================
       return interaction.editReply({
+
         embeds: [embed]
       });
 
     } catch (err) {
 
-      console.error('History Command Error:', err);
+      console.error(
+        'History Command Error:',
+        err
+      );
 
-      if (interaction.deferred || interaction.replied) {
+      if (
+
+        interaction.deferred ||
+
+        interaction.replied
+      ) {
 
         return interaction.editReply({
+
           content:
             '❌ Failed to fetch history.'
         });
       }
 
       return interaction.reply({
+
         content:
           '❌ Failed to fetch history.',
+
         ephemeral: true
       });
     }

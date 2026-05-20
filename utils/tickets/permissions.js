@@ -7,6 +7,29 @@ const {
 } = require('../../database');
 
 // ==================================================
+// 🧠 SAFE STRING
+// ==================================================
+function safeString(
+  value,
+  fallback = null
+) {
+
+  if (
+    typeof value !== 'string'
+  ) {
+
+    return fallback;
+  }
+
+  const cleaned =
+    value.trim();
+
+  return cleaned.length
+    ? cleaned
+    : fallback;
+}
+
+// ==================================================
 // 👮 GET STAFF ROLE
 // ==================================================
 function getStaffRole(
@@ -14,24 +37,43 @@ function getStaffRole(
   type
 ) {
 
-  const settings = get(
+  const safeGuildId =
+    safeString(guildId);
 
-    `SELECT roleId
-     FROM ticket_settings
-     WHERE guildId = ?
-     AND type = ?`,
+  const safeType =
+    safeString(type);
 
-    [
-      guildId,
-      type
-    ]
+  if (
+    !safeGuildId ||
+    !safeType
+  ) {
+
+    return null;
+  }
+
+  const settings =
+    get(
+
+      `SELECT roleId
+       FROM ticket_settings
+       WHERE guildId = ?
+       AND type = ?`,
+
+      [
+
+        safeGuildId,
+
+        safeType
+      ]
+    );
+
+  return safeString(
+    settings?.roleId
   );
-
-  return settings?.roleId || null;
 }
 
 // ==================================================
-// 🔐 STAFF CHECK
+// 🔐 STAFF ACCESS CHECK
 // ==================================================
 function hasTicketAccess({
 
@@ -42,36 +84,71 @@ function hasTicketAccess({
   type
 }) {
 
-  // ==============================================
-  // 👑 ADMIN BYPASS
-  // ==============================================
-  if (
+  try {
 
-    member.permissions.has(
-      PermissionsBitField.Flags.Administrator
-    )
-  ) {
+    // ==========================================
+    // 🚫 INVALID MEMBER
+    // ==========================================
+    if (
+      !member
+    ) {
 
-    return true;
-  }
+      return false;
+    }
 
-  // ==============================================
-  // 👮 STAFF ROLE
-  // ==============================================
-  const roleId =
-    getStaffRole(
-      guildId,
-      type
+    // ==========================================
+    // 👑 ADMIN BYPASS
+    // ==========================================
+    if (
+
+      member.permissions?.has(
+
+        PermissionsBitField.Flags.Administrator
+      )
+    ) {
+
+      return true;
+    }
+
+    // ==========================================
+    // 👮 STAFF ROLE
+    // ==========================================
+    const roleId =
+      getStaffRole(
+        guildId,
+        type
+      );
+
+    if (
+      !roleId
+    ) {
+
+      return false;
+    }
+
+    // ==========================================
+    // 🚫 NO ROLE CACHE
+    // ==========================================
+    if (
+      !member.roles?.cache
+    ) {
+
+      return false;
+    }
+
+    return member.roles.cache.has(
+      roleId
     );
 
-  if (!roleId) {
+  } catch (err) {
+
+    console.error(
+      'Ticket permission error:',
+      err
+    );
 
     return false;
   }
-
-  return member.roles.cache.has(
-    roleId
-  );
 }
 
 // ==================================================
@@ -162,6 +239,9 @@ function canDeleteTicket({
   });
 }
 
+// ==================================================
+// 📦 EXPORTS
+// ==================================================
 module.exports = {
 
   getStaffRole,

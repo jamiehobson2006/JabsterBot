@@ -11,14 +11,15 @@ const {
 } = require('discord.js');
 
 const {
-  run,
-  get
+  run
 } = require('../../database');
 
 const ticketTypes =
   require('../../utils/tickets/ticketTypes');
 
 module.exports = {
+
+  cooldown: 5000,
 
   data:
     new SlashCommandBuilder()
@@ -29,9 +30,9 @@ module.exports = {
         'Configure a ticket type'
       )
 
-      // ========================
+      // ==========================================
       // 🎫 TYPE
-      // ========================
+      // ==========================================
       .addStringOption(option => {
 
         option
@@ -58,9 +59,9 @@ module.exports = {
         return option;
       })
 
-      // ========================
+      // ==========================================
       // 📂 CATEGORY
-      // ========================
+      // ==========================================
       .addChannelOption(option =>
 
         option
@@ -78,9 +79,9 @@ module.exports = {
           .setRequired(true)
       )
 
-      // ========================
+      // ==========================================
       // 👮 STAFF ROLE
-      // ========================
+      // ==========================================
       .addRoleOption(option =>
 
         option
@@ -94,9 +95,9 @@ module.exports = {
           .setRequired(true)
       )
 
-      // ========================
+      // ==========================================
       // ⚡ ENABLED
-      // ========================
+      // ==========================================
       .addBooleanOption(option =>
 
         option
@@ -158,18 +159,99 @@ module.exports = {
           true
         );
 
+      const botMember =
+        interaction.guild.members.me;
+
+      // ==========================================
+      // 🛡 CATEGORY VALIDATION
+      // ==========================================
+      const perms =
+        category.permissionsFor(
+          botMember
+        );
+
+      const missing = [];
+
+      if (
+
+        !perms?.has(
+          PermissionsBitField.Flags.ViewChannel
+        )
+      ) {
+
+        missing.push(
+          'View Channel'
+        );
+      }
+
+      if (
+
+        !perms?.has(
+          PermissionsBitField.Flags.SendMessages
+        )
+      ) {
+
+        missing.push(
+          'Send Messages'
+        );
+      }
+
+      if (
+
+        !perms?.has(
+          PermissionsBitField.Flags.ManageChannels
+        )
+      ) {
+
+        missing.push(
+          'Manage Channels'
+        );
+      }
+
+      if (missing.length) {
+
+        return interaction.editReply({
+
+          content:
+
+            `❌ Missing category permissions:\n\n` +
+
+            `• ${missing.join('\n• ')}`
+        });
+      }
+
+      // ==========================================
+      // 🚫 ROLE HIERARCHY CHECK
+      // ==========================================
+      if (
+
+        role.position >=
+        botMember.roles.highest.position
+      ) {
+
+        return interaction.editReply({
+
+          content:
+
+            '❌ That role is above my highest role.'
+        });
+      }
+
       // ==========================================
       // 💾 SAVE
       // ==========================================
       run(
 
         `INSERT INTO ticket_settings
+
          (
+
            guildId,
            type,
            enabled,
            categoryId,
            roleId
+
          )
 
          VALUES (?, ?, ?, ?, ?)
@@ -205,8 +287,11 @@ module.exports = {
         new EmbedBuilder()
 
           .setColor(
+
             enabled
+
               ? 0x57F287
+
               : 0xED4245
           )
 
@@ -214,11 +299,16 @@ module.exports = {
             '🎫 Ticket System Configured'
           )
 
+          .setDescription(
+
+            `Successfully updated the **${ticketTypes[type].name}** ticket configuration.`
+          )
+
           .addFields(
 
             {
 
-              name: 'Type',
+              name: '🎫 Ticket Type',
 
               value:
                 ticketTypes[type].name,
@@ -228,19 +318,22 @@ module.exports = {
 
             {
 
-              name: 'Enabled',
+              name: '⚡ Status',
 
               value:
+
                 enabled
-                  ? 'Yes'
-                  : 'No',
+
+                  ? 'Enabled'
+
+                  : 'Disabled',
 
               inline: true
             },
 
             {
 
-              name: 'Category',
+              name: '📂 Category',
 
               value:
                 `${category}`,
@@ -250,12 +343,26 @@ module.exports = {
 
             {
 
-              name: 'Staff Role',
+              name: '👮 Staff Role',
 
               value:
                 `${role}`,
 
               inline: true
+            },
+
+            {
+
+              name: '📊 Features',
+
+              value:
+
+                '• Ticket claiming\n' +
+                '• Ticket closing\n' +
+                '• Transcript logging\n' +
+                '• Staff permissions',
+
+              inline: false
             }
           )
 
@@ -267,6 +374,9 @@ module.exports = {
 
           .setTimestamp();
 
+      // ==========================================
+      // 📤 RESPONSE
+      // ==========================================
       return interaction.editReply({
 
         embeds: [embed]

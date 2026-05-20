@@ -21,6 +21,68 @@ const {
 } = require('./transcript');
 
 // ==================================================
+// 🧠 SAFE STRING
+// ==================================================
+function safeString(
+  value,
+  fallback = 'Unknown'
+) {
+
+  if (
+    typeof value !== 'string'
+  ) {
+
+    return fallback;
+  }
+
+  return value.trim() ||
+    fallback;
+}
+
+// ==================================================
+// ⏱ FORMAT TIME
+// ==================================================
+function formatDuration(ms) {
+
+  if (
+    !ms ||
+    ms < 1000
+  ) {
+
+    return 'Under 1 second';
+  }
+
+  const seconds =
+    Math.floor(ms / 1000);
+
+  const minutes =
+    Math.floor(seconds / 60);
+
+  const hours =
+    Math.floor(minutes / 60);
+
+  const days =
+    Math.floor(hours / 24);
+
+  if (days >= 1) {
+
+    return `${days}d ${hours % 24}h`;
+  }
+
+  if (hours >= 1) {
+
+    return `${hours}h ${minutes % 60}m`;
+  }
+
+  if (minutes >= 1) {
+
+    return `${minutes}m ${seconds % 60}s`;
+  }
+
+  return `${seconds}s`;
+}
+
+// ==================================================
 // 🔒 CLOSE TICKET
 // ==================================================
 async function closeTicket({
@@ -29,17 +91,35 @@ async function closeTicket({
 }) {
 
   // ==============================================
+  // 🚫 INVALID INTERACTION
+  // ==============================================
+  if (
+    !interaction ||
+    !interaction.guild ||
+    !interaction.channel
+  ) {
+
+    throw new Error(
+      'Invalid interaction.'
+    );
+  }
+
+  // ==============================================
   // 🔍 FETCH TICKET
   // ==============================================
-  const ticket = get(
+  const ticket =
+    get(
 
-    `SELECT *
-     FROM tickets
-     WHERE channelId = ?
-     AND status = 'OPEN'`,
+      `SELECT *
+       FROM tickets
+       WHERE channelId = ?
+       AND status = 'OPEN'`,
 
-    [interaction.channel.id]
-  );
+      [
+
+        interaction.channel.id
+      ]
+    );
 
   if (!ticket) {
 
@@ -52,7 +132,7 @@ async function closeTicket({
   // 🔐 PERMISSION CHECK
   // ==============================================
   const allowed =
-    canCloseTicket({
+    await canCloseTicket({
 
       member:
         interaction.member,
@@ -72,57 +152,91 @@ async function closeTicket({
   }
 
   // ==============================================
+  // 🔒 CLOSE LOCK
+  // ==============================================
+  const closeResult =
+    run(
+
+      `UPDATE tickets
+
+       SET
+         status = 'CLOSED',
+         closedBy = ?,
+         closedAt = ?
+
+       WHERE channelId = ?
+       AND status = 'OPEN'`,
+
+      [
+
+        interaction.user.id,
+
+        Date.now(),
+
+        interaction.channel.id
+      ]
+    );
+
+  // ==============================================
+  // 🚫 ALREADY CLOSED
+  // ==============================================
+  if (
+    !closeResult ||
+    closeResult.changes === 0
+  ) {
+
+    throw new Error(
+      'This ticket is already closed.'
+    );
+  }
+
+  // ==============================================
   // ⏱ HANDLE TIME
   // ==============================================
+  const createdAt =
+    Number(
+      ticket.createdAt || 0
+    );
+
   const handleTime =
-    Date.now() -
-    ticket.createdAt;
+    Math.max(
+
+      Date.now() - createdAt,
+
+      0
+    );
 
   // ==============================================
-  // 💾 UPDATE DB
+  // 📊 STAFF STATS
   // ==============================================
-  run(
+  try {
 
-    `UPDATE tickets
+    addClose(
 
-     SET
-       status = 'CLOSED',
-       closedBy = ?,
-       closedAt = ?
+      interaction.guild.id,
 
-     WHERE channelId = ?`,
+      interaction.user.id
+    );
 
-    [
+    addHandleTime(
+
+      interaction.guild.id,
 
       interaction.user.id,
 
-      Date.now(),
+      handleTime
+    );
 
-      interaction.channel.id
-    ]
-  );
+  } catch (err) {
 
-  // ==============================================
-  // 📊 STATS
-  // ==============================================
-  addClose(
-
-    interaction.guild.id,
-
-    interaction.user.id
-  );
-
-  addHandleTime(
-
-    interaction.guild.id,
-
-    interaction.user.id,
-
-    handleTime
-  );
+    console.error(
+      'Ticket stats error:',
+      err
+    );
+  }
 
   // ==============================================
-  // 🎨 EMBED
+  // 🎨 CLOSE EMBED
   // ==============================================
   const embed =
     new EmbedBuilder()
@@ -142,7 +256,8 @@ async function closeTicket({
 
         {
 
-          name: 'Closed By',
+          name:
+            'Closed By',
 
           value:
             `${interaction.user}`,
@@ -152,10 +267,23 @@ async function closeTicket({
 
         {
 
-          name: 'Ticket Type',
+          name:
+            'Ticket Type',
 
           value:
-            ticket.type,
+
+            `\`${safeString(ticket.type)}\``,
+
+          inline: true
+        },
+
+        {
+
+          name:
+            'Handle Time',
+
+          value:
+            formatDuration(handleTime),
 
           inline: true
         }
@@ -170,6 +298,72 @@ async function closeTicket({
       .setTimestamp();
 
   // ==============================================
+  // 🔘 DISABLE BUTTONS
+  // ==============================================
+  try {
+
+    const messages =
+      await interaction.channel.messages
+        .fetch({ limit: 15 });
+
+    const ticketMessage =
+      messages.find(
+
+        msg =>
+
+          msg.author.id ===
+          interaction.client.user.id &&
+
+          msg.components?.length
+      );
+
+    if (ticketMessage) {
+
+      const updatedComponents =
+        ticketMessage.components.map(
+          row => {
+
+            row.components.forEach(
+              component => {
+
+                component.data.disabled =
+                  true;
+
+                // ==============================
+                // 🔒 UPDATE LABEL
+                // ==============================
+                if (
+
+                  component.customId ===
+                  'ticket_close'
+                ) {
+
+                  component.data.label =
+                    'Closed';
+                }
+              }
+            );
+
+            return row;
+          }
+        );
+
+      await ticketMessage.edit({
+
+        components:
+          updatedComponents
+      }).catch(() => {});
+    }
+
+  } catch (err) {
+
+    console.error(
+      'Ticket button disable error:',
+      err
+    );
+  }
+
+  // ==============================================
   // 📤 SEND CLOSE MESSAGE
   // ==============================================
   await interaction.channel.send({
@@ -178,34 +372,63 @@ async function closeTicket({
   });
 
   // ==============================================
-  // 📜 TRANSCRIPT
+  // 📜 GENERATE TRANSCRIPT
   // ==============================================
-  await generateTranscript({
+  try {
 
-    client:
-      interaction.client,
+    await generateTranscript({
 
-    channel:
-      interaction.channel,
+      client:
+        interaction.client,
 
-    ticket,
+      channel:
+        interaction.channel,
 
-    closedBy:
-      interaction.user
-  });
+      ticket,
+
+      closedBy:
+        interaction.user
+    });
+
+  } catch (err) {
+
+    console.error(
+      'Transcript generation error:',
+      err
+    );
+  }
 
   // ==============================================
   // 🗑 DELETE CHANNEL
   // ==============================================
   setTimeout(async () => {
 
-    await interaction.channel.delete()
+    try {
 
-      .catch(() => {});
+      await interaction.channel.delete(
+
+        `Ticket closed by ${interaction.user.tag}`
+      );
+
+    } catch (err) {
+
+      console.error(
+        'Channel delete error:',
+        err
+      );
+    }
 
   }, 5000);
 
-  return true;
+  return {
+
+    success: true,
+
+    closedBy:
+      interaction.user.id,
+
+    handleTime
+  };
 }
 
 module.exports = {

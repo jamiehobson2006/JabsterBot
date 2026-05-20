@@ -3,6 +3,9 @@ const {
   SlashCommandBuilder
 } = require('discord.js');
 
+// ========================
+// ⏱ FORMAT UPTIME
+// ========================
 function formatUptime(ms) {
 
   const totalSeconds =
@@ -35,16 +38,19 @@ function formatUptime(ms) {
 // ========================
 // 🎯 STATUS SYSTEM
 // ========================
-function getStatus(ping, memoryMB) {
+function getStatus(ping, rssMB) {
 
   if (
     ping < 80 &&
-    memoryMB < 250
+    rssMB < 250
   ) {
 
     return {
+
       text: '🟢 Ultra Fast',
+
       color: 0x57F287,
+
       message:
         '⚡ Systems operating at maximum efficiency.'
     };
@@ -52,12 +58,15 @@ function getStatus(ping, memoryMB) {
 
   if (
     ping < 150 &&
-    memoryMB < 500
+    rssMB < 500
   ) {
 
     return {
+
       text: '🟡 Stable',
+
       color: 0xFEE75C,
+
       message:
         '🛰️ All systems operational.'
     };
@@ -68,8 +77,11 @@ function getStatus(ping, memoryMB) {
   ) {
 
     return {
+
       text: '🟠 Moderate Load',
+
       color: 0xFAA61A,
+
       message:
         '📡 Handling increased traffic.'
     };
@@ -90,13 +102,14 @@ module.exports = {
 
   cooldown: 5000,
 
-  data: new SlashCommandBuilder()
+  data:
+    new SlashCommandBuilder()
 
-    .setName('uptime')
+      .setName('uptime')
 
-    .setDescription(
-      'Check bot uptime and performance'
-    ),
+      .setDescription(
+        'Check bot uptime and performance'
+      ),
 
   async execute(interaction) {
 
@@ -109,7 +122,7 @@ module.exports = {
       // ⏱️ UPTIME
       // ========================
       const uptimeMs =
-        client.uptime;
+        client.uptime || 0;
 
       const uptime =
         formatUptime(
@@ -127,9 +140,19 @@ module.exports = {
       // ========================
       // 🧠 MEMORY
       // ========================
-      const memoryMB =
+      const memory =
+        process.memoryUsage();
+
+      const heapMB =
         (
-          process.memoryUsage().heapUsed /
+          memory.heapUsed /
+          1024 /
+          1024
+        ).toFixed(2);
+
+      const rssMB =
+        (
+          memory.rss /
           1024 /
           1024
         ).toFixed(2);
@@ -163,7 +186,7 @@ module.exports = {
       const status =
         getStatus(
           apiPing,
-          Number(memoryMB)
+          Number(rssMB)
         );
 
       // ========================
@@ -216,7 +239,9 @@ module.exports = {
           .addFields(
 
             {
-              name: '⏱️ Uptime',
+
+              name:
+                '⏱️ Uptime',
 
               value:
                 `\`${uptime}\``,
@@ -225,7 +250,9 @@ module.exports = {
             },
 
             {
-              name: '📡 API Latency',
+
+              name:
+                '📡 API Latency',
 
               value:
                 `\`${apiPing}ms\``,
@@ -234,7 +261,9 @@ module.exports = {
             },
 
             {
-              name: '💡 Status',
+
+              name:
+                '💡 Status',
 
               value:
                 status.text,
@@ -243,16 +272,31 @@ module.exports = {
             },
 
             {
-              name: '🧠 Memory Usage',
+
+              name:
+                '🧠 Heap Usage',
 
               value:
-                `\`${memoryMB} MB\``,
+                `\`${heapMB} MB\``,
 
               inline: true
             },
 
             {
-              name: '🌐 Servers',
+
+              name:
+                '💾 RAM Usage',
+
+              value:
+                `\`${rssMB} MB\``,
+
+              inline: true
+            },
+
+            {
+
+              name:
+                '🌐 Servers',
 
               value:
                 `\`${guilds.toLocaleString()}\``,
@@ -261,7 +305,9 @@ module.exports = {
             },
 
             {
-              name: '👥 Users',
+
+              name:
+                '👥 Cached Users',
 
               value:
                 `\`${users.toLocaleString()}\``,
@@ -270,7 +316,9 @@ module.exports = {
             },
 
             {
-              name: '💬 Channels',
+
+              name:
+                '💬 Cached Channels',
 
               value:
                 `\`${channels.toLocaleString()}\``,
@@ -279,7 +327,9 @@ module.exports = {
             },
 
             {
-              name: '🕒 Started',
+
+              name:
+                '🕒 Started',
 
               value:
                 `<t:${startedTimestamp}:R>`,
@@ -288,14 +338,47 @@ module.exports = {
             }
           )
 
+          .setThumbnail(
+
+            client.user.displayAvatarURL({
+
+              dynamic: true
+            })
+          )
+
           .setFooter({
+
             text:
               'JabsterBot • Live Performance Monitor'
           })
 
           .setTimestamp();
 
+      // ========================
+      // 🚨 PERFORMANCE WARNING
+      // ========================
+      if (
+
+        apiPing > 250 ||
+
+        Number(rssMB) > 750
+      ) {
+
+        embed.addFields({
+
+          name:
+            '⚠️ Performance Warning',
+
+          value:
+            'The bot is currently experiencing elevated resource usage.'
+        });
+      }
+
+      // ========================
+      // ✅ RESPONSE
+      // ========================
       return interaction.editReply({
+
         embeds: [embed]
       });
 
@@ -307,11 +390,14 @@ module.exports = {
       );
 
       if (
+
         interaction.deferred ||
+
         interaction.replied
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ Failed to fetch uptime.'
         });

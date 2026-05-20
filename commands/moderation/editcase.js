@@ -1,19 +1,46 @@
 const {
+
   PermissionsBitField,
+
   EmbedBuilder,
+
   SlashCommandBuilder
+
 } = require('discord.js');
 
-const { run, get } = require('../../database');
-const { sendLog, createLogEmbed } = require('../../utils/logger');
+const {
 
-// 🧠 Safe trim
-function trim(text, max = 300) {
+  run,
 
-  if (!text) return 'No reason provided';
+  get
+
+} = require('../../database');
+
+const {
+
+  sendLog,
+
+  createLogEmbed
+
+} = require('../../utils/logger');
+
+// ==================================================
+// ✂ SAFE TRIM
+// ==================================================
+function trim(
+  text,
+  max = 300
+) {
+
+  if (!text) {
+
+    return 'No reason provided';
+  }
 
   return text.length > max
+
     ? text.slice(0, max) + '...'
+
     : text;
 }
 
@@ -21,112 +48,209 @@ module.exports = {
 
   cooldown: 3000,
 
-  data: new SlashCommandBuilder()
+  data:
+    new SlashCommandBuilder()
 
-    .setName('editcase')
-    .setDescription('Edit the reason of a moderation case')
+      .setName('editcase')
 
-    .addIntegerOption(option =>
-      option
-        .setName('case_id')
-        .setDescription('Case ID')
-        .setRequired(true)
-        .setMinValue(1)
-    )
+      .setDescription(
+        'Edit the reason of a moderation case'
+      )
 
-    .addStringOption(option =>
-      option
-        .setName('reason')
-        .setDescription('New reason')
-        .setRequired(true)
-        .setMinLength(2)
-        .setMaxLength(500)
-    ),
+      .addIntegerOption(option =>
+
+        option
+
+          .setName('case_id')
+
+          .setDescription(
+            'Case ID'
+          )
+
+          .setRequired(true)
+
+          .setMinValue(1)
+      )
+
+      .addStringOption(option =>
+
+        option
+
+          .setName('reason')
+
+          .setDescription(
+            'New reason'
+          )
+
+          .setRequired(true)
+
+          .setMinLength(2)
+
+          .setMaxLength(500)
+      ),
 
   async execute(interaction) {
 
     try {
 
-      const caseId =
-        interaction.options.getInteger('case_id', true);
+      // ==========================================
+      // 🔐 PERMISSION CHECK
+      // ==========================================
+      if (
 
-      const newReason =
-        interaction.options
-          .getString('reason', true)
-          .trim();
+        !interaction.memberPermissions.has(
 
-      // 🔐 Permission
-      if (!interaction.memberPermissions.has(
-        PermissionsBitField.Flags.ManageGuild
-      )) {
+          PermissionsBitField.Flags.ManageGuild
+        )
+      ) {
 
         return interaction.editReply({
+
           content:
+
             '❌ You need **Manage Server** permission.'
         });
       }
 
-      // ❌ Empty
+      // ==========================================
+      // 🆔 OPTIONS
+      // ==========================================
+      const caseId =
+        interaction.options.getInteger(
+
+          'case_id',
+
+          true
+        );
+
+      const newReason =
+        interaction.options
+
+          .getString(
+            'reason',
+            true
+          )
+
+          .trim();
+
+      // ==========================================
+      // ❌ EMPTY CHECK
+      // ==========================================
       if (!newReason.length) {
 
         return interaction.editReply({
+
           content:
             '❌ Reason cannot be empty.'
         });
       }
 
-      // 🔍 Fetch case
-      const caseData = get(
-        `SELECT * FROM cases
-         WHERE guildId=? AND id=?`,
-        [interaction.guild.id, caseId]
-      );
+      // ==========================================
+      // 📄 FETCH CASE
+      // ==========================================
+      const caseData =
+        get(
 
+          `SELECT *
+           FROM cases
+
+           WHERE guildId = ?
+           AND id = ?`,
+
+          [
+
+            interaction.guild.id,
+
+            caseId
+          ]
+        );
+
+      // ==========================================
+      // ❌ NOT FOUND
+      // ==========================================
       if (!caseData) {
 
         return interaction.editReply({
-          content: '❌ Case not found.'
+
+          content:
+            '❌ Case not found.'
         });
       }
 
       const oldReason =
-        caseData.reason || 'No reason provided';
+        caseData.reason ||
 
-      // ❌ Same reason
+        'No reason provided';
+
+      // ==========================================
+      // ⚠ SAME REASON
+      // ==========================================
       if (oldReason === newReason) {
 
         return interaction.editReply({
+
           content:
+
             '⚠️ The new reason is the same as the current one.'
         });
       }
 
-      // 📝 Update DB
+      // ==========================================
+      // 📝 UPDATE CASE
+      // ==========================================
       run(
+
         `UPDATE cases
-         SET reason=?
-         WHERE guildId=? AND id=?`,
+
+         SET reason = ?
+
+         WHERE guildId = ?
+         AND id = ?`,
+
         [
+
           newReason,
+
           interaction.guild.id,
+
           caseId
         ]
       );
 
-      // 📜 Audit DB
+      // ==========================================
+      // 📜 AUDIT LOG DB
+      // ==========================================
       run(
+
         `INSERT INTO audit_logs
-         (guildId, action, targetId, executorId, metadata, timestamp)
+
+         (
+           guildId,
+           action,
+           targetId,
+           executorId,
+           metadata,
+           timestamp
+         )
+
          VALUES (?, ?, ?, ?, ?, ?)`,
+
         [
+
           interaction.guild.id,
+
           'EDIT_CASE',
+
           caseData.userId,
+
           interaction.user.id,
 
           JSON.stringify({
+
             caseId,
+
             oldReason,
+
             newReason
           }),
 
@@ -134,94 +258,166 @@ module.exports = {
         ]
       );
 
-      // 🎨 Response
-      const embed = new EmbedBuilder()
+      // ==========================================
+      // 🎨 RESPONSE EMBED
+      // ==========================================
+      const embed =
+        new EmbedBuilder()
 
-        .setColor(0xF1C40F)
+          .setColor(0xF1C40F)
 
-        .setTitle(`📝 Case #${caseId} Updated`)
+          .setTitle(
+            `📝 Case #${caseId} Updated`
+          )
 
-        .addFields(
+          .setDescription(
 
-          {
-            name: '👤 User',
-            value: `<@${caseData.userId}>`,
-            inline: true
-          },
+            'The moderation case reason has been successfully updated.'
+          )
 
-          {
-            name: '📌 Action',
-            value: `\`${caseData.action}\``,
-            inline: true
-          },
+          .addFields(
 
-          {
-            name: '🛡 Edited By',
-            value: `${interaction.user}`,
-            inline: true
-          },
+            {
 
-          {
-            name: 'Previous Reason',
-            value: trim(oldReason)
-          },
+              name: '👤 User',
 
-          {
-            name: 'New Reason',
-            value: trim(newReason)
-          }
-        )
+              value:
+                `<@${caseData.userId}>`,
 
-        .setFooter({
-          text:
-            `Case ID: ${caseId}`
-        })
+              inline: true
+            },
 
-        .setTimestamp();
+            {
 
+              name: '📌 Action',
+
+              value:
+                `\`${caseData.action}\``,
+
+              inline: true
+            },
+
+            {
+
+              name: '🛡 Edited By',
+
+              value:
+                `${interaction.user}`,
+
+              inline: true
+            },
+
+            {
+
+              name: '📄 Previous Reason',
+
+              value:
+                trim(oldReason)
+            },
+
+            {
+
+              name: '📝 New Reason',
+
+              value:
+                trim(newReason)
+            },
+
+            {
+
+              name: '🕒 Original Case Date',
+
+              value:
+
+                `<t:${Math.floor(
+
+                  (caseData.createdAt || Date.now()) / 1000
+
+                )}:F>`
+            }
+          )
+
+          .setFooter({
+
+            text:
+              `Case ID: ${caseId}`
+          })
+
+          .setTimestamp();
+
+      // ==========================================
+      // 📤 RESPONSE
+      // ==========================================
       await interaction.editReply({
+
         embeds: [embed]
       });
 
-      // 📜 Modlogs
-      const logEmbed = createLogEmbed({
+      // ==========================================
+      // 📜 MOD LOG
+      // ==========================================
+      const logEmbed =
+        createLogEmbed({
 
-        action: 'EDIT CASE',
+          action:
+            'EDIT CASE',
 
-        user: {
-          id: caseData.userId,
-          tag: `User (${caseData.userId})`
-        },
+          user: {
 
-        moderator: interaction.user,
+            id:
+              caseData.userId,
 
-        reason:
-          `Old: ${trim(oldReason)}\nNew: ${trim(newReason)}`,
+            tag:
+              `User (${caseData.userId})`
+          },
 
-        caseId
-      });
+          moderator:
+            interaction.user,
+
+          reason:
+
+            `Old: ${trim(oldReason)}\n\n` +
+
+            `New: ${trim(newReason)}`,
+
+          caseId
+        });
 
       await sendLog(
+
         interaction.client,
+
         interaction.guild.id,
+
         logEmbed
       );
 
     } catch (err) {
 
-      console.error('EditCase Error:', err);
+      console.error(
+        'EditCase Error:',
+        err
+      );
 
-      if (interaction.deferred || interaction.replied) {
+      if (
+
+        interaction.deferred ||
+
+        interaction.replied
+      ) {
 
         return interaction.editReply({
+
           content:
             '❌ Failed to edit case.'
         });
       }
 
       return interaction.reply({
+
         content:
           '❌ Failed to edit case.',
+
         ephemeral: true
       });
     }

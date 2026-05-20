@@ -33,13 +33,71 @@ const LOG_TYPES = {
     'ticketLogChannelId',
 
   SUGGESTIONS:
-    'suggestionLogChannelId'
+    'suggestionLogChannelId',
+
+  INVITES:
+    'inviteChannelId'
 };
 
 // ==================================================
-// 🧠 FORMAT USER
+// 🧠 SAFE STRING
 // ==================================================
-function formatUser(userId) {
+function safeString(
+  value,
+  fallback = 'Unknown'
+) {
+
+  if (
+    typeof value !== 'string'
+  ) {
+
+    return fallback;
+  }
+
+  const cleaned =
+    value.trim();
+
+  return cleaned.length
+    ? cleaned
+    : fallback;
+}
+
+// ==================================================
+// 🧠 SAFE TRUNCATE
+// ==================================================
+function truncate(
+  text,
+  max = 1024
+) {
+
+  if (!text) {
+    return '*No content*';
+  }
+
+  const string =
+    String(text);
+
+  if (
+    string.length <= max
+  ) {
+
+    return string;
+  }
+
+  return (
+    string.slice(
+      0,
+      max - 3
+    ) + '...'
+  );
+}
+
+// ==================================================
+// 👤 FORMAT USER
+// ==================================================
+function formatUser(
+  userId
+) {
 
   return userId
 
@@ -51,79 +109,95 @@ function formatUser(userId) {
 // ==================================================
 // 🧠 FORMAT EMBED VALUE
 // ==================================================
-function formatEmbedValue(value) {
+function formatEmbedValue(
+  value
+) {
 
   if (!value) {
     return null;
   }
 
+  // ==============================================
+  // 📝 STRING
+  // ==============================================
   if (
     typeof value === 'string'
   ) {
 
-    return value;
+    return truncate(
+      value
+    );
   }
 
-  // ========================
+  // ==============================================
   // 📺 CHANNEL
-  // ========================
+  // ==============================================
   if (
     value.id === 'CHANNEL'
   ) {
 
-    return (
+    return truncate(
+
       value.tag ||
+
       value.name ||
+
       'Channel'
     );
   }
 
-  // ========================
+  // ==============================================
   // 👤 USER OBJECT
-  // ========================
+  // ==============================================
   if (
     value.id &&
     value.tag
   ) {
 
-    return (
-      `<@${value.id}> ` +
-      `(${value.tag})`
+    return truncate(
+
+      `<@${value.id}> (${value.tag})`
     );
   }
 
-  // ========================
+  // ==============================================
   // 👤 USERNAME
-  // ========================
+  // ==============================================
   if (
     value.id &&
     value.username
   ) {
 
-    return (
-      `<@${value.id}> ` +
-      `(${value.username})`
+    return truncate(
+
+      `<@${value.id}> (${value.username})`
     );
   }
 
-  // ========================
+  // ==============================================
   // 🆔 ID ONLY
-  // ========================
-  if (value.id) {
+  // ==============================================
+  if (
+    value.id
+  ) {
 
     return `<@${value.id}>`;
   }
 
-  return String(value);
+  return truncate(
+    String(value)
+  );
 }
 
 // ==================================================
 // 📂 GET LOG CHANNEL
 // ==================================================
 async function getLogChannel(
+
   client,
   guildId,
   type = 'MODERATION'
+
 ) {
 
   try {
@@ -132,6 +206,7 @@ async function getLogChannel(
       LOG_TYPES[type];
 
     if (!column) {
+
       return null;
     }
 
@@ -149,6 +224,7 @@ async function getLogChannel(
       settings?.[column];
 
     if (!channelId) {
+
       return null;
     }
 
@@ -158,13 +234,15 @@ async function getLogChannel(
         .catch(() => null);
 
     if (!channel) {
+
       return null;
     }
 
-    // ========================
-    // 📺 TEXT CHANNEL ONLY
-    // ========================
+    // ==========================================
+    // 📺 VALID CHANNEL
+    // ==========================================
     if (
+
       ![
         ChannelType.GuildText,
         ChannelType.GuildAnnouncement
@@ -174,9 +252,9 @@ async function getLogChannel(
       return null;
     }
 
-    // ========================
+    // ==========================================
     // 🤖 BOT PERMISSIONS
-    // ========================
+    // ==========================================
     const perms =
       channel.permissionsFor(
         channel.guild.members.me
@@ -213,10 +291,12 @@ async function getLogChannel(
 // 📤 SEND LOG
 // ==================================================
 async function sendLog(
+
   client,
   guildId,
   type,
   embed
+
 ) {
 
   try {
@@ -230,17 +310,21 @@ async function sendLog(
       );
 
     if (!channel) {
+
       return null;
     }
 
     return await channel.send({
+
       embeds: [embed]
     });
 
   } catch (err) {
 
     console.error(
+
       `Failed to send ${type} log:`,
+
       err.message
     );
 
@@ -283,7 +367,9 @@ function createLogEmbed({
     formatEmbedValue(user);
 
   const moderatorValue =
-    formatEmbedValue(moderator);
+    formatEmbedValue(
+      moderator
+    );
 
   if (userValue) {
 
@@ -303,7 +389,8 @@ function createLogEmbed({
 
       name: 'Moderator',
 
-      value: moderatorValue,
+      value:
+        moderatorValue,
 
       inline: true
     });
@@ -315,7 +402,10 @@ function createLogEmbed({
 
       name: 'Duration',
 
-      value: String(duration),
+      value:
+        truncate(
+          duration
+        ),
 
       inline: true
     });
@@ -328,7 +418,7 @@ function createLogEmbed({
       name: 'Reason',
 
       value:
-        String(reason).slice(0, 1024)
+        truncate(reason)
     });
   }
 
@@ -354,7 +444,9 @@ function createAuditEmbed({
   const embed =
     new EmbedBuilder()
 
-      .setTitle(action)
+      .setTitle(
+        safeString(action)
+      )
 
       .setColor(color)
 
@@ -366,7 +458,8 @@ function createAuditEmbed({
 
       name: 'Target',
 
-      value: target,
+      value:
+        truncate(target),
 
       inline: true
     });
@@ -378,7 +471,8 @@ function createAuditEmbed({
 
       name: 'Executor',
 
-      value: executor,
+      value:
+        truncate(executor),
 
       inline: true
     });
@@ -390,7 +484,8 @@ function createAuditEmbed({
 
       name: 'Channel',
 
-      value: channel,
+      value:
+        truncate(channel),
 
       inline: true
     });
@@ -402,7 +497,8 @@ function createAuditEmbed({
 
       name: 'Message',
 
-      value: messageLink
+      value:
+        truncate(messageLink)
     });
   }
 
@@ -413,7 +509,7 @@ function createAuditEmbed({
       name: 'Reason',
 
       value:
-        reason.slice(0, 1024)
+        truncate(reason)
     });
   }
 
@@ -424,7 +520,7 @@ function createAuditEmbed({
       name: 'Details',
 
       value:
-        extra.slice(0, 1024)
+        truncate(extra)
     });
   }
 
@@ -434,16 +530,22 @@ function createAuditEmbed({
 // ==================================================
 // 🧾 MEMBER JOIN EMBED
 // ==================================================
-function createMemberJoinEmbed(member) {
+function createMemberJoinEmbed(
+  member
+) {
 
   return new EmbedBuilder()
 
-    .setTitle('📥 Member Joined')
+    .setTitle(
+      '📥 Member Joined'
+    )
 
     .setColor(0x57F287)
 
     .setThumbnail(
+
       member.user.displayAvatarURL({
+
         dynamic: true
       })
     )
@@ -451,18 +553,23 @@ function createMemberJoinEmbed(member) {
     .addFields(
 
       {
+
         name: 'User',
 
         value:
+
           `${member.user.tag}\n<@${member.id}>`,
 
         inline: true
       },
 
       {
-        name: 'Account Created',
+
+        name:
+          'Account Created',
 
         value:
+
           `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`,
 
         inline: true
@@ -475,16 +582,22 @@ function createMemberJoinEmbed(member) {
 // ==================================================
 // 📤 MEMBER LEAVE EMBED
 // ==================================================
-function createMemberLeaveEmbed(member) {
+function createMemberLeaveEmbed(
+  member
+) {
 
   return new EmbedBuilder()
 
-    .setTitle('📤 Member Left')
+    .setTitle(
+      '📤 Member Left'
+    )
 
     .setColor(0xED4245)
 
     .setThumbnail(
+
       member.user.displayAvatarURL({
+
         dynamic: true
       })
     )
@@ -492,16 +605,20 @@ function createMemberLeaveEmbed(member) {
     .addFields(
 
       {
+
         name: 'User',
 
         value:
+
           `${member.user.tag}\n<@${member.id}>`,
 
         inline: true
       },
 
       {
-        name: 'Joined Server',
+
+        name:
+          'Joined Server',
 
         value:
 
@@ -519,29 +636,282 @@ function createMemberLeaveEmbed(member) {
 }
 
 // ==================================================
-// 🗑 MESSAGE DELETE EMBED
+// 📨 INVITE JOIN EMBED
 // ==================================================
-function createMessageDeleteEmbed(message) {
+function createInviteJoinEmbed({
+
+  member,
+  inviterId,
+  inviteCode,
+  stats,
+  fake
+
+}) {
+
+  const embed =
+    new EmbedBuilder()
+
+      .setTitle(
+
+        fake
+
+          ? '⚠️ Suspicious Member Joined'
+
+          : '📥 Member Joined'
+      )
+
+      .setColor(
+
+        fake
+
+          ? 0xED4245
+
+          : 0x57F287
+      )
+
+      .setThumbnail(
+
+        member.user.displayAvatarURL({
+
+          dynamic: true
+        })
+      )
+
+      .addFields(
+
+        {
+
+          name:
+            '👤 User',
+
+          value:
+
+            `${member.user.tag}\n<@${member.id}>`,
+
+          inline: true
+        },
+
+        {
+
+          name:
+            '📨 Invited By',
+
+          value:
+
+            inviterId
+
+              ? `<@${inviterId}>`
+
+              : 'Unknown',
+
+          inline: true
+        },
+
+        {
+
+          name:
+            '🔗 Invite Code',
+
+          value:
+
+            `\`${inviteCode || 'Unknown'}\``,
+
+          inline: true
+        },
+
+        {
+
+          name:
+            '📅 Account Created',
+
+          value:
+
+            `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`,
+
+          inline: true
+        },
+
+        {
+
+          name:
+            '⚠️ Fake Account',
+
+          value:
+
+            fake
+              ? 'Yes'
+              : 'No',
+
+          inline: true
+        },
+
+        {
+
+          name:
+            '📊 Inviter Stats',
+
+          value:
+
+            stats
+
+              ? `Regular: ${stats.regular}\nFake: ${stats.fake}\nLeaves: ${stats.leaves}`
+
+              : 'No stats',
+
+          inline: true
+        }
+      )
+
+      .setTimestamp();
+
+  if (fake) {
+
+    embed.setDescription(
+
+      '⚠️ This account is very new and may be suspicious.'
+    );
+  }
+
+  return embed;
+}
+
+// ==================================================
+// 📤 INVITE LEAVE EMBED
+// ==================================================
+function createInviteLeaveEmbed({
+
+  member,
+  inviterId,
+  stayed,
+  fake,
+  stats
+
+}) {
 
   return new EmbedBuilder()
 
-    .setTitle('🗑 Message Deleted')
+    .setTitle(
+      '📤 Member Left'
+    )
+
+    .setColor(0xED4245)
+
+    .setThumbnail(
+
+      member.user.displayAvatarURL({
+
+        dynamic: true
+      })
+    )
+
+    .addFields(
+
+      {
+
+        name:
+          '👤 User',
+
+        value:
+
+          `${member.user.tag}\n<@${member.id}>`,
+
+        inline: true
+      },
+
+      {
+
+        name:
+          '📨 Invited By',
+
+        value:
+
+          inviterId
+
+            ? `<@${inviterId}>`
+
+            : 'Unknown',
+
+        inline: true
+      },
+
+      {
+
+        name:
+          '⏱ Stayed For',
+
+        value:
+          truncate(stayed),
+
+        inline: true
+      },
+
+      {
+
+        name:
+          '⚠️ Fake Invite',
+
+        value:
+
+          fake
+            ? 'Yes'
+            : 'No',
+
+        inline: true
+      },
+
+      {
+
+        name:
+          '📊 Inviter Stats',
+
+        value:
+
+          stats
+
+            ? `Regular: ${stats.regular}\nFake: ${stats.fake}\nLeaves: ${stats.leaves}`
+
+            : 'No stats',
+
+        inline: true
+      }
+    )
+
+    .setTimestamp();
+}
+
+// ==================================================
+// 🗑 MESSAGE DELETE EMBED
+// ==================================================
+function createMessageDeleteEmbed(
+  message
+) {
+
+  return new EmbedBuilder()
+
+    .setTitle(
+      '🗑 Message Deleted'
+    )
 
     .setColor(0xED4245)
 
     .addFields(
 
       {
-        name: 'Author',
+
+        name:
+          'Author',
 
         value:
+
           `${message.author?.tag || 'Unknown'}\n<@${message.author?.id}>`,
 
         inline: true
       },
 
       {
-        name: 'Channel',
+
+        name:
+          'Channel',
 
         value:
           `<#${message.channel.id}>`,
@@ -550,13 +920,15 @@ function createMessageDeleteEmbed(message) {
       },
 
       {
-        name: 'Content',
+
+        name:
+          'Content',
 
         value:
 
-          message.content?.slice(0, 1024) ||
-
-          '*No content*'
+          truncate(
+            message.content
+          )
       }
     )
 
@@ -567,29 +939,38 @@ function createMessageDeleteEmbed(message) {
 // ✏ MESSAGE EDIT EMBED
 // ==================================================
 function createMessageEditEmbed(
+
   oldMessage,
   newMessage
+
 ) {
 
   return new EmbedBuilder()
 
-    .setTitle('✏️ Message Edited')
+    .setTitle(
+      '✏️ Message Edited'
+    )
 
     .setColor(0xFEE75C)
 
     .addFields(
 
       {
-        name: 'Author',
+
+        name:
+          'Author',
 
         value:
+
           `${oldMessage.author?.tag || 'Unknown'}\n<@${oldMessage.author?.id}>`,
 
         inline: true
       },
 
       {
-        name: 'Channel',
+
+        name:
+          'Channel',
 
         value:
           `<#${oldMessage.channel.id}>`,
@@ -598,23 +979,27 @@ function createMessageEditEmbed(
       },
 
       {
-        name: 'Before',
+
+        name:
+          'Before',
 
         value:
 
-          oldMessage.content?.slice(0, 1024) ||
-
-          '*No content*'
+          truncate(
+            oldMessage.content
+          )
       },
 
       {
-        name: 'After',
+
+        name:
+          'After',
 
         value:
 
-          newMessage.content?.slice(0, 1024) ||
-
-          '*No content*'
+          truncate(
+            newMessage.content
+          )
       }
     )
 
@@ -640,28 +1025,46 @@ async function logAudit(
 
 ) {
 
-  run(
+  try {
 
-    `INSERT INTO audit_logs
-    (guildId, action, targetId, executorId, metadata, timestamp)
+    run(
 
-    VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO audit_logs
 
-    [
+      (
+        guildId,
+        action,
+        targetId,
+        executorId,
+        metadata,
+        timestamp
+      )
 
-      guildId,
+      VALUES (?, ?, ?, ?, ?, ?)`,
 
-      action,
+      [
 
-      targetId || null,
+        guildId,
 
-      executorId || null,
+        action,
 
-      JSON.stringify(metadata),
+        targetId || null,
 
-      Date.now()
-    ]
-  );
+        executorId || null,
+
+        JSON.stringify(metadata),
+
+        Date.now()
+      ]
+    );
+
+  } catch (err) {
+
+    console.error(
+      'Audit log DB error:',
+      err
+    );
+  }
 
   return sendLog(
 
@@ -687,7 +1090,9 @@ async function logAudit(
 
           Object.keys(metadata).length
 
-            ? JSON.stringify(metadata).slice(0, 1024)
+            ? truncate(
+                JSON.stringify(metadata)
+              )
 
             : undefined
       })
@@ -709,6 +1114,10 @@ module.exports = {
   createMemberJoinEmbed,
 
   createMemberLeaveEmbed,
+
+  createInviteJoinEmbed,
+
+  createInviteLeaveEmbed,
 
   createMessageDeleteEmbed,
 

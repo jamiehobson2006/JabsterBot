@@ -1,7 +1,5 @@
 const {
-
-  PermissionsBitField
-
+  MessageFlags
 } = require('discord.js');
 
 const {
@@ -11,6 +9,132 @@ const {
 const {
   closeTicket
 } = require('../utils/tickets/closeTicket');
+
+// ==================================================
+// 🚫 STALE INTERACTIONS
+// ==================================================
+function isStaleInteractionError(error) {
+
+  return (
+
+    error?.code === 10062 ||
+
+    error?.code === 40060 ||
+
+    error?.code === 10015
+  );
+}
+
+// ==================================================
+// ⏳ SAFE DEFER
+// ==================================================
+async function safelyDefer(
+  interaction
+) {
+
+  try {
+
+    if (
+
+      interaction.deferred ||
+
+      interaction.replied
+    ) {
+
+      return true;
+    }
+
+    await interaction.deferReply({
+
+      flags:
+        MessageFlags.Ephemeral
+    });
+
+    return true;
+
+  } catch (err) {
+
+    if (
+      !isStaleInteractionError(err)
+    ) {
+
+      console.error(
+        'Ticket defer error:',
+        err
+      );
+    }
+
+    return false;
+  }
+}
+
+// ==================================================
+// 💬 SAFE REPLY
+// ==================================================
+async function safelyReply(
+  interaction,
+  payload
+) {
+
+  try {
+
+    // ==============================================
+    // ✏️ EDIT REPLY
+    // ==============================================
+    if (
+
+      interaction.deferred ||
+
+      interaction.replied
+    ) {
+
+      try {
+
+        return await interaction.editReply(
+          payload
+        );
+
+      } catch {
+
+        // ==========================================
+        // 🔁 FALLBACK FOLLOWUP
+        // ==========================================
+        return await interaction.followUp({
+
+          ...payload,
+
+          flags:
+            MessageFlags.Ephemeral
+        });
+      }
+    }
+
+    // ==============================================
+    // 💬 NORMAL REPLY
+    // ==============================================
+    return await interaction.reply({
+
+      ...payload,
+
+      flags:
+        MessageFlags.Ephemeral
+    });
+
+  } catch (err) {
+
+    if (
+      !isStaleInteractionError(err)
+    ) {
+
+      console.error(
+        'Ticket reply error:',
+        err
+      );
+    }
+
+    return null;
+  }
+}
 
 module.exports = {
 
@@ -27,7 +151,8 @@ module.exports = {
 
         interaction.isStringSelectMenu() &&
 
-        interaction.customId === 'ticket_create'
+        interaction.customId ===
+        'ticket_create'
       ) {
 
         // handled in ticketMenus.js
@@ -51,14 +176,17 @@ module.exports = {
       }
 
       // ==================================================
-      // 🔘 BUTTON INTERACTIONS
+      // 🔘 BUTTON ONLY
       // ==================================================
-      if (!interaction.isButton()) {
+      if (
+        !interaction.isButton()
+      ) {
+
         return;
       }
 
       // ==================================================
-      // 👮 CLAIM BUTTON
+      // 🎟 CLAIM BUTTON
       // ==================================================
       if (
 
@@ -66,10 +194,14 @@ module.exports = {
         'ticket_claim'
       ) {
 
-        await interaction.deferReply({
+        const deferred =
+          await safelyDefer(
+            interaction
+          );
 
-          ephemeral: true
-        });
+        if (!deferred) {
+          return;
+        }
 
         try {
 
@@ -78,19 +210,30 @@ module.exports = {
             interaction
           });
 
-          return interaction.editReply({
+          return safelyReply(
+            interaction,
+            {
 
-            content:
-              '✅ Ticket claimed.'
-          });
+              content:
+                '✅ Ticket claimed.'
+            }
+          );
 
         } catch (err) {
 
-          return interaction.editReply({
+          console.error(
+            'Claim Ticket Error:',
+            err
+          );
 
-            content:
-              `❌ ${err.message}`
-          });
+          return safelyReply(
+            interaction,
+            {
+
+              content:
+                `❌ ${err.message || 'Failed to claim ticket.'}`
+            }
+          );
         }
       }
 
@@ -103,10 +246,14 @@ module.exports = {
         'ticket_close'
       ) {
 
-        await interaction.deferReply({
+        const deferred =
+          await safelyDefer(
+            interaction
+          );
 
-          ephemeral: true
-        });
+        if (!deferred) {
+          return;
+        }
 
         try {
 
@@ -115,24 +262,35 @@ module.exports = {
             interaction
           });
 
-          return interaction.editReply({
+          return safelyReply(
+            interaction,
+            {
 
-            content:
-              '✅ Ticket closed.'
-          });
+              content:
+                '✅ Ticket closed.'
+            }
+          );
 
         } catch (err) {
 
-          return interaction.editReply({
+          console.error(
+            'Close Ticket Error:',
+            err
+          );
 
-            content:
-              `❌ ${err.message}`
-          });
+          return safelyReply(
+            interaction,
+            {
+
+              content:
+                `❌ ${err.message || 'Failed to close ticket.'}`
+            }
+          );
         }
       }
 
       // ==================================================
-      // 🚫 UNKNOWN BUTTONS
+      // 🚫 UNKNOWN BUTTON
       // ==================================================
       return;
 
@@ -143,33 +301,14 @@ module.exports = {
         err
       );
 
-      try {
+      return safelyReply(
+        interaction,
+        {
 
-        if (
-
-          interaction.deferred ||
-
-          interaction.replied
-        ) {
-
-          await interaction.editReply({
-
-            content:
-              '❌ Ticket system error.'
-          });
-
-        } else {
-
-          await interaction.reply({
-
-            content:
-              '❌ Ticket system error.',
-
-            ephemeral: true
-          });
+          content:
+            '❌ Ticket system error.'
         }
-
-      } catch {}
+      );
     }
   }
 };

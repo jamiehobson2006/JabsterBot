@@ -6,9 +6,85 @@ const {
 
   TextInputStyle,
 
-  ActionRowBuilder
+  ActionRowBuilder,
+
+  MessageFlags
 
 } = require('discord.js');
+
+// ==================================================
+// 🚫 STALE INTERACTIONS
+// ==================================================
+function isStaleInteractionError(error) {
+
+  return (
+
+    error?.code === 10062 ||
+
+    error?.code === 40060 ||
+
+    error?.code === 10015
+  );
+}
+
+// ==================================================
+// 💬 SAFE REPLY
+// ==================================================
+async function safelyReply(
+  interaction,
+  payload
+) {
+
+  try {
+
+    if (
+
+      interaction.deferred ||
+
+      interaction.replied
+    ) {
+
+      try {
+
+        return await interaction.editReply(
+          payload
+        );
+
+      } catch {
+
+        return await interaction.followUp({
+
+          ...payload,
+
+          flags:
+            MessageFlags.Ephemeral
+        });
+      }
+    }
+
+    return await interaction.reply({
+
+      ...payload,
+
+      flags:
+        MessageFlags.Ephemeral
+    });
+
+  } catch (err) {
+
+    if (
+      !isStaleInteractionError(err)
+    ) {
+
+      console.error(
+        'Ticket Menu Reply Error:',
+        err
+      );
+    }
+
+    return null;
+  }
+}
 
 module.exports = {
 
@@ -19,23 +95,46 @@ module.exports = {
     try {
 
       // ==================================================
-      // 🎟 TICKET MENU
+      // 🎟 TICKET MENU ONLY
       // ==================================================
       if (
 
         !interaction.isStringSelectMenu() ||
 
-        interaction.customId !== 'ticket_create'
+        interaction.customId !==
+        'ticket_create'
       ) {
 
         return;
       }
 
       // ==============================================
-      // 🎫 TYPE
+      // 🎫 VALIDATE TYPE
       // ==============================================
       const type =
-        interaction.values[0];
+        interaction.values?.[0];
+
+      if (!type) {
+
+        return safelyReply(
+          interaction,
+          {
+
+            content:
+              '❌ Invalid ticket type.'
+          }
+        );
+      }
+
+      // ==============================================
+      // 🧹 CLEAN TYPE
+      // ==============================================
+      const safeType =
+        type
+
+          .replace(/[^a-zA-Z0-9_-]/g, '')
+
+          .slice(0, 30);
 
       // ==============================================
       // 📝 MODAL
@@ -44,7 +143,7 @@ module.exports = {
         new ModalBuilder()
 
           .setCustomId(
-            `ticket_modal_${type}`
+            `ticket_modal_${safeType}`
           )
 
           .setTitle(
@@ -76,6 +175,8 @@ module.exports = {
 
           .setRequired(true)
 
+          .setMinLength(5)
+
           .setMaxLength(1000);
 
       // ==============================================
@@ -84,14 +185,18 @@ module.exports = {
       const row =
         new ActionRowBuilder()
 
-          .addComponents(reasonInput);
+          .addComponents(
+            reasonInput
+          );
 
       modal.addComponents(row);
 
       // ==============================================
       // 📤 SHOW MODAL
       // ==============================================
-      return interaction.showModal(modal);
+      await interaction.showModal(
+        modal
+      );
 
     } catch (err) {
 
@@ -100,33 +205,21 @@ module.exports = {
         err
       );
 
-      try {
+      if (
+        isStaleInteractionError(err)
+      ) {
 
-        if (
+        return;
+      }
 
-          interaction.deferred ||
+      return safelyReply(
+        interaction,
+        {
 
-          interaction.replied
-        ) {
-
-          await interaction.editReply({
-
-            content:
-              '❌ Failed to open ticket menu.'
-          });
-
-        } else {
-
-          await interaction.reply({
-
-            content:
-              '❌ Failed to open ticket menu.',
-
-            ephemeral: true
-          });
+          content:
+            '❌ Failed to open ticket menu.'
         }
-
-      } catch {}
+      );
     }
   }
 };

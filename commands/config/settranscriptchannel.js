@@ -16,6 +16,8 @@ const {
 
 module.exports = {
 
+  cooldown: 5000,
+
   data:
     new SlashCommandBuilder()
 
@@ -75,7 +77,19 @@ module.exports = {
         );
 
       // ==========================================
-      // 🛡 BOT PERMISSIONS
+      // 🛡 VALIDATE CHANNEL
+      // ==========================================
+      if (!channel.isTextBased()) {
+
+        return interaction.editReply({
+
+          content:
+            '❌ Invalid text channel.'
+        });
+      }
+
+      // ==========================================
+      // 🤖 BOT PERMISSIONS
       // ==========================================
       const perms =
         channel.permissionsFor(
@@ -84,7 +98,7 @@ module.exports = {
 
       if (
 
-        !perms.has([
+        !perms?.has([
 
           PermissionsBitField.Flags.ViewChannel,
 
@@ -133,7 +147,7 @@ module.exports = {
       );
 
       // ==========================================
-      // 🎨 EMBED
+      // 🎨 SUCCESS EMBED
       // ==========================================
       const embed =
         new EmbedBuilder()
@@ -141,7 +155,7 @@ module.exports = {
           .setColor(0x57F287)
 
           .setTitle(
-            '📜 Transcript Channel Set'
+            '📜 Transcript Channel Configured'
           )
 
           .setDescription(
@@ -149,20 +163,48 @@ module.exports = {
             `Ticket transcripts will now be sent to ${channel}`
           )
 
-          .addFields({
+          .addFields(
 
-            name: 'Channel ID',
+            {
 
-            value:
-              `\`${channel.id}\``,
+              name: 'Enabled Features',
 
-            inline: true
-          })
+              value:
+
+                '• HTML transcripts\n' +
+                '• Ticket close logs\n' +
+                '• Staff close tracking\n' +
+                '• Ticket analytics\n' +
+                '• Transcript storage',
+
+              inline: false
+            },
+
+            {
+
+              name: 'Configured By',
+
+              value:
+                `${interaction.user}`,
+
+              inline: true
+            },
+
+            {
+
+              name: 'Channel',
+
+              value:
+                `${channel}`,
+
+              inline: true
+            }
+          )
 
           .setFooter({
 
             text:
-              `Configured by ${interaction.user.tag}`
+              `Guild ID: ${interaction.guild.id}`
           })
 
           .setTimestamp();
@@ -170,9 +212,45 @@ module.exports = {
       // ==========================================
       // 📤 RESPONSE
       // ==========================================
-      return interaction.editReply({
+      await interaction.editReply({
 
         embeds: [embed]
+      });
+
+      // ==========================================
+      // 🧪 TEST MESSAGE
+      // ==========================================
+      await channel.send({
+
+        embeds: [
+
+          new EmbedBuilder()
+
+            .setColor(0x5865F2)
+
+            .setTitle(
+              '📜 Transcript Logging Enabled'
+            )
+
+            .setDescription(
+
+              'This channel will now receive:\n\n' +
+
+              '• Ticket transcripts\n' +
+              '• Ticket close logs\n' +
+              '• Staff close tracking\n' +
+              '• Ticket analytics\n' +
+              '• Transcript files'
+            )
+
+            .setFooter({
+
+              text:
+                `Configured by ${interaction.user.tag}`
+            })
+
+            .setTimestamp()
+        ]
       });
 
     } catch (err) {

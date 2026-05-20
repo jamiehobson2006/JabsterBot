@@ -7,26 +7,50 @@ const {
 
 const { run } = require('../../database');
 
+// ========================
+// 🧠 FORMAT PERMISSIONS
+// ========================
+function formatPerm(perm) {
+
+  return perm
+
+    .replace(/([A-Z])/g, ' $1')
+
+    .trim();
+}
+
 module.exports = {
 
   cooldown: 3000,
 
-  data: new SlashCommandBuilder()
+  data:
+    new SlashCommandBuilder()
 
-    .setName('setmodlogs')
+      .setName('setmodlogs')
 
-    .setDescription('Set the moderation logs channel')
+      .setDescription(
+        'Set the moderation logs channel'
+      )
 
-    .addChannelOption(option =>
-      option
-        .setName('channel')
-        .setDescription('Channel to send moderation logs to')
-        .addChannelTypes(
-          ChannelType.GuildText,
-          ChannelType.GuildAnnouncement
-        )
-        .setRequired(true)
-    ),
+      .addChannelOption(option =>
+
+        option
+
+          .setName('channel')
+
+          .setDescription(
+            'Channel to send moderation logs to'
+          )
+
+          .addChannelTypes(
+
+            ChannelType.GuildText,
+
+            ChannelType.GuildAnnouncement
+          )
+
+          .setRequired(true)
+      ),
 
   async execute(interaction) {
 
@@ -36,17 +60,23 @@ module.exports = {
       // 🔐 PERMISSION CHECK
       // ========================
       if (
+
         !interaction.memberPermissions.has(
+
           PermissionsBitField.Flags.ManageGuild
         )
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ You need **Manage Server** permission.'
         });
       }
 
+      // ========================
+      // 📥 CHANNEL
+      // ========================
       const channel =
         interaction.options.getChannel(
           'channel',
@@ -54,26 +84,27 @@ module.exports = {
         );
 
       // ========================
-      // 🚫 CHANNEL VALIDATION
+      // 🚫 VALIDATION
       // ========================
       if (
-        ![
-          ChannelType.GuildText,
-          ChannelType.GuildAnnouncement
-        ].includes(channel.type)
+        !channel ||
+        !channel.isTextBased()
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ Please select a valid text channel.'
         });
       }
 
       if (
-        channel.guildId !== interaction.guild.id
+        channel.guildId !==
+        interaction.guild.id
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ That channel is not in this server.'
         });
@@ -90,15 +121,19 @@ module.exports = {
       const requiredPerms = [
 
         PermissionsBitField.Flags.ViewChannel,
-        PermissionsBitField.Flags.SendMessages,
-        PermissionsBitField.Flags.EmbedLinks,
-        PermissionsBitField.Flags.ReadMessageHistory
 
+        PermissionsBitField.Flags.SendMessages,
+
+        PermissionsBitField.Flags.EmbedLinks,
+
+        PermissionsBitField.Flags.ReadMessageHistory
       ];
 
       const missing =
         requiredPerms.filter(
-          p => !perms?.has(p)
+
+          perm =>
+            !perms?.has(perm)
         );
 
       if (missing.length) {
@@ -107,12 +142,17 @@ module.exports = {
 
           content:
 
-            '❌ Missing permissions in that channel:\n' +
+            '❌ Missing permissions in that channel:\n\n' +
 
             missing
+
               .map(
-                p => `• \`${p}\``
+
+                perm =>
+
+                  `• ${formatPerm(String(perm))}`
               )
+
               .join('\n')
         });
       }
@@ -123,23 +163,30 @@ module.exports = {
       await run(
 
         `INSERT INTO guild_settings
-        (guildId, modlogChannelId)
+        (
+          guildId,
+          modlogChannelId
+        )
 
         VALUES (?, ?)
 
         ON CONFLICT(guildId)
 
         DO UPDATE SET
-        modlogChannelId = excluded.modlogChannelId`,
+
+          modlogChannelId =
+          excluded.modlogChannelId`,
 
         [
+
           interaction.guild.id,
+
           channel.id
         ]
       );
 
       // ========================
-      // 🧪 TEST LOG
+      // 🧪 TEST MESSAGE
       // ========================
       try {
 
@@ -148,32 +195,44 @@ module.exports = {
 
             .setColor(0x5865F2)
 
-            .setTitle('📜 Moderation Logs Enabled')
+            .setTitle(
+              '📜 Moderation Logs Enabled'
+            )
 
             .setDescription(
 
               'This channel is now configured ' +
+
               'to receive moderation logs.'
             )
 
             .addFields(
 
               {
-                name: 'Configured By',
+
+                name:
+                  'Configured By',
+
                 value:
                   `${interaction.user}`,
+
                 inline: true
               },
 
               {
-                name: 'Server',
+
+                name:
+                  'Server',
+
                 value:
                   interaction.guild.name,
+
                 inline: true
               }
             )
 
             .setFooter({
+
               text:
                 'Logging system active'
             })
@@ -181,10 +240,17 @@ module.exports = {
             .setTimestamp();
 
         await channel.send({
+
           embeds: [testEmbed]
         });
 
-      } catch {}
+      } catch (err) {
+
+        console.error(
+          'Modlog test message failed:',
+          err
+        );
+      }
 
       // ========================
       // 🎨 RESPONSE
@@ -194,16 +260,32 @@ module.exports = {
 
           .setColor(0x57F287)
 
-          .setTitle('📜 Moderation Logs Configured')
+          .setTitle(
+            '📜 Moderation Logs Configured'
+          )
 
           .setDescription(
+
             `Moderation logs will now be sent to ${channel}`
           )
 
           .addFields(
 
             {
-              name: 'Channel ID',
+
+              name:
+                '📺 Channel',
+
+              value:
+                `${channel}`,
+
+              inline: true
+            },
+
+            {
+
+              name:
+                '🆔 Channel ID',
 
               value:
                 `\`${channel.id}\``,
@@ -212,23 +294,30 @@ module.exports = {
             },
 
             {
-              name: 'Status',
+
+              name:
+                '✅ Status',
 
               value:
-                '✅ Test successful',
+                'Logging Active',
 
               inline: true
             }
           )
 
           .setFooter({
+
             text:
               `Configured by ${interaction.user.tag}`
           })
 
           .setTimestamp();
 
+      // ========================
+      // ✅ RESPONSE
+      // ========================
       return interaction.editReply({
+
         embeds: [embed]
       });
 
@@ -240,11 +329,14 @@ module.exports = {
       );
 
       if (
+
         interaction.deferred ||
+
         interaction.replied
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ Failed to set mod logs channel.'
         });

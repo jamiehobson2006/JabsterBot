@@ -21,6 +21,8 @@ const ticketTypes =
 
 module.exports = {
 
+  cooldown: 5000,
+
   data:
     new SlashCommandBuilder()
 
@@ -58,12 +60,19 @@ module.exports = {
 
         `SELECT *
          FROM ticket_settings
+
          WHERE guildId = ?
          AND enabled = 1`,
 
-        [interaction.guild.id]
+        [
+
+          interaction.guild.id
+        ]
       );
 
+      // ==========================================
+      // ❌ NO TYPES
+      // ==========================================
       if (!rows.length) {
 
         return interaction.editReply({
@@ -88,16 +97,41 @@ module.exports = {
         options.push({
 
           label:
-            type.name,
+            type.name.slice(0, 100),
 
           description:
-            type.description,
+            type.description.slice(0, 100),
 
           emoji:
             type.emoji,
 
           value:
             row.type
+        });
+      }
+
+      // ==========================================
+      // 🚫 NO VALID TYPES
+      // ==========================================
+      if (!options.length) {
+
+        return interaction.editReply({
+
+          content:
+            '❌ No valid ticket types found.'
+        });
+      }
+
+      // ==========================================
+      // 🚫 DISCORD LIMIT
+      // ==========================================
+      if (options.length > 25) {
+
+        return interaction.editReply({
+
+          content:
+
+            '❌ Discord only allows 25 ticket types per panel.'
         });
       }
 
@@ -112,7 +146,7 @@ module.exports = {
           )
 
           .setPlaceholder(
-            'Select a ticket type'
+            '🎫 Select a ticket type'
           )
 
           .addOptions(options);
@@ -121,6 +155,17 @@ module.exports = {
         new ActionRowBuilder()
 
           .addComponents(menu);
+
+      // ==========================================
+      // 📊 TYPE DISPLAY
+      // ==========================================
+      const ticketDisplay =
+        options.map(option =>
+
+          `${option.emoji} **${option.label}**\n` +
+
+          `${option.description}`
+        ).join('\n\n');
 
       // ==========================================
       // 🎨 EMBED
@@ -136,33 +181,42 @@ module.exports = {
 
           .setDescription(
 
-            'Need help?\n\n' +
+            'Need assistance?\n\n' +
 
-            'Select a ticket type from the menu below.\n\n' +
-
-            'Our staff team will assist you as soon as possible.'
+            'Select a ticket type from the menu below and our staff team will assist you as soon as possible.'
           )
 
-          .addFields({
+          .addFields(
 
-            name:
-              'Available Ticket Types',
+            {
 
-            value:
+              name:
+                'Available Ticket Types',
 
-              options.map(option =>
+              value:
+                ticketDisplay
+            },
 
-                `${option.emoji} **${option.label}**\n` +
+            {
 
-                `${option.description}`
+              name:
+                '📊 Panel Statistics',
 
-              ).join('\n\n')
-          })
+              value:
+
+                `• ${options.length} ticket type(s)\n` +
+
+                `• Interactive support menu\n` +
+
+                `• Fast staff response system`
+            }
+          )
 
           .setFooter({
 
             text:
-              `${interaction.guild.name} Support System`
+
+              `${interaction.guild.name} • Advanced Ticket System`
           })
 
           .setTimestamp();
@@ -183,7 +237,7 @@ module.exports = {
       return interaction.editReply({
 
         content:
-          '✅ Ticket panel created.'
+          '✅ Ticket panel created successfully.'
       });
 
     } catch (err) {

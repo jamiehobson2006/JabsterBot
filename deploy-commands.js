@@ -1,7 +1,10 @@
 ﻿require('dotenv').config();
 
-const fs = require('fs');
-const path = require('path');
+const fs =
+  require('fs');
+
+const path =
+  require('path');
 
 const {
   PermissionFlagsBits,
@@ -22,7 +25,7 @@ const DEV_GUILD_ID =
   process.env.DEV_GUILD_ID || null;
 
 // ==================================================
-// 🛡 SAFETY CHECKS
+// 🛡 ENV VALIDATION
 // ==================================================
 if (!TOKEN) {
 
@@ -42,7 +45,11 @@ if (!CLIENT_ID) {
 // 📡 DEBUG
 // ==================================================
 console.log('━━━━━━━━━━━━━━━━━━━━━━');
-console.log('🚀 Deploying Commands');
+
+console.log(
+  '🚀 Deploying Commands'
+);
+
 console.log('━━━━━━━━━━━━━━━━━━━━━━');
 
 console.log(
@@ -72,6 +79,9 @@ console.log('━━━━━━━━━━━━━━━━━━━━━━'
 // ==================================================
 const permissionDefaults = {
 
+  // ==============================================
+  // 🔨 MODERATION
+  // ==============================================
   ban:
     PermissionFlagsBits.BanMembers,
 
@@ -99,13 +109,16 @@ const permissionDefaults = {
   case:
     PermissionFlagsBits.ManageGuild,
 
-  modlogs:
+  cases:
     PermissionFlagsBits.ManageGuild,
 
   history:
     PermissionFlagsBits.ManageGuild,
 
   editcase:
+    PermissionFlagsBits.ManageGuild,
+
+  modlogs:
     PermissionFlagsBits.ManageGuild,
 
   modlogremove:
@@ -129,6 +142,9 @@ const permissionDefaults = {
   poll:
     PermissionFlagsBits.ManageMessages,
 
+  // ==============================================
+  // 🎟 TICKETS
+  // ==============================================
   setmodlogs:
     PermissionFlagsBits.ManageGuild,
 
@@ -156,30 +172,103 @@ const permissionDefaults = {
   ticketsetup:
     PermissionFlagsBits.Administrator,
 
+  ticketpanelv3:
+    PermissionFlagsBits.Administrator,
+
+  ticketdebug:
+    PermissionFlagsBits.Administrator,
+
   ticketstats:
-    PermissionFlagsBits.Administrator
+    PermissionFlagsBits.Administrator,
+
+  // ==============================================
+  // 🎉 GIVEAWAYS
+  // ==============================================
+  giveaway:
+    PermissionFlagsBits.ManageGuild,
+
+  greroll:
+    PermissionFlagsBits.ManageGuild,
+
+  gend:
+    PermissionFlagsBits.ManageGuild,
+
+  gdelete:
+    PermissionFlagsBits.ManageGuild,
+
+  glist:
+    PermissionFlagsBits.ManageGuild,
+
+  gstats:
+    PermissionFlagsBits.ManageGuild,
+
+  ginfo:
+    PermissionFlagsBits.ManageGuild,
+
+  gblacklist:
+    PermissionFlagsBits.ManageGuild,
+
+  gunblacklist:
+    PermissionFlagsBits.ManageGuild,
+
+  // ==============================================
+  // 📨 INVITES
+  // ==============================================
+  invites:
+    PermissionFlagsBits.ManageGuild,
+
+  invitetop:
+    PermissionFlagsBits.ManageGuild,
+
+  setinvitechannel:
+    PermissionFlagsBits.ManageGuild
 };
 
 // ==================================================
-// 📦 LOAD COMMANDS
+// 📦 COMMAND STORAGE
 // ==================================================
 const commands = [];
 
 const loadedNames =
   new Set();
 
+const failedCommands =
+  [];
+
+// ==================================================
+// 📂 COMMANDS PATH
+// ==================================================
 const foldersPath =
   path.join(
     __dirname,
     'commands'
   );
 
+// ==================================================
+// 🚫 MISSING FOLDER
+// ==================================================
+if (
+  !fs.existsSync(
+    foldersPath
+  )
+) {
+
+  throw new Error(
+    '❌ Commands folder missing'
+  );
+}
+
+// ==================================================
+// 📂 LOAD COMMAND FOLDERS
+// ==================================================
 const commandFolders =
   fs.readdirSync(
     foldersPath
   );
 
-for (const folder of commandFolders) {
+for (
+  const folder of commandFolders
+) {
 
   const commandsPath =
     path.join(
@@ -187,6 +276,22 @@ for (const folder of commandFolders) {
       folder
     );
 
+  // ==============================================
+  // 🚫 SKIP NON-FOLDERS
+  // ==============================================
+  if (
+
+    !fs.statSync(
+      commandsPath
+    ).isDirectory()
+  ) {
+
+    continue;
+  }
+
+  // ==============================================
+  // 📂 COMMAND FILES
+  // ==============================================
   const commandFiles =
     fs.readdirSync(
       commandsPath
@@ -196,7 +301,9 @@ for (const folder of commandFolders) {
         file.endsWith('.js')
       );
 
-  for (const file of commandFiles) {
+  for (
+    const file of commandFiles
+  ) {
 
     try {
 
@@ -206,8 +313,13 @@ for (const folder of commandFolders) {
           file
         );
 
+      // ==========================================
+      // 🧹 CLEAR CACHE
+      // ==========================================
       delete require.cache[
-        require.resolve(filePath)
+        require.resolve(
+          filePath
+        )
       ];
 
       const command =
@@ -217,31 +329,64 @@ for (const folder of commandFolders) {
       // 🛡 VALIDATION
       // ==========================================
       if (
+
+        !command ||
+
         !command.data ||
+
         !command.execute
       ) {
 
         console.warn(
+
           `⚠️ Invalid command skipped: ${file}`
         );
+
+        failedCommands.push(file);
 
         continue;
       }
 
+      // ==========================================
+      // 🧠 JSON
+      // ==========================================
       const commandJson =
         command.data.toJSON();
+
+      // ==========================================
+      // 🚫 INVALID NAME
+      // ==========================================
+      if (
+        !commandJson.name
+      ) {
+
+        console.warn(
+
+          `⚠️ Missing command name: ${file}`
+        );
+
+        failedCommands.push(file);
+
+        continue;
+      }
 
       // ==========================================
       // 🚫 DUPLICATES
       // ==========================================
       if (
+
         loadedNames.has(
           commandJson.name
         )
       ) {
 
         console.warn(
+
           `⚠️ Duplicate command skipped: ${commandJson.name}`
+        );
+
+        failedCommands.push(
+          commandJson.name
         );
 
         continue;
@@ -267,19 +412,40 @@ for (const folder of commandFolders) {
           defaultPermission.toString();
       }
 
+      // ==========================================
+      // 🚫 DM DISABLED DEFAULT
+      // ==========================================
+      if (
+        command.dmPermission === false
+      ) {
+
+        commandJson.dm_permission =
+          false;
+      }
+
+      // ==========================================
+      // 📦 STORE
+      // ==========================================
       commands.push(
         commandJson
       );
 
       console.log(
+
         `✅ Loaded /${commandJson.name}`
       );
 
     } catch (err) {
 
       console.error(
+
         `❌ Failed loading command ${file}:`,
+
         err
+      );
+
+      failedCommands.push(
+        file
       );
     }
   }
@@ -288,7 +454,9 @@ for (const folder of commandFolders) {
 // ==================================================
 // 🚫 NO COMMANDS
 // ==================================================
-if (!commands.length) {
+if (
+  !commands.length
+) {
 
   throw new Error(
     '❌ No commands loaded.'
@@ -296,7 +464,32 @@ if (!commands.length) {
 }
 
 // ==================================================
-// 🚀 REST
+// 📊 SUMMARY
+// ==================================================
+console.log('━━━━━━━━━━━━━━━━━━━━━━');
+
+console.log(
+  `📦 Loaded Commands: ${commands.length}`
+);
+
+console.log(
+  `❌ Failed Commands: ${failedCommands.length}`
+);
+
+if (
+  failedCommands.length
+) {
+
+  console.log(
+    'Failed:',
+    failedCommands.join(', ')
+  );
+}
+
+console.log('━━━━━━━━━━━━━━━━━━━━━━');
+
+// ==================================================
+// 🚀 REST CLIENT
 // ==================================================
 const rest =
   new REST({
@@ -315,6 +508,7 @@ const rest =
     console.log('━━━━━━━━━━━━━━━━━━━━━━');
 
     console.log(
+
       `📦 Deploying ${commands.length} commands...`
     );
 
@@ -323,25 +517,29 @@ const rest =
     // ==========================================
     if (DEV_GUILD_ID) {
 
-      // 🧹 Clear old global commands
       console.log(
-        '🧹 Clearing old global commands...'
+        '🧹 Clearing old guild commands...'
       );
 
       await rest.put(
 
-        Routes.applicationCommands(
-          CLIENT_ID
+        Routes.applicationGuildCommands(
+
+          CLIENT_ID,
+
+          DEV_GUILD_ID
         ),
 
-        { body: [] }
+        {
+
+          body: []
+        }
       );
 
       console.log(
-        '✅ Old global commands cleared'
+        '✅ Old guild commands cleared'
       );
 
-      // 🚀 Deploy guild commands
       console.log(
         '⚡ Deploying guild commands...'
       );
@@ -355,10 +553,14 @@ const rest =
           DEV_GUILD_ID
         ),
 
-        { body: commands }
+        {
+
+          body: commands
+        }
       );
 
       console.log(
+
         `✅ Commands deployed to guild ${DEV_GUILD_ID}`
       );
     }
@@ -367,6 +569,26 @@ const rest =
     // 🌍 GLOBAL MODE
     // ==========================================
     else {
+
+      console.log(
+        '🌍 Clearing old global commands...'
+      );
+
+      await rest.put(
+
+        Routes.applicationCommands(
+          CLIENT_ID
+        ),
+
+        {
+
+          body: []
+        }
+      );
+
+      console.log(
+        '✅ Old global commands cleared'
+      );
 
       console.log(
         '🌍 Deploying global commands...'
@@ -378,13 +600,22 @@ const rest =
           CLIENT_ID
         ),
 
-        { body: commands }
+        {
+
+          body: commands
+        }
       );
 
       console.log(
         '✅ Global commands deployed'
       );
     }
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━');
+
+    console.log(
+      '✅ Deploy complete'
+    );
 
     console.log('━━━━━━━━━━━━━━━━━━━━━━');
 

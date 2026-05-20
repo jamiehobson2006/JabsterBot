@@ -17,34 +17,35 @@ const {
 // ========================
 // 🫥 EPHEMERAL COMMANDS
 // ========================
-const ephemeralCommands = new Set([
+const ephemeralCommands =
+  new Set([
 
-  'ban',
-  'kick',
-  'mute',
-  'unmute',
-  'warn',
-  'warnings',
-  'clearwarns',
-  'case',
-  'modlogs',
-  'history',
-  'editcase',
-  'modlogremove',
-  'purge',
-  'role',
-  'poll',
-  'slowmode',
-  'lock',
-  'unlock',
-  'setmodlogs',
-  'suggestchannel',
-  'setstaffrole',
-  'setadminrole',
-  'settranscriptchannel',
-  'ticketsetup',
-  'ticketpanel'
-]);
+    'ban',
+    'kick',
+    'mute',
+    'unmute',
+    'warn',
+    'warnings',
+    'clearwarns',
+    'case',
+    'modlogs',
+    'history',
+    'editcase',
+    'modlogremove',
+    'purge',
+    'role',
+    'poll',
+    'slowmode',
+    'lock',
+    'unlock',
+    'setmodlogs',
+    'suggestchannel',
+    'setstaffrole',
+    'setadminrole',
+    'settranscriptchannel',
+    'ticketsetup',
+    'ticketpanel'
+  ]);
 
 // ========================
 // 🚫 STALE INTERACTIONS
@@ -52,8 +53,12 @@ const ephemeralCommands = new Set([
 function isStaleInteractionError(error) {
 
   return (
+
     error?.code === 10062 ||
-    error?.code === 40060
+
+    error?.code === 40060 ||
+
+    error?.code === 10015
   );
 }
 
@@ -66,7 +71,9 @@ async function safelyDeferReply(
 ) {
 
   if (
+
     interaction.deferred ||
+
     interaction.replied
   ) {
 
@@ -78,8 +85,11 @@ async function safelyDeferReply(
     await interaction.deferReply({
 
       flags:
+
         ephemeral
+
           ? MessageFlags.Ephemeral
+
           : undefined
     });
 
@@ -111,17 +121,63 @@ async function safelyReply(
 
   try {
 
+    // ======================================
+    // ✏ EDIT EXISTING
+    // ======================================
     if (
+
       interaction.deferred ||
+
       interaction.replied
     ) {
 
-      return interaction.editReply(
-        payload
-      );
+      try {
+
+        return await interaction.editReply(
+          payload
+        );
+
+      } catch (editError) {
+
+        // ==============================
+        // 🔁 FALLBACK FOLLOWUP
+        // ==============================
+        try {
+
+          return await interaction.followUp({
+
+            ...payload,
+
+            flags:
+
+              payload.flags ||
+
+              MessageFlags.Ephemeral
+          });
+
+        } catch (followError) {
+
+          if (
+            !isStaleInteractionError(
+              followError
+            )
+          ) {
+
+            console.error(
+              'Failed followUp reply:',
+              followError
+            );
+          }
+
+          return null;
+        }
+      }
     }
 
-    return interaction.reply(
+    // ======================================
+    // 💬 NORMAL REPLY
+    // ======================================
+    return await interaction.reply(
       payload
     );
 
@@ -152,6 +208,16 @@ module.exports = {
   ) {
 
     try {
+
+      // ==========================================
+      // 🛡 GUILD ONLY
+      // ==========================================
+      if (
+        !interaction.guild
+      ) {
+
+        return;
+      }
 
       // ==================================================
       // 🔘 BUTTON INTERACTIONS
@@ -261,6 +327,24 @@ module.exports = {
               );
 
             // ==========================================
+            // 🧹 REMOVE OLD VOTE FIELD
+            // ==========================================
+            const filteredFields =
+              (
+                embed.data.fields || []
+              ).filter(
+
+                field =>
+
+                  field.name !==
+                  '📊 Community Votes'
+              );
+
+            embed.setFields(
+              filteredFields
+            );
+
+            // ==========================================
             // 👍 COMMUNITY VOTES
             // ==========================================
             let upvotes = 0;
@@ -320,6 +404,7 @@ module.exports = {
                   value:
 
                     `✅ Upvotes: ${upvotes}\n` +
+
                     `❌ Downvotes: ${downvotes}`
                 });
 
@@ -369,6 +454,7 @@ module.exports = {
                   value:
 
                     `✅ Upvotes: ${upvotes}\n` +
+
                     `❌ Downvotes: ${downvotes}`
                 });
 
@@ -409,7 +495,9 @@ module.exports = {
           );
 
           if (
+
             !interaction.replied &&
+
             !interaction.deferred
           ) {
 
@@ -494,23 +582,12 @@ module.exports = {
         // 🫥 EPHEMERAL
         // ==========================================
         const shouldBeEphemeral =
+
+          command.ephemeral ||
+
           ephemeralCommands.has(
             interaction.commandName
           );
-
-        // ==========================================
-        // ⏳ SAFE DEFER
-        // ==========================================
-        const acknowledged =
-          await safelyDeferReply(
-
-            interaction,
-            shouldBeEphemeral
-          );
-
-        if (!acknowledged) {
-          return;
-        }
 
         // ==========================================
         // ⏱️ COOLDOWN
@@ -518,7 +595,7 @@ module.exports = {
         const cooldown =
           await useCooldown(
 
-            interaction.guild?.id,
+            interaction.guild.id,
 
             interaction.user.id,
 
@@ -539,9 +616,27 @@ module.exports = {
 
                 `Try again in ` +
 
-                `**${Math.ceil(cooldown / 1000)}s**.`
+                `**${Math.ceil(cooldown / 1000)}s**.`,
+
+              flags:
+                MessageFlags.Ephemeral
             }
           );
+        }
+
+        // ==========================================
+        // ⏳ SAFE DEFER
+        // ==========================================
+        const acknowledged =
+          await safelyDeferReply(
+
+            interaction,
+            shouldBeEphemeral
+          );
+
+        if (!acknowledged) {
+
+          return;
         }
 
         // ==========================================
@@ -562,7 +657,7 @@ module.exports = {
         );
 
         // ==========================================
-        // 🚫 DISCORD PERMISSION ERRORS
+        // 🚫 MISSING PERMISSIONS
         // ==========================================
         if (
           error?.code === 50013
@@ -575,6 +670,7 @@ module.exports = {
               content:
 
                 '❌ I am missing permissions ' +
+
                 'to perform that action.'
             }
           );
@@ -617,7 +713,7 @@ module.exports = {
         // ==========================================
         // ❌ GENERIC ERROR
         // ==========================================
-        await safelyReply(
+        return safelyReply(
           interaction,
           {
 

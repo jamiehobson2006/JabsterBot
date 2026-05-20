@@ -1,13 +1,28 @@
 const {
+
   PermissionsBitField,
+
   EmbedBuilder,
+
   SlashCommandBuilder
+
 } = require('discord.js');
 
 const {
+
   sendLog,
+
   createLogEmbed
+
 } = require('../../utils/logger');
+
+const {
+
+  get,
+
+  run
+
+} = require('../../database');
 
 // ========================
 // 🚫 DANGEROUS PERMISSIONS
@@ -26,7 +41,6 @@ const dangerousPerms = [
   PermissionsBitField.Flags.ModerateMembers,
 
   PermissionsBitField.Flags.MentionEveryone
-
 ];
 
 // ========================
@@ -44,6 +58,7 @@ function hasUnsafePermissions(
 
       // Executor DOES NOT have it
       if (
+
         !executor.permissions.has(perm)
       ) {
 
@@ -55,68 +70,145 @@ function hasUnsafePermissions(
   return false;
 }
 
+// ========================
+// 🛡 PROTECTED ROLE CHECK
+// ========================
+function isProtectedRole(role) {
+
+  return role.permissions.has(
+
+    PermissionsBitField.Flags.Administrator
+
+  ) ||
+
+  role.permissions.has(
+
+    PermissionsBitField.Flags.ManageGuild
+
+  ) ||
+
+  role.permissions.has(
+
+    PermissionsBitField.Flags.BanMembers
+  );
+}
+
 module.exports = {
 
   cooldown: 3000,
 
-  data: new SlashCommandBuilder()
+  data:
+    new SlashCommandBuilder()
 
-    .setName('role')
+      .setName('role')
 
-    .setDescription('Add or remove a role')
+      .setDescription(
+        'Add or remove a role'
+      )
 
-    .addStringOption(option =>
-      option
-        .setName('action')
-        .setDescription('Add or remove')
-        .setRequired(true)
-        .addChoices(
+      .addStringOption(option =>
 
-          {
-            name: 'Add',
-            value: 'add'
-          },
+        option
 
-          {
-            name: 'Remove',
-            value: 'remove'
-          }
-        )
-    )
+          .setName('action')
 
-    .addUserOption(option =>
-      option
-        .setName('user')
-        .setDescription('User')
-        .setRequired(true)
-    )
+          .setDescription(
+            'Add or remove'
+          )
 
-    .addRoleOption(option =>
-      option
-        .setName('role')
-        .setDescription('Role')
-        .setRequired(true)
-    ),
+          .setRequired(true)
+
+          .addChoices(
+
+            {
+
+              name: 'Add',
+
+              value: 'add'
+            },
+
+            {
+
+              name: 'Remove',
+
+              value: 'remove'
+            }
+          )
+      )
+
+      .addUserOption(option =>
+
+        option
+
+          .setName('user')
+
+          .setDescription(
+            'User'
+          )
+
+          .setRequired(true)
+      )
+
+      .addRoleOption(option =>
+
+        option
+
+          .setName('role')
+
+          .setDescription(
+            'Role'
+          )
+
+          .setRequired(true)
+      ),
 
   async execute(interaction) {
 
     try {
 
+      // ========================
+      // 🔐 PERMISSION CHECK
+      // ========================
+      if (
+
+        !interaction.memberPermissions.has(
+
+          PermissionsBitField.Flags.ManageRoles
+        )
+      ) {
+
+        return interaction.editReply({
+
+          content:
+
+            '❌ You need **Manage Roles** permission.'
+        });
+      }
+
+      // ========================
+      // 📥 OPTIONS
+      // ========================
       const action =
         interaction.options.getString(
+
           'action',
+
           true
         );
 
       const user =
         interaction.options.getUser(
+
           'user',
+
           true
         );
 
       const role =
         interaction.options.getRole(
+
           'role',
+
           true
         );
 
@@ -126,15 +218,22 @@ module.exports = {
       const executor =
         interaction.member;
 
+      // ========================
+      // 👤 FETCH MEMBER
+      // ========================
       const member =
         await interaction.guild.members
+
           .fetch(user.id)
+
           .catch(() => null);
 
       if (!member) {
 
         return interaction.editReply({
+
           content:
+
             '❌ User not found in this server.'
         });
       }
@@ -143,13 +242,17 @@ module.exports = {
       // 🤖 BOT PERMISSION
       // ========================
       if (
+
         !botMember.permissions.has(
+
           PermissionsBitField.Flags.ManageRoles
         )
       ) {
 
         return interaction.editReply({
+
           content:
+
             '❌ I do not have permission to manage roles.'
         });
       }
@@ -158,10 +261,13 @@ module.exports = {
       // 🚫 @EVERYONE
       // ========================
       if (
-        role.id === interaction.guild.id
+
+        role.id ===
+        interaction.guild.id
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ You cannot manage @everyone.'
         });
@@ -173,7 +279,9 @@ module.exports = {
       if (role.managed) {
 
         return interaction.editReply({
+
           content:
+
             '❌ You cannot manage bot/integration roles.'
         });
       }
@@ -182,23 +290,55 @@ module.exports = {
       // 🤖 BOT HIERARCHY
       // ========================
       if (
+
         role.position >=
+
         botMember.roles.highest.position
       ) {
 
         return interaction.editReply({
+
           content:
+
             '❌ That role is higher than my highest role.'
         });
       }
 
       // ========================
-      // 👑 ADMIN BYPASS
+      // 👑 OWNER BYPASS
+      // ========================
+      const isOwner =
+        interaction.user.id ===
+        interaction.guild.ownerId;
+
+      // ========================
+      // 👑 ADMIN CHECK
       // ========================
       const isAdmin =
         executor.permissions.has(
+
           PermissionsBitField.Flags.Administrator
-        );
+        ) ||
+
+        isOwner;
+
+      // ========================
+      // 🚫 BOT TARGET PROTECTION
+      // ========================
+      if (
+
+        member.user.bot &&
+
+        !isAdmin
+      ) {
+
+        return interaction.editReply({
+
+          content:
+
+            '❌ You cannot manage bot roles unless you are an administrator.'
+        });
+      }
 
       // ========================
       // 👤 NORMAL USERS
@@ -206,54 +346,122 @@ module.exports = {
       if (!isAdmin) {
 
         // 🚫 ONLY SELF
-        if (user.id !== interaction.user.id) {
+        if (
+
+          user.id !==
+          interaction.user.id
+        ) {
 
           return interaction.editReply({
+
             content:
+
               '❌ You can only manage your own roles.'
           });
         }
 
         // 🚫 HIGHER ROLE
         if (
+
           role.position >=
+
           executor.roles.highest.position
         ) {
 
           return interaction.editReply({
+
             content:
+
               '❌ You cannot assign a role higher than or equal to your highest role.'
           });
         }
 
         // 🚫 DANGEROUS PERMISSIONS
         if (
+
           hasUnsafePermissions(
+
             executor,
             role
           )
         ) {
 
           return interaction.editReply({
+
             content:
+
               '❌ You cannot assign roles with permissions you do not already have.'
+          });
+        }
+
+        // ========================
+        // 🔒 SELF ROLE WHITELIST
+        // ========================
+        const selfRole =
+          get(
+
+            `SELECT *
+             FROM self_roles
+
+             WHERE guildId = ?
+             AND roleId = ?`,
+
+            [
+
+              interaction.guild.id,
+
+              role.id
+            ]
+          );
+
+        if (!selfRole) {
+
+          return interaction.editReply({
+
+            content:
+
+              '❌ This role is not self-assignable.'
           });
         }
       }
 
       // ========================
-      // 👑 ADMIN TARGET CHECK
+      // 👑 HIERARCHY CHECK
       // ========================
       if (
-        isAdmin &&
+
+        !isOwner &&
+
         member.roles.highest.position >=
+
         executor.roles.highest.position &&
+
         member.id !== executor.id
       ) {
 
         return interaction.editReply({
+
           content:
+
             '❌ You cannot manage this user due to role hierarchy.'
+        });
+      }
+
+      // ========================
+      // 🔒 PROTECTED ROLE CHECK
+      // ========================
+      if (
+
+        isProtectedRole(role) &&
+
+        !isOwner
+      ) {
+
+        return interaction.editReply({
+
+          content:
+
+            '❌ Only the server owner can manage protected moderation roles.'
         });
       }
 
@@ -263,36 +471,106 @@ module.exports = {
       if (action === 'add') {
 
         if (
+
           member.roles.cache.has(role.id)
         ) {
 
           return interaction.editReply({
+
             content:
+
               '❌ User already has that role.'
           });
         }
 
         await member.roles.add(role);
 
+        // ====================
+        // 💾 AUDIT LOG
+        // ====================
+        run(
+
+          `INSERT INTO role_actions
+
+           (
+             guildId,
+             userId,
+             moderatorId,
+             roleId,
+             action,
+             timestamp
+           )
+
+           VALUES (?, ?, ?, ?, ?, ?)`,
+
+          [
+
+            interaction.guild.id,
+
+            user.id,
+
+            interaction.user.id,
+
+            role.id,
+
+            'ADD',
+
+            Date.now()
+          ]
+        );
+
+        // ====================
+        // 🎨 EMBED
+        // ====================
         const embed =
           new EmbedBuilder()
 
             .setColor(0x57F287)
 
-            .setTitle('➕ Role Added')
+            .setTitle(
+              '➕ Role Added'
+            )
 
             .setDescription(
+
               `${role} added to ${user}`
             )
 
-            .addFields({
+            .addFields(
 
-              name: 'Role ID',
+              {
 
-              value: `\`${role.id}\``
-            })
+                name: '👤 User',
+
+                value:
+                  `${user.tag}`,
+
+                inline: true
+              },
+
+              {
+
+                name: '🏷 Role',
+
+                value:
+                  `${role.name}`,
+
+                inline: true
+              },
+
+              {
+
+                name: '🆔 Role ID',
+
+                value:
+                  `\`${role.id}\``,
+
+                inline: false
+              }
+            )
 
             .setFooter({
+
               text:
                 `By ${interaction.user.tag}`
             })
@@ -300,25 +578,34 @@ module.exports = {
             .setTimestamp();
 
         await interaction.editReply({
+
           embeds: [embed]
         });
 
+        // ====================
+        // 📜 LOG
+        // ====================
         const log =
           createLogEmbed({
 
-            action: 'ROLE_ADD',
+            action:
+              'ROLE_ADD',
 
             user,
 
-            moderator: interaction.user,
+            moderator:
+              interaction.user,
 
             reason:
               `Added role ${role.name}`
           });
 
         return sendLog(
+
           interaction.client,
+
           interaction.guild.id,
+
           log
         );
       }
@@ -329,36 +616,106 @@ module.exports = {
       if (action === 'remove') {
 
         if (
+
           !member.roles.cache.has(role.id)
         ) {
 
           return interaction.editReply({
+
             content:
+
               '❌ User does not have that role.'
           });
         }
 
         await member.roles.remove(role);
 
+        // ====================
+        // 💾 AUDIT LOG
+        // ====================
+        run(
+
+          `INSERT INTO role_actions
+
+           (
+             guildId,
+             userId,
+             moderatorId,
+             roleId,
+             action,
+             timestamp
+           )
+
+           VALUES (?, ?, ?, ?, ?, ?)`,
+
+          [
+
+            interaction.guild.id,
+
+            user.id,
+
+            interaction.user.id,
+
+            role.id,
+
+            'REMOVE',
+
+            Date.now()
+          ]
+        );
+
+        // ====================
+        // 🎨 EMBED
+        // ====================
         const embed =
           new EmbedBuilder()
 
             .setColor(0xE67E22)
 
-            .setTitle('➖ Role Removed')
+            .setTitle(
+              '➖ Role Removed'
+            )
 
             .setDescription(
+
               `${role} removed from ${user}`
             )
 
-            .addFields({
+            .addFields(
 
-              name: 'Role ID',
+              {
 
-              value: `\`${role.id}\``
-            })
+                name: '👤 User',
+
+                value:
+                  `${user.tag}`,
+
+                inline: true
+              },
+
+              {
+
+                name: '🏷 Role',
+
+                value:
+                  `${role.name}`,
+
+                inline: true
+              },
+
+              {
+
+                name: '🆔 Role ID',
+
+                value:
+                  `\`${role.id}\``,
+
+                inline: false
+              }
+            )
 
             .setFooter({
+
               text:
                 `By ${interaction.user.tag}`
             })
@@ -366,30 +723,40 @@ module.exports = {
             .setTimestamp();
 
         await interaction.editReply({
+
           embeds: [embed]
         });
 
+        // ====================
+        // 📜 LOG
+        // ====================
         const log =
           createLogEmbed({
 
-            action: 'ROLE_REMOVE',
+            action:
+              'ROLE_REMOVE',
 
             user,
 
-            moderator: interaction.user,
+            moderator:
+              interaction.user,
 
             reason:
               `Removed role ${role.name}`
           });
 
         return sendLog(
+
           interaction.client,
+
           interaction.guild.id,
+
           log
         );
       }
 
       return interaction.editReply({
+
         content:
           '❌ Invalid action.'
       });
@@ -397,16 +764,21 @@ module.exports = {
     } catch (err) {
 
       console.error(
+
         'Role Command Error:',
+
         err
       );
 
       if (
+
         interaction.deferred ||
+
         interaction.replied
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ Failed to manage role.'
         });

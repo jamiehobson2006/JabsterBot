@@ -23,6 +23,43 @@ const ticketTypes =
   require('./ticketTypes');
 
 // ==================================================
+// 🧠 SAFE STRING
+// ==================================================
+function safeString(
+  value,
+  fallback = 'unknown'
+) {
+
+  if (
+    typeof value !== 'string'
+  ) {
+
+    return fallback;
+  }
+
+  return value.trim() ||
+    fallback;
+}
+
+// ==================================================
+// 🧠 CLEAN CHANNEL NAME
+// ==================================================
+function cleanChannelName(
+  text
+) {
+
+  return text
+
+    .toLowerCase()
+
+    .replace(/[^a-z0-9-]/g, '')
+
+    .replace(/-+/g, '-')
+
+    .slice(0, 90);
+}
+
+// ==================================================
 // 🎫 CREATE TICKET
 // ==================================================
 async function createTicket({
@@ -35,34 +72,56 @@ async function createTicket({
 }) {
 
   // ==========================================
-  // 🧠 VALIDATE TYPE
+  // 🚫 INVALID INTERACTION
   // ==========================================
-  const config =
-    ticketTypes[type];
-
-  if (!config) {
+  if (
+    !interaction ||
+    !interaction.guild
+  ) {
 
     throw new Error(
-      'Invalid ticket type'
+      'Invalid interaction.'
     );
   }
 
   // ==========================================
-  // 🔍 CHECK SETTINGS
+  // 🧠 VALIDATE TYPE
   // ==========================================
-  const settings = get(
+  const safeType =
+    safeString(type);
 
-    `SELECT *
-     FROM ticket_settings
-     WHERE guildId = ?
-     AND type = ?`,
+  const config =
+    ticketTypes[safeType];
 
-    [
-      interaction.guild.id,
-      type
-    ]
-  );
+  if (!config) {
 
+    throw new Error(
+      'Invalid ticket type.'
+    );
+  }
+
+  // ==========================================
+  // 🔍 FETCH SETTINGS
+  // ==========================================
+  const settings =
+    get(
+
+      `SELECT *
+       FROM ticket_settings
+       WHERE guildId = ?
+       AND type = ?`,
+
+      [
+
+        interaction.guild.id,
+
+        safeType
+      ]
+    );
+
+  // ==========================================
+  // 🚫 DISABLED
+  // ==========================================
   if (
     !settings ||
     !settings.enabled
@@ -76,21 +135,25 @@ async function createTicket({
   // ==========================================
   // 🚫 DUPLICATE CHECK
   // ==========================================
-  const existing = get(
+  const existing =
+    get(
 
-    `SELECT *
-     FROM tickets
-     WHERE guildId = ?
-     AND userId = ?
-     AND type = ?
-     AND status = 'OPEN'`,
+      `SELECT *
+       FROM tickets
+       WHERE guildId = ?
+       AND userId = ?
+       AND type = ?
+       AND status = 'OPEN'`,
 
-    [
-      interaction.guild.id,
-      interaction.user.id,
-      type
-    ]
-  );
+      [
+
+        interaction.guild.id,
+
+        interaction.user.id,
+
+        safeType
+      ]
+    );
 
   if (existing) {
 
@@ -104,9 +167,11 @@ async function createTicket({
   // ==========================================
   const category =
     settings.categoryId
+
       ? interaction.guild.channels.cache.get(
           settings.categoryId
         )
+
       : null;
 
   // ==========================================
@@ -114,30 +179,40 @@ async function createTicket({
   // ==========================================
   const staffRole =
     settings.roleId
+
       ? interaction.guild.roles.cache.get(
           settings.roleId
         )
+
       : null;
 
   // ==========================================
   // 🏷 CHANNEL NAME
   // ==========================================
   const username =
-    interaction.user.username
+    cleanChannelName(
+      interaction.user.username
+    );
 
-      .toLowerCase()
+  let channelName =
+    `${safeType}-${username}`;
 
-      .replace(/[^a-z0-9]/g, '');
-
-  const channelName =
-    `${type}-${username}`;
+  // ==========================================
+  // 🧠 ENSURE UNIQUE NAME
+  // ==========================================
+  channelName =
+    channelName.slice(0, 90);
 
   // ==========================================
   // 🔐 PERMISSIONS
   // ==========================================
   const overwrites = [
 
+    // ========================================
+    // 🌍 EVERYONE
+    // ========================================
     {
+
       id:
         interaction.guild.roles.everyone.id,
 
@@ -147,7 +222,11 @@ async function createTicket({
       ]
     },
 
+    // ========================================
+    // 👤 TICKET OWNER
+    // ========================================
     {
+
       id:
         interaction.user.id,
 
@@ -165,7 +244,11 @@ async function createTicket({
       ]
     },
 
+    // ========================================
+    // 🤖 BOT
+    // ========================================
     {
+
       id:
         interaction.client.user.id,
 
@@ -211,15 +294,21 @@ async function createTicket({
   const channel =
     await interaction.guild.channels.create({
 
-      name: channelName,
+      name:
+        channelName,
 
-      type: ChannelType.GuildText,
+      type:
+        ChannelType.GuildText,
 
       parent:
         category?.id || null,
 
       permissionOverwrites:
-        overwrites
+        overwrites,
+
+      reason:
+
+        `Ticket created by ${interaction.user.tag}`
     });
 
   // ==========================================
@@ -232,24 +321,60 @@ async function createTicket({
 
         new ButtonBuilder()
 
-          .setCustomId('ticket_claim')
+          .setCustomId(
+            'ticket_claim'
+          )
 
-          .setLabel('Claim')
+          .setLabel(
+            'Claim'
+          )
 
-          .setEmoji('👮')
+          .setEmoji(
+            '👮'
+          )
 
-          .setStyle(ButtonStyle.Primary),
+          .setStyle(
+            ButtonStyle.Primary
+          ),
 
         new ButtonBuilder()
 
-          .setCustomId('ticket_close')
+          .setCustomId(
+            'ticket_close'
+          )
 
-          .setLabel('Close')
+          .setLabel(
+            'Close'
+          )
 
-          .setEmoji('🔒')
+          .setEmoji(
+            '🔒'
+          )
 
-          .setStyle(ButtonStyle.Danger)
+          .setStyle(
+            ButtonStyle.Danger
+          )
       );
+
+  // ==========================================
+  // 🧹 CLEAN REASON
+  // ==========================================
+  let cleanReason =
+    reason;
+
+  if (cleanReason) {
+
+    cleanReason =
+      cleanReason
+
+        .replace(/@everyone|@here/g, '[mention removed]')
+
+        .replace(/\s+/g, ' ')
+
+        .trim()
+
+        .slice(0, 1000);
+  }
 
   // ==========================================
   // 🎨 EMBED
@@ -260,6 +385,7 @@ async function createTicket({
       .setColor(0x5865F2)
 
       .setTitle(
+
         `${config.emoji} ${config.name}`
       )
 
@@ -275,17 +401,23 @@ async function createTicket({
       .addFields(
 
         {
-          name: 'Type',
 
-          value: config.name,
+          name:
+            'Type',
+
+          value:
+            config.name,
 
           inline: true
         },
 
         {
-          name: 'Creator',
 
-          value: `${interaction.user}`,
+          name:
+            'Creator',
+
+          value:
+            `${interaction.user}`,
 
           inline: true
         }
@@ -294,30 +426,41 @@ async function createTicket({
       .setFooter({
 
         text:
+
           `User ID: ${interaction.user.id}`
       })
 
       .setTimestamp();
 
-  if (reason) {
+  // ==========================================
+  // 📝 REASON
+  // ==========================================
+  if (
+    cleanReason
+  ) {
 
     embed.addFields({
 
-      name: 'Reason',
+      name:
+        'Reason',
 
-      value: reason.slice(0, 1000)
+      value:
+        cleanReason
     });
   }
 
   // ==========================================
-  // 📨 SEND MESSAGE
+  // 📨 SEND TICKET MESSAGE
   // ==========================================
   const msg =
     await channel.send({
 
       content:
+
         staffRole
+
           ? `<@&${staffRole.id}>`
+
           : `${interaction.user}`,
 
       embeds: [embed],
@@ -326,26 +469,39 @@ async function createTicket({
     });
 
   // ==========================================
-  // 💾 SAVE DB
+  // 💾 SAVE DATABASE
   // ==========================================
   run(
 
     `INSERT INTO tickets
+
      (
        guildId,
        channelId,
+       messageId,
        userId,
        type,
-       createdAt
+       createdAt,
+       status
      )
-     VALUES (?, ?, ?, ?, ?)`,
+
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
 
     [
+
       interaction.guild.id,
+
       channel.id,
+
+      msg.id,
+
       interaction.user.id,
-      type,
-      Date.now()
+
+      safeType,
+
+      Date.now(),
+
+      'OPEN'
     ]
   );
 
@@ -353,6 +509,8 @@ async function createTicket({
   // ✅ RETURN
   // ==========================================
   return {
+
+    success: true,
 
     channel,
 

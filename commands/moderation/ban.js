@@ -8,338 +8,621 @@ const {
 } = require('discord.js');
 
 const { run } = require('../../database');
-const { sendLog, createLogEmbed } = require('../../utils/logger');
+
+const {
+  sendLog,
+  createLogEmbed
+} = require('../../utils/logger');
 
 module.exports = {
 
   cooldown: 3000,
 
-  data: new SlashCommandBuilder()
-    .setName('ban')
-    .setDescription('Ban a user from the server')
+  data:
+    new SlashCommandBuilder()
 
-    .addUserOption(option =>
-      option
-        .setName('user')
-        .setDescription('User to ban')
-        .setRequired(true)
-    )
+      .setName('ban')
 
-    .addStringOption(option =>
-      option
-        .setName('reason')
-        .setDescription('Reason')
-        .setMaxLength(200)
-    ),
+      .setDescription(
+        'Ban a user from the server'
+      )
+
+      .addUserOption(option =>
+
+        option
+
+          .setName('user')
+
+          .setDescription(
+            'User to ban'
+          )
+
+          .setRequired(true)
+      )
+
+      .addStringOption(option =>
+
+        option
+
+          .setName('reason')
+
+          .setDescription(
+            'Reason'
+          )
+
+          .setMaxLength(200)
+      )
+
+      .addIntegerOption(option =>
+
+        option
+
+          .setName('delete_messages')
+
+          .setDescription(
+            'Delete message history (0-7 days)'
+          )
+
+          .setMinValue(0)
+
+          .setMaxValue(7)
+      ),
 
   async execute(interaction) {
 
     try {
 
-      const user = interaction.options.getUser('user', true);
+      // ========================================
+      // 🔐 MODERATOR PERMISSION
+      // ========================================
+      if (
 
-      const reason =
-        interaction.options.getString('reason') ||
-        'No reason provided';
+        !interaction.memberPermissions.has(
 
-      // ========================
-      // 🔐 PERMISSION CHECK
-      // ========================
-      if (!interaction.memberPermissions.has(
-        PermissionsBitField.Flags.BanMembers
-      )) {
+          PermissionsBitField.Flags.BanMembers
+        )
+      ) {
 
         return interaction.editReply({
-          content: '❌ You lack permission to ban members.'
+
+          content:
+            '❌ You lack permission to ban members.'
         });
       }
 
-      // ========================
+      // ========================================
+      // 🤖 BOT PERMISSION
+      // ========================================
+      if (
+
+        !interaction.guild.members.me.permissions.has(
+
+          PermissionsBitField.Flags.BanMembers
+        )
+      ) {
+
+        return interaction.editReply({
+
+          content:
+            '❌ I do not have Ban Members permission.'
+        });
+      }
+
+      // ========================================
+      // 👤 OPTIONS
+      // ========================================
+      const user =
+        interaction.options.getUser(
+          'user',
+          true
+        );
+
+      const reason =
+        interaction.options.getString(
+          'reason'
+        ) ||
+
+        'No reason provided';
+
+      const deleteDays =
+        interaction.options.getInteger(
+          'delete_messages'
+        ) || 0;
+
+      // ========================================
       // ❌ BASIC CHECKS
-      // ========================
+      // ========================================
       if (user.id === interaction.user.id) {
 
         return interaction.editReply({
-          content: '❌ You cannot ban yourself.'
+
+          content:
+            '❌ You cannot ban yourself.'
         });
       }
 
       if (user.id === interaction.client.user.id) {
 
         return interaction.editReply({
-          content: '❌ You cannot ban the bot.'
+
+          content:
+            '❌ You cannot ban the bot.'
         });
       }
 
       if (user.id === interaction.guild.ownerId) {
 
         return interaction.editReply({
-          content: '❌ You cannot ban the server owner.'
+
+          content:
+            '❌ You cannot ban the server owner.'
         });
       }
 
-      // ========================
+      // ========================================
       // 🔍 EXISTING BAN CHECK
-      // ========================
-      const existingBan = await interaction.guild.bans
-        .fetch(user.id)
-        .catch(() => null);
+      // ========================================
+      const existingBan =
+        await interaction.guild.bans
+
+          .fetch(user.id)
+
+          .catch(() => null);
 
       if (existingBan) {
 
         return interaction.editReply({
-          content: '❌ This user is already banned.'
+
+          content:
+            '❌ This user is already banned.'
         });
       }
 
-      // ========================
+      // ========================================
       // 👤 FETCH MEMBER
-      // ========================
-      let member = await interaction.guild.members
-        .fetch(user.id)
-        .catch(() => null);
+      // ========================================
+      let member =
+        await interaction.guild.members
+
+          .fetch(user.id)
+
+          .catch(() => null);
 
       if (member) {
 
-        // 🔒 Hierarchy check
+        // ======================================
+        // 🔒 MODERATOR HIERARCHY
+        // ======================================
         if (
-          interaction.member.id !== interaction.guild.ownerId &&
+
+          interaction.member.id !==
+          interaction.guild.ownerId &&
+
           member.roles.highest.position >=
+
           interaction.member.roles.highest.position
         ) {
 
           return interaction.editReply({
+
             content:
-              '❌ You cannot ban this user (role hierarchy).'
+
+              '❌ You cannot ban this user due to role hierarchy.'
           });
         }
 
-        // 🔒 Bot hierarchy
+        // ======================================
+        // 👑 ADMIN CHECK
+        // ======================================
+        if (
+
+          member.permissions.has(
+
+            PermissionsBitField.Flags.Administrator
+          ) &&
+
+          interaction.user.id !==
+          interaction.guild.ownerId
+        ) {
+
+          return interaction.editReply({
+
+            content:
+              '❌ You cannot ban administrators.'
+          });
+        }
+
+        // ======================================
+        // 🤖 BOT HIERARCHY
+        // ======================================
         if (!member.bannable) {
 
           return interaction.editReply({
-            content: '❌ I cannot ban this user.'
+
+            content:
+              '❌ I cannot ban this user.'
           });
         }
       }
 
-      // ========================
-      // 🎯 CONFIRM BUTTONS
-      // ========================
-      const confirmId = `confirm_ban_${interaction.id}`;
-      const cancelId = `cancel_ban_${interaction.id}`;
+      // ========================================
+      // 🎯 BUTTON IDS
+      // ========================================
+      const confirmId =
+        `confirm_ban_${interaction.id}`;
 
-      const row = new ActionRowBuilder().addComponents(
+      const cancelId =
+        `cancel_ban_${interaction.id}`;
 
-        new ButtonBuilder()
-          .setCustomId(confirmId)
-          .setLabel('Confirm Ban')
-          .setStyle(ButtonStyle.Danger),
+      // ========================================
+      // 🎛 BUTTONS
+      // ========================================
+      const row =
+        new ActionRowBuilder()
 
-        new ButtonBuilder()
-          .setCustomId(cancelId)
-          .setLabel('Cancel')
-          .setStyle(ButtonStyle.Secondary)
-      );
+          .addComponents(
 
-      const msg = await interaction.editReply({
+            new ButtonBuilder()
 
-        embeds: [
+              .setCustomId(confirmId)
 
-          new EmbedBuilder()
-            .setColor(0xED4245)
-            .setTitle('Confirm Ban')
-            .setDescription(
-              `Are you sure you want to ban **${user.tag}**?\n\n` +
-              `📄 Reason: ${reason}`
-            )
-        ],
+              .setLabel(
+                'Confirm Ban'
+              )
 
-        components: [row]
-      });
+              .setStyle(
+                ButtonStyle.Danger
+              ),
+
+            new ButtonBuilder()
+
+              .setCustomId(cancelId)
+
+              .setLabel(
+                'Cancel'
+              )
+
+              .setStyle(
+                ButtonStyle.Secondary
+              )
+          );
+
+      // ========================================
+      // 🎨 CONFIRM EMBED
+      // ========================================
+      const confirmEmbed =
+        new EmbedBuilder()
+
+          .setColor(0xED4245)
+
+          .setTitle(
+            '🔨 Confirm Ban'
+          )
+
+          .setDescription(
+
+            `Are you sure you want to ban **${user.tag}**?\n\n` +
+
+            `📄 Reason: ${reason}\n` +
+
+            `🗑 Delete Messages: ${deleteDays} day(s)`
+          )
+
+          .setFooter({
+
+            text:
+              `Moderator: ${interaction.user.tag}`
+          })
+
+          .setTimestamp();
+
+      const msg =
+        await interaction.editReply({
+
+          embeds: [confirmEmbed],
+
+          components: [row]
+        });
 
       let handled = false;
 
-      // ========================
+      // ========================================
       // 🎛 COLLECTOR
-      // ========================
-      const collector = msg.createMessageComponentCollector({
+      // ========================================
+      const collector =
+        msg.createMessageComponentCollector({
 
-        time: 15000,
+          time: 15000,
 
-        filter: i =>
-          i.user.id === interaction.user.id &&
-          [confirmId, cancelId].includes(i.customId)
-      });
+          filter: i =>
 
-      collector.on('collect', async (i) => {
+            i.user.id === interaction.user.id &&
+
+            [
+              confirmId,
+              cancelId
+            ].includes(i.customId)
+        });
+
+      // ========================================
+      // 📥 BUTTON CLICK
+      // ========================================
+      collector.on('collect', async i => {
 
         if (handled) return;
+
         handled = true;
 
         try {
 
           await i.update({
+
             components: []
           });
 
-          // ========================
+          // ====================================
           // ❌ CANCEL
-          // ========================
+          // ====================================
           if (i.customId === cancelId) {
 
             return interaction.editReply({
-              content: '❌ Ban cancelled.',
-              embeds: []
+
+              content:
+                '❌ Ban cancelled.',
+
+              embeds: [],
+
+              components: []
             });
           }
 
-          // ========================
-          // 🔨 CONFIRM BAN
-          // ========================
-          if (i.customId === confirmId) {
+          // ====================================
+          // 🔄 REFETCH MEMBER
+          // ====================================
+          member =
+            await interaction.guild.members
 
-            member = await interaction.guild.members
               .fetch(user.id)
+
               .catch(() => null);
 
-            if (member && !member.bannable) {
+          if (
 
-              return interaction.editReply({
-                content:
-                  '❌ I can no longer ban this user.',
-                embeds: []
-              });
-            }
+            member &&
 
-            // ========================
-            // 📩 DM USER
-            // ========================
-            try {
+            !member.bannable
+          ) {
 
-              await user.send({
+            return interaction.editReply({
 
-                embeds: [
+              content:
+                '❌ I can no longer ban this user.',
 
-                  new EmbedBuilder()
-                    .setColor(0xED4245)
-                    .setTitle('You Were Banned')
-                    .setDescription(
-                      `You were banned from **${interaction.guild.name}**\n\n` +
-                      `📄 Reason: ${reason}`
-                    )
-                    .setTimestamp()
-                ]
-              });
+              embeds: [],
 
-            } catch {}
+              components: []
+            });
+          }
 
-            // ========================
-            // 🔨 BAN USER
-            // ========================
-            await interaction.guild.members.ban(user.id, {
+          // ====================================
+          // 📩 DM USER
+          // ====================================
+          try {
 
-              reason:
-                `${reason} | Banned by ${interaction.user.tag}`
+            await user.send({
+
+              embeds: [
+
+                new EmbedBuilder()
+
+                  .setColor(0xED4245)
+
+                  .setTitle(
+                    '🔨 You Were Banned'
+                  )
+
+                  .setDescription(
+
+                    `You were banned from **${interaction.guild.name}**`
+                  )
+
+                  .addFields(
+
+                    {
+
+                      name: '📄 Reason',
+
+                      value:
+                        reason
+                    },
+
+                    {
+
+                      name: '🛡 Moderator',
+
+                      value:
+                        interaction.user.tag
+                    }
+                  )
+
+                  .setTimestamp()
+              ]
             });
 
-            // ========================
-            // 💾 SAVE CASE
-            // ========================
-            const result = await run(
+          } catch {}
+
+          // ====================================
+          // 🔨 BAN USER
+          // ====================================
+          await interaction.guild.members.ban(
+            user.id,
+            {
+
+              deleteMessageSeconds:
+                deleteDays * 86400,
+
+              reason:
+
+                `${reason} | Banned by ${interaction.user.tag}`
+            }
+          );
+
+          // ====================================
+          // 💾 SAVE CASE
+          // ====================================
+          const result =
+            await run(
 
               `INSERT INTO cases
-              (guildId, userId, moderatorId, action, reason, createdAt)
+
+              (
+                guildId,
+                userId,
+                moderatorId,
+                action,
+                reason,
+                createdAt
+              )
+
               VALUES (?, ?, ?, ?, ?, ?)`,
 
               [
+
                 interaction.guild.id,
+
                 user.id,
+
                 interaction.user.id,
+
                 'BAN',
+
                 reason,
+
                 Date.now()
               ]
             );
 
-            const caseId =
-              result?.lastInsertRowid ?? 'N/A';
+          const caseId =
+            result?.lastInsertRowid || 'N/A';
 
-            // ========================
-            // 🎨 SUCCESS EMBED
-            // ========================
-            const embed = new EmbedBuilder()
+          // ====================================
+          // 🎨 SUCCESS EMBED
+          // ====================================
+          const embed =
+            new EmbedBuilder()
 
               .setColor(0xED4245)
 
-              .setTitle('🔨 User Banned')
+              .setTitle(
+                '🔨 User Banned'
+              )
 
               .setDescription(
+
                 `Successfully banned **${user.tag}**`
               )
 
               .addFields(
 
                 {
+
                   name: '📄 Reason',
-                  value: reason
+
+                  value:
+                    reason
                 },
 
                 {
+
+                  name: '🗑 Deleted Messages',
+
+                  value:
+                    `${deleteDays} day(s)`,
+
+                  inline: true
+                },
+
+                {
+
                   name: '📁 Case',
-                  value: `#${caseId}`,
+
+                  value:
+                    `#${caseId}`,
+
                   inline: true
                 }
               )
 
               .setFooter({
-                text: `Moderator: ${interaction.user.tag}`
+
+                text:
+                  `Moderator: ${interaction.user.tag}`
               })
 
               .setTimestamp();
 
-            await interaction.editReply({
+          // ====================================
+          // 📤 RESPONSE
+          // ====================================
+          await interaction.editReply({
 
-              content: '',
-              embeds: [embed]
-            });
+            content: '',
 
-            // ========================
-            // 📜 MOD LOG
-            // ========================
-            const logEmbed = createLogEmbed({
+            embeds: [embed],
+
+            components: []
+          });
+
+          // ====================================
+          // 📜 LOG
+          // ====================================
+          const logEmbed =
+            createLogEmbed({
 
               action: 'BAN',
+
               user,
-              moderator: interaction.user,
+
+              moderator:
+                interaction.user,
+
               reason,
+
               caseId
             });
 
-            await sendLog(
-              interaction.client,
-              interaction.guild.id,
-              logEmbed
-            );
-          }
+          await sendLog(
+
+            interaction.client,
+
+            interaction.guild.id,
+
+            logEmbed
+          );
 
         } catch (err) {
 
-          console.error('Ban Collector Error:', err);
+          console.error(
+            'Ban Collector Error:',
+            err
+          );
 
           return interaction.editReply({
 
-            content: '❌ Failed to ban user.',
+            content:
+              '❌ Failed to ban user.',
+
             embeds: [],
+
             components: []
           });
         }
       });
 
-      // ========================
+      // ========================================
       // ⌛ TIMEOUT
-      // ========================
-      collector.on('end', async (_, reason) => {
+      // ========================================
+      collector.on('end', async () => {
 
         if (!handled) {
 
@@ -347,8 +630,11 @@ module.exports = {
 
             await interaction.editReply({
 
-              content: '⌛ Ban timed out.',
+              content:
+                '⌛ Ban timed out.',
+
               embeds: [],
+
               components: []
             });
 
@@ -358,17 +644,30 @@ module.exports = {
 
     } catch (err) {
 
-      console.error('Ban Command Error:', err);
+      console.error(
+        'Ban Command Error:',
+        err
+      );
 
-      if (interaction.deferred || interaction.replied) {
+      if (
+
+        interaction.deferred ||
+
+        interaction.replied
+      ) {
 
         return interaction.editReply({
-          content: '❌ Error executing ban command.'
+
+          content:
+            '❌ Error executing ban command.'
         });
       }
 
       return interaction.reply({
-        content: '❌ Error executing ban command.',
+
+        content:
+          '❌ Error executing ban command.',
+
         ephemeral: true
       });
     }

@@ -1,29 +1,46 @@
 ﻿const {
+
   EmbedBuilder,
-  SlashCommandBuilder
+
+  SlashCommandBuilder,
+
+  PermissionsBitField
+
 } = require('discord.js');
 
 const {
+
   run,
+
   get
+
 } = require('../../database');
 
 module.exports = {
 
   cooldown: 3000,
 
-  data: new SlashCommandBuilder()
+  data:
+    new SlashCommandBuilder()
 
-    .setName('afk')
+      .setName('afk')
 
-    .setDescription('Set your AFK status')
+      .setDescription(
+        'Set your AFK status'
+      )
 
-    .addStringOption(option =>
-      option
-        .setName('reason')
-        .setDescription('Reason for being AFK')
-        .setMaxLength(200)
-    ),
+      .addStringOption(option =>
+
+        option
+
+          .setName('reason')
+
+          .setDescription(
+            'Reason for being AFK'
+          )
+
+          .setMaxLength(200)
+      ),
 
   async execute(interaction) {
 
@@ -35,22 +52,40 @@ module.exports = {
       let reason =
         interaction.options.getString(
           'reason'
-        ) || 'AFK';
+        ) ||
+
+        'AFK';
 
       // ========================
       // 🧹 CLEAN REASON
       // ========================
       reason = reason
 
-        .replace(/@everyone|@here/g, '[mention removed]')
+        .replace(
+          /@everyone|@here/g,
 
-        .replace(/[`*_~|>#]/g, '')
+          '[mention removed]'
+        )
 
-        .replace(/\s+/g, ' ')
+        .replace(
+          /[`*_~|>#]/g,
+
+          ''
+        )
+
+        .replace(
+          /\s+/g,
+
+          ' '
+        )
 
         .trim();
 
+      // ========================
+      // 🚫 EMPTY CHECK
+      // ========================
       if (!reason.length) {
+
         reason = 'AFK';
       }
 
@@ -60,12 +95,17 @@ module.exports = {
       const existing =
         get(
 
-          `SELECT * FROM afk
-          WHERE guildId = ?
-          AND userId = ?`,
+          `SELECT *
+
+           FROM afk
+
+           WHERE guildId = ?
+           AND userId = ?`,
 
           [
+
             interaction.guild.id,
+
             interaction.user.id
           ]
         );
@@ -74,60 +114,159 @@ module.exports = {
         Date.now();
 
       // ========================
+      // ⏱ AFK COUNT
+      // ========================
+      const stats =
+        get(
+
+          `SELECT COUNT(*) as total
+
+           FROM afk_history
+
+           WHERE guildId = ?
+           AND userId = ?`,
+
+          [
+
+            interaction.guild.id,
+
+            interaction.user.id
+          ]
+        );
+
+      const afkCount =
+        (stats?.total || 0) + 1;
+
+      // ========================
       // 💾 SAVE AFK
       // ========================
       run(
 
         `INSERT INTO afk
-        (guildId, userId, reason, timestamp)
 
-        VALUES (?, ?, ?, ?)
+         (
+           guildId,
+           userId,
+           reason,
+           timestamp
+         )
 
-        ON CONFLICT(guildId, userId)
+         VALUES (?, ?, ?, ?)
 
-        DO UPDATE SET
-        reason = excluded.reason,
-        timestamp = excluded.timestamp`,
+         ON CONFLICT(guildId, userId)
+
+         DO UPDATE SET
+
+         reason = excluded.reason,
+         timestamp = excluded.timestamp`,
 
         [
+
           interaction.guild.id,
+
           interaction.user.id,
+
           reason,
+
           now
         ]
       );
+
+      // ========================
+      // 📜 HISTORY LOG
+      // ========================
+      run(
+
+        `INSERT INTO afk_history
+
+         (
+           guildId,
+           userId,
+           reason,
+           timestamp
+         )
+
+         VALUES (?, ?, ?, ?)`,
+
+        [
+
+          interaction.guild.id,
+
+          interaction.user.id,
+
+          reason,
+
+          now
+        ]
+      );
+
+      // ========================
+      // 👤 MEMBER
+      // ========================
+      const member =
+        interaction.member;
+
+      let nicknameUpdated =
+        false;
 
       // ========================
       // 🏷 AFK NICKNAME
       // ========================
       try {
 
-        const member =
-          interaction.member;
-
         if (
+
           member &&
-          member.manageable
+
+          member.manageable &&
+
+          interaction.guild.members.me.permissions.has(
+
+            PermissionsBitField.Flags.ManageNicknames
+          )
         ) {
 
           const currentName =
+
             member.nickname ||
+
             member.user.username;
 
+          // ====================
+          // 🚫 ALREADY AFK
+          // ====================
           if (
-            !currentName.startsWith('[AFK] ')
+
+            !currentName.startsWith(
+              '[AFK] '
+            )
           ) {
 
             const newName =
-              `[AFK] ${currentName}`.slice(0, 32);
 
-            await member
-              .setNickname(newName)
-              .catch(() => {});
+              `[AFK] ${currentName}`
+
+                .slice(0, 32);
+
+            await member.setNickname(
+
+              newName,
+
+              'AFK status enabled'
+            );
+
+            nicknameUpdated =
+              true;
           }
         }
 
-      } catch {}
+      } catch (err) {
+
+        console.error(
+          'AFK Nickname Error:',
+          err
+        );
+      }
 
       // ========================
       // 🎨 EMBED
@@ -135,9 +274,21 @@ module.exports = {
       const embed =
         new EmbedBuilder()
 
-          .setColor(0x5865F2)
+          .setColor(
+            0x5865F2
+          )
 
-          .setTitle('🌙 AFK Status Set')
+          .setTitle(
+            '🌙 AFK Status Set'
+          )
+
+          .setThumbnail(
+
+            interaction.user.displayAvatarURL({
+
+              dynamic: true
+            })
+          )
 
           .setDescription(
 
@@ -151,19 +302,52 @@ module.exports = {
           .addFields(
 
             {
+
               name: '📄 Reason',
-              value: reason
+
+              value:
+                reason
             },
 
             {
+
               name: '🕒 Since',
+
               value:
+
                 `<t:${Math.floor(now / 1000)}:R>`,
+
+              inline: true
+            },
+
+            {
+
+              name: '📊 AFK Count',
+
+              value:
+                `${afkCount}`,
+
+              inline: true
+            },
+
+            {
+
+              name: '🏷 Nickname Updated',
+
+              value:
+
+                nicknameUpdated
+
+                  ? '✅ Yes'
+
+                  : '❌ No',
+
               inline: true
             }
           )
 
           .setFooter({
+
             text:
               `User: ${interaction.user.tag}`
           })
@@ -174,6 +358,7 @@ module.exports = {
       // ✅ RESPONSE
       // ========================
       await interaction.editReply({
+
         embeds: [embed]
       });
 
@@ -182,9 +367,14 @@ module.exports = {
       // ========================
       setTimeout(() => {
 
-        interaction
-          .deleteReply()
-          .catch(() => {});
+        if (!interaction.ephemeral) {
+
+          interaction
+
+            .deleteReply()
+
+            .catch(() => {});
+        }
 
       }, 3000);
 
@@ -196,11 +386,14 @@ module.exports = {
       );
 
       if (
+
         interaction.deferred ||
+
         interaction.replied
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ Failed to set AFK.'
         });

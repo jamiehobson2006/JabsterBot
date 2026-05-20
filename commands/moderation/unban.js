@@ -1,42 +1,67 @@
 ﻿const {
+
   PermissionsBitField,
+
   SlashCommandBuilder,
+
   EmbedBuilder,
+
   ChannelType
+
 } = require('discord.js');
 
 const {
+
   run
+
 } = require('../../database');
 
 const {
+
   sendLog,
+
   createLogEmbed
+
 } = require('../../utils/logger');
 
 module.exports = {
 
   cooldown: 3000,
 
-  data: new SlashCommandBuilder()
+  data:
+    new SlashCommandBuilder()
 
-    .setName('unban')
+      .setName('unban')
 
-    .setDescription('Unban a user by ID')
+      .setDescription(
+        'Unban a user by ID'
+      )
 
-    .addStringOption(option =>
-      option
-        .setName('user_id')
-        .setDescription('The ID of the user to unban')
-        .setRequired(true)
-    )
+      .addStringOption(option =>
 
-    .addStringOption(option =>
-      option
-        .setName('reason')
-        .setDescription('Reason for unbanning')
-        .setMaxLength(200)
-    ),
+        option
+
+          .setName('user_id')
+
+          .setDescription(
+            'The ID of the user to unban'
+          )
+
+          .setRequired(true)
+      )
+
+      .addStringOption(option =>
+
+        option
+
+          .setName('reason')
+
+          .setDescription(
+            'Reason for unbanning'
+          )
+
+          .setMaxLength(300)
+      ),
 
   async execute(interaction) {
 
@@ -46,17 +71,24 @@ module.exports = {
       // 🔐 USER PERMISSION
       // ========================
       if (
+
         !interaction.memberPermissions.has(
+
           PermissionsBitField.Flags.BanMembers
         )
       ) {
 
         return interaction.editReply({
+
           content:
+
             '❌ You need **Ban Members** permission.'
         });
       }
 
+      // ========================
+      // 🤖 BOT MEMBER
+      // ========================
       const botMember =
         interaction.guild.members.me;
 
@@ -64,13 +96,17 @@ module.exports = {
       // 🤖 BOT PERMISSION
       // ========================
       if (
+
         !botMember.permissions.has(
+
           PermissionsBitField.Flags.BanMembers
         )
       ) {
 
         return interaction.editReply({
+
           content:
+
             '❌ I do not have permission to unban members.'
         });
       }
@@ -80,23 +116,47 @@ module.exports = {
       // ========================
       const userId =
         interaction.options.getString(
+
           'user_id',
+
           true
         );
 
       const reason =
         interaction.options.getString(
           'reason'
-        ) || 'No reason provided';
+        ) ||
+
+        'No reason provided';
 
       // ========================
       // 🛡 VALIDATE ID
       // ========================
-      if (!/^\d{17,20}$/.test(userId)) {
+      if (
+
+        !/^\d{17,20}$/.test(userId)
+      ) {
 
         return interaction.editReply({
+
           content:
             '❌ Invalid Discord user ID.'
+        });
+      }
+
+      // ========================
+      // 🚫 SELF CHECK
+      // ========================
+      if (
+
+        userId ===
+        interaction.user.id
+      ) {
+
+        return interaction.editReply({
+
+          content:
+            '❌ You cannot unban yourself.'
         });
       }
 
@@ -115,6 +175,7 @@ module.exports = {
       } catch {
 
         return interaction.editReply({
+
           content:
             '❌ That user is not banned.'
         });
@@ -124,52 +185,79 @@ module.exports = {
       // 🔓 UNBAN
       // ========================
       await interaction.guild.members.unban(
+
         userId,
-        reason
+
+        `${reason} | By ${interaction.user.tag}`
       );
 
       // ========================
       // 🔗 CREATE INVITE
       // ========================
-      let inviteLink = null;
+      let inviteLink =
+        null;
 
       try {
 
-        // Try current channel first
+        // ======================================
+        // 📺 CURRENT CHANNEL
+        // ======================================
         if (
+
           interaction.channel &&
-          interaction.channel.type === ChannelType.GuildText &&
-          interaction.channel.permissionsFor(botMember)?.has(
+
+          interaction.channel.type ===
+          ChannelType.GuildText &&
+
+          interaction.channel.permissionsFor(
+            botMember
+          )?.has([
+
+            PermissionsBitField.Flags.ViewChannel,
+
             PermissionsBitField.Flags.CreateInstantInvite
-          )
+          ])
         ) {
 
           const invite =
             await interaction.channel.createInvite({
 
-              maxAge: 86400,
-              maxUses: 1,
+              maxAge:
+                86400,
+
+              maxUses:
+                1,
+
+              unique:
+                true,
 
               reason:
+
                 `Invite for unbanned user ${userId}`
             });
 
-          inviteLink = invite.url;
+          inviteLink =
+            invite.url;
         }
 
-        // Fallback channel
+        // ======================================
+        // 📺 FALLBACK CHANNEL
+        // ======================================
         if (!inviteLink) {
 
           const fallback =
             interaction.guild.channels.cache.find(c =>
 
-              c.type === ChannelType.GuildText &&
+              c.type ===
+              ChannelType.GuildText &&
 
-              c.permissionsFor(botMember)?.has([
+              c.permissionsFor(
+                botMember
+              )?.has([
 
                 PermissionsBitField.Flags.ViewChannel,
-                PermissionsBitField.Flags.CreateInstantInvite
 
+                PermissionsBitField.Flags.CreateInstantInvite
               ])
             );
 
@@ -178,14 +266,22 @@ module.exports = {
             const invite =
               await fallback.createInvite({
 
-                maxAge: 86400,
-                maxUses: 1,
+                maxAge:
+                  86400,
+
+                maxUses:
+                  1,
+
+                unique:
+                  true,
 
                 reason:
+
                   `Invite for unbanned user ${userId}`
               });
 
-            inviteLink = invite.url;
+            inviteLink =
+              invite.url;
           }
         }
 
@@ -210,10 +306,12 @@ module.exports = {
         const dmEmbed =
           new EmbedBuilder()
 
-            .setColor(0x57F287)
+            .setColor(
+              0x57F287
+            )
 
             .setTitle(
-              `🔓 You Were Unbanned`
+              '🔓 You Were Unbanned'
             )
 
             .setDescription(
@@ -221,36 +319,138 @@ module.exports = {
               `You have been unbanned from **${interaction.guild.name}**.`
             )
 
-            .addFields({
+            .addFields(
 
-              name: '📄 Reason',
+              {
 
-              value: reason
-            })
+                name: '📄 Reason',
+
+                value:
+                  reason
+              },
+
+              {
+
+                name: '🛡 Moderator',
+
+                value:
+                  interaction.user.tag,
+
+                inline: true
+              }
+            )
 
             .setTimestamp();
 
+        // ======================================
+        // 🔗 INVITE
+        // ======================================
         if (inviteLink) {
 
           dmEmbed.addFields({
 
-            name: '🔗 Rejoin Server',
+            name:
+              '🔗 Rejoin Server',
 
-            value: inviteLink
+            value:
+              inviteLink
           });
         }
 
         await fetchedUser.send({
+
           embeds: [dmEmbed]
         });
 
       } catch (err) {
 
         console.error(
+
           'Failed to DM unbanned user:',
+
           err
         );
       }
+
+      // ========================
+      // 💾 SAVE CASE
+      // ========================
+      const result =
+        run(
+
+          `INSERT INTO cases
+
+           (
+             guildId,
+             userId,
+             moderatorId,
+             action,
+             reason,
+             createdAt
+           )
+
+           VALUES (?, ?, ?, ?, ?, ?)`,
+
+          [
+
+            interaction.guild.id,
+
+            userId,
+
+            interaction.user.id,
+
+            'UNBAN',
+
+            reason,
+
+            Date.now()
+          ]
+        );
+
+      const caseId =
+        result?.lastInsertRowid || 'N/A';
+
+      // ========================
+      // 📜 AUDIT LOG
+      // ========================
+      run(
+
+        `INSERT INTO audit_logs
+
+         (
+           guildId,
+           action,
+           targetId,
+           executorId,
+           metadata,
+           timestamp
+         )
+
+         VALUES (?, ?, ?, ?, ?, ?)`,
+
+        [
+
+          interaction.guild.id,
+
+          'UNBAN',
+
+          userId,
+
+          interaction.user.id,
+
+          JSON.stringify({
+
+            reason,
+
+            caseId,
+
+            inviteCreated:
+              !!inviteLink
+          }),
+
+          Date.now()
+        ]
+      );
 
       // ========================
       // 🎨 RESPONSE
@@ -258,48 +458,89 @@ module.exports = {
       const embed =
         new EmbedBuilder()
 
-          .setColor(0x57F287)
+          .setColor(
+            0x57F287
+          )
 
-          .setTitle('🔓 User Unbanned')
+          .setTitle(
+            '🔓 User Unbanned'
+          )
 
           .setDescription(
+
             `Successfully unbanned **${ban.user.tag}**`
           )
 
           .addFields(
 
             {
-              name: 'User ID',
-              value: `\`${userId}\``,
+
+              name: '👤 User',
+
+              value:
+
+                `${ban.user.tag}\n\`${userId}\``,
+
               inline: true
             },
 
             {
-              name: 'Reason',
-              value: reason,
-              inline: false
+
+              name: '🛡 Moderator',
+
+              value:
+                `${interaction.user.tag}`,
+
+              inline: true
+            },
+
+            {
+
+              name: '📁 Case',
+
+              value:
+                `#${caseId}`,
+
+              inline: true
+            },
+
+            {
+
+              name: '📄 Reason',
+
+              value:
+                reason
             }
           )
 
           .setFooter({
+
             text:
-              `Moderator: ${interaction.user.tag}`
+              `${interaction.guild.name} Moderation`
           })
 
           .setTimestamp();
 
+      // ========================
+      // 🔗 INVITE STATUS
+      // ========================
       if (inviteLink) {
 
         embed.addFields({
 
-          name: '🔗 Invite Created',
+          name:
+            '🔗 Invite Created',
 
           value:
-            '[Invite generated successfully]'
+            'A rejoin invite was sent to the user.'
         });
       }
 
+      // ========================
+      // ✅ RESPONSE
+      // ========================
       await interaction.editReply({
+
         embeds: [embed]
       });
 
@@ -308,49 +549,44 @@ module.exports = {
       // ========================
       setTimeout(() => {
 
-        interaction
-          .deleteReply()
-          .catch(() => {});
+        if (!interaction.ephemeral) {
 
-      }, 3000);
+          interaction
+
+            .deleteReply()
+
+            .catch(() => {});
+        }
+
+      }, 4000);
 
       // ========================
-      // 📜 LOG
+      // 📜 MOD LOG
       // ========================
       const logEmbed =
         createLogEmbed({
 
-          action: 'UNBAN',
+          action:
+            'UNBAN',
 
-          user: ban.user,
+          user:
+            ban.user,
 
-          moderator: interaction.user,
+          moderator:
+            interaction.user,
 
-          reason
+          reason,
+
+          caseId
         });
 
       await sendLog(
+
         interaction.client,
+
         interaction.guild.id,
+
         logEmbed
-      );
-
-      // ========================
-      // 💾 SAVE CASE
-      // ========================
-      run(
-
-        `INSERT INTO cases
-        (guildId, userId, moderatorId, action, reason, timestamp)
-        VALUES (?, ?, ?, 'UNBAN', ?, ?)`,
-
-        [
-          interaction.guild.id,
-          userId,
-          interaction.user.id,
-          reason,
-          Date.now()
-        ]
       );
 
     } catch (err) {
@@ -361,11 +597,14 @@ module.exports = {
       );
 
       if (
+
         interaction.deferred ||
+
         interaction.replied
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ Failed to unban user.'
         });

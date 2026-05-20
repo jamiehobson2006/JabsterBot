@@ -1,21 +1,65 @@
 const {
   EmbedBuilder,
   SlashCommandBuilder,
-  PermissionsBitField
+  PermissionsBitField,
+  ActivityType
 } = require('discord.js');
 
 // ========================
-// 🏅 FORMAT BADGES
+// 🏅 BADGE FORMATTER
 // ========================
-function formatBadge(badge) {
+function getBadges(flags) {
 
-  return badge
+  const badgeMap = {
 
-    .toLowerCase()
+    Staff:
+      '👑 Discord Staff',
 
-    .replace(/_/g, ' ')
+    Partner:
+      '🤝 Partnered Server Owner',
 
-    .replace(/\b\w/g, l => l.toUpperCase());
+    Hypesquad:
+      '🎉 HypeSquad Events',
+
+    BugHunterLevel1:
+      '🐛 Bug Hunter',
+
+    BugHunterLevel2:
+      '🐞 Bug Hunter Gold',
+
+    HypeSquadOnlineHouse1:
+      '🏠 House Bravery',
+
+    HypeSquadOnlineHouse2:
+      '🏠 House Brilliance',
+
+    HypeSquadOnlineHouse3:
+      '🏠 House Balance',
+
+    PremiumEarlySupporter:
+      '💎 Early Supporter',
+
+    VerifiedBot:
+      '✔️ Verified Bot',
+
+    ActiveDeveloper:
+      '🛠 Active Developer'
+  };
+
+  if (!flags.length) {
+    return 'None';
+  }
+
+  return flags
+
+    .map(flag =>
+
+      badgeMap[flag] ||
+
+      `• ${flag}`
+    )
+
+    .join('\n');
 }
 
 // ========================
@@ -27,36 +71,61 @@ function getActivity(member) {
     member.presence?.activities;
 
   if (!activities?.length) {
+
     return 'None';
   }
 
   const activity =
-    activities.find(a => a.type !== 4) ||
+    activities.find(
+      a => a.type !== ActivityType.Custom
+    ) ||
+
     activities[0];
 
   switch (activity.type) {
 
-    case 0:
+    case ActivityType.Playing:
+
       return `🎮 Playing **${activity.name}**`;
 
-    case 1:
+    case ActivityType.Streaming:
+
       return `📺 Streaming **${activity.name}**`;
 
-    case 2:
+    case ActivityType.Listening:
+
+      if (
+        activity.name === 'Spotify'
+      ) {
+
+        return (
+
+          `🎵 Listening to **${activity.details || 'Unknown Song'}**\n` +
+
+          `👤 ${activity.state || 'Unknown Artist'}`
+        );
+      }
+
       return `🎵 Listening to **${activity.name}**`;
 
-    case 3:
+    case ActivityType.Watching:
+
       return `📹 Watching **${activity.name}**`;
 
-    case 4:
+    case ActivityType.Custom:
+
       return activity.state
+
         ? `💭 ${activity.state}`
+
         : 'Custom Status';
 
-    case 5:
+    case ActivityType.Competing:
+
       return `🏆 Competing in **${activity.name}**`;
 
     default:
+
       return activity.name || 'Unknown';
   }
 }
@@ -91,10 +160,12 @@ function getStatus(status) {
 function getMemberType(member, guild) {
 
   if (member.user.bot) {
+
     return '🤖 Bot';
   }
 
   if (member.id === guild.ownerId) {
+
     return '👑 Server Owner';
   }
 
@@ -123,21 +194,25 @@ module.exports = {
 
   cooldown: 3000,
 
-  data: new SlashCommandBuilder()
+  data:
+    new SlashCommandBuilder()
 
-    .setName('userinfo')
+      .setName('userinfo')
 
-    .setDescription(
-      'View information about a user'
-    )
+      .setDescription(
+        'View information about a user'
+      )
 
-    .addUserOption(option =>
-      option
-        .setName('user')
-        .setDescription(
-          'User to view'
-        )
-    ),
+      .addUserOption(option =>
+
+        option
+
+          .setName('user')
+
+          .setDescription(
+            'User to view'
+          )
+      ),
 
   async execute(interaction) {
 
@@ -148,16 +223,20 @@ module.exports = {
       // ========================
       const user =
         interaction.options.getUser('user') ||
+
         interaction.user;
 
       const member =
         await interaction.guild.members
+
           .fetch(user.id)
+
           .catch(() => null);
 
       if (!member) {
 
         return interaction.editReply({
+
           content:
             '❌ User not found in this server.'
         });
@@ -179,7 +258,7 @@ module.exports = {
           )
 
           .map(
-            r => `• ${r}`
+            r => `${r}`
           );
 
       const roleDisplay =
@@ -187,12 +266,12 @@ module.exports = {
 
           ? roles
               .slice(0, 10)
-              .join('\n') +
+              .join(', ') +
 
             (
               roles.length > 10
 
-                ? `\n+${roles.length - 10} more`
+                ? ` +${roles.length - 10} more`
 
                 : ''
             )
@@ -209,15 +288,7 @@ module.exports = {
         flags.toArray();
 
       const badgeDisplay =
-        badges.length
-
-          ? badges
-              .map(
-                b => `• ${formatBadge(b)}`
-              )
-              .join('\n')
-
-          : 'None';
+        getBadges(badges);
 
       // ========================
       // 🎮 ACTIVITY
@@ -271,7 +342,7 @@ module.exports = {
       // 📊 JOIN POSITION
       // ========================
       let joinPosition =
-        'Server too large';
+        'Large Server';
 
       if (
         interaction.guild.memberCount < 1000
@@ -341,6 +412,25 @@ module.exports = {
       }
 
       // ========================
+      // 🔗 PROFILE BUTTONS
+      // ========================
+      const avatar =
+        user.displayAvatarURL({
+
+          dynamic: true,
+
+          size: 1024
+        });
+
+      const banner =
+        user.bannerURL({
+
+          dynamic: true,
+
+          size: 1024
+        });
+
+      // ========================
       // 🎨 EMBED
       // ========================
       const embed =
@@ -352,12 +442,7 @@ module.exports = {
 
           .setColor(color)
 
-          .setThumbnail(
-            user.displayAvatarURL({
-              dynamic: true,
-              size: 512
-            })
-          )
+          .setThumbnail(avatar)
 
           .setDescription(
             `${getMemberType(member, interaction.guild)}`
@@ -366,7 +451,9 @@ module.exports = {
           .addFields(
 
             {
-              name: '🆔 User ID',
+
+              name:
+                '🆔 User ID',
 
               value:
                 `\`${user.id}\``,
@@ -375,7 +462,9 @@ module.exports = {
             },
 
             {
-              name: '🟢 Status',
+
+              name:
+                '🟢 Status',
 
               value:
                 status,
@@ -384,7 +473,9 @@ module.exports = {
             },
 
             {
-              name: '🔇 Timeout',
+
+              name:
+                '🔇 Timeout',
 
               value:
                 timeout,
@@ -393,7 +484,9 @@ module.exports = {
             },
 
             {
-              name: '📅 Account Created',
+
+              name:
+                '📅 Account Created',
 
               value:
                 `<t:${Math.floor(user.createdTimestamp / 1000)}:F>`,
@@ -402,7 +495,9 @@ module.exports = {
             },
 
             {
-              name: '📥 Joined Server',
+
+              name:
+                '📥 Joined Server',
 
               value:
                 `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>`,
@@ -411,7 +506,9 @@ module.exports = {
             },
 
             {
-              name: '📊 Join Position',
+
+              name:
+                '📊 Join Position',
 
               value:
                 joinPosition,
@@ -420,7 +517,9 @@ module.exports = {
             },
 
             {
-              name: '🏆 Highest Role',
+
+              name:
+                '🏆 Highest Role',
 
               value:
                 member.roles.highest.toString(),
@@ -429,7 +528,9 @@ module.exports = {
             },
 
             {
-              name: '🚀 Boosting Since',
+
+              name:
+                '🚀 Boosting Since',
 
               value:
                 boosting,
@@ -438,7 +539,9 @@ module.exports = {
             },
 
             {
-              name: '🎮 Activity',
+
+              name:
+                '🎮 Activity',
 
               value:
                 activity,
@@ -447,7 +550,9 @@ module.exports = {
             },
 
             {
-              name: '🛡 Key Permissions',
+
+              name:
+                '🛡 Key Permissions',
 
               value:
 
@@ -463,7 +568,9 @@ module.exports = {
             },
 
             {
-              name: '🏅 Badges',
+
+              name:
+                '🏅 Badges',
 
               value:
                 badgeDisplay,
@@ -472,7 +579,9 @@ module.exports = {
             },
 
             {
-              name: '🎭 Roles',
+
+              name:
+                '🎭 Roles',
 
               value:
                 roleDisplay,
@@ -481,22 +590,19 @@ module.exports = {
             },
 
             {
-              name: '🔗 Profile Links',
+
+              name:
+                '🔗 Profile Links',
 
               value:
 
-                `[Avatar](${user.displayAvatarURL({
-                  dynamic: true,
-                  size: 1024
-                })})` +
+                `[Avatar](${avatar})` +
 
                 (
-                  user.bannerURL()
 
-                    ? ` • [Banner](${user.bannerURL({
-                        dynamic: true,
-                        size: 1024
-                      })})`
+                  banner
+
+                    ? ` • [Banner](${banner})`
 
                     : ''
                 ),
@@ -505,21 +611,29 @@ module.exports = {
             }
           )
 
-          .setImage(
-            user.bannerURL({
-              dynamic: true,
-              size: 1024
-            })
-          )
-
           .setFooter({
+
             text:
               `Requested by ${interaction.user.tag}`
           })
 
           .setTimestamp();
 
+      // ========================
+      // 🖼 BANNER
+      // ========================
+      if (banner) {
+
+        embed.setImage(
+          banner
+        );
+      }
+
+      // ========================
+      // ✅ RESPONSE
+      // ========================
       return interaction.editReply({
+
         embeds: [embed]
       });
 
@@ -531,11 +645,14 @@ module.exports = {
       );
 
       if (
+
         interaction.deferred ||
+
         interaction.replied
       ) {
 
         return interaction.editReply({
+
           content:
             '❌ Failed to fetch user info.'
         });
