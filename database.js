@@ -274,9 +274,17 @@ function createCasesTable() {
 
       duration INTEGER,
 
-      timestamp INTEGER NOT NULL
+      expiresAt INTEGER,
+
+      channelId TEXT,
+
+      timestamp INTEGER,
+
+      createdAt INTEGER NOT NULL DEFAULT 0
     )
   `);
+
+  migrateCasesTable();
 
   ensureColumn(
     'cases',
@@ -286,9 +294,41 @@ function createCasesTable() {
 
   ensureColumn(
     'cases',
+    'expiresAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'cases',
+    'channelId',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'cases',
     'timestamp',
     'INTEGER'
   );
+
+  ensureColumn(
+    'cases',
+    'createdAt',
+    'INTEGER NOT NULL DEFAULT 0'
+  );
+
+  rawRun(`
+    UPDATE cases
+    SET createdAt = timestamp
+    WHERE (createdAt IS NULL OR createdAt = 0)
+    AND timestamp IS NOT NULL
+  `);
+
+  rawRun(`
+    UPDATE cases
+    SET timestamp = createdAt
+    WHERE (timestamp IS NULL OR timestamp = 0)
+    AND createdAt IS NOT NULL
+  `);
 
   createIndex(
 
@@ -307,9 +347,147 @@ function createCasesTable() {
   );
 }
 
-// ==================================================
-// ⚠️ WARNS
-// ==================================================
+function getColumnDef(
+  columns,
+  name
+) {
+
+  return columns.find(
+    column => column.name === name
+  );
+}
+
+function hasColumn(
+  columns,
+  name
+) {
+
+  return Boolean(
+    getColumnDef(columns, name)
+  );
+}
+
+function caseSelectExpr(
+  columns,
+  name,
+  fallback
+) {
+
+  return hasColumn(columns, name)
+    ? name
+    : fallback;
+}
+
+function migrateCasesTable() {
+
+  const columns =
+    tableColumns('cases');
+
+  const timestampColumn =
+    getColumnDef(
+      columns,
+      'timestamp'
+    );
+
+  const needsMigration =
+    !hasColumn(columns, 'createdAt') ||
+    !hasColumn(columns, 'expiresAt') ||
+    !hasColumn(columns, 'channelId') ||
+    Boolean(timestampColumn?.notnull);
+
+  if (!needsMigration) {
+    return;
+  }
+
+  const backupName =
+    `cases_legacy_${Date.now()}`;
+
+  rawRun(
+    `ALTER TABLE cases RENAME TO ${backupName}`
+  );
+
+  rawRun(`
+    CREATE TABLE cases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guildId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      moderatorId TEXT NOT NULL,
+      action TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      duration INTEGER,
+      expiresAt INTEGER,
+      channelId TEXT,
+      timestamp INTEGER,
+      createdAt INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  const legacyColumns =
+    tableColumns(backupName);
+
+  const timestampExpr =
+    hasColumn(legacyColumns, 'timestamp')
+      ? 'timestamp'
+      : caseSelectExpr(
+          legacyColumns,
+          'createdAt',
+          '?'
+        );
+
+  const createdAtExpr =
+    hasColumn(legacyColumns, 'createdAt')
+      ? 'createdAt'
+      : caseSelectExpr(
+          legacyColumns,
+          'timestamp',
+          '?'
+        );
+
+  const params = [];
+
+  if (timestampExpr === '?') {
+    params.push(Date.now());
+  }
+
+  if (createdAtExpr === '?') {
+    params.push(Date.now());
+  }
+
+  rawRun(
+    `INSERT INTO cases (
+       id,
+       guildId,
+       userId,
+       moderatorId,
+       action,
+       reason,
+       duration,
+       expiresAt,
+       channelId,
+       timestamp,
+       createdAt
+     )
+     SELECT
+       ${caseSelectExpr(legacyColumns, 'id', 'NULL')},
+       ${caseSelectExpr(legacyColumns, 'guildId', "'legacy'")},
+       ${caseSelectExpr(legacyColumns, 'userId', "'unknown'")},
+       ${caseSelectExpr(legacyColumns, 'moderatorId', "'unknown'")},
+       ${caseSelectExpr(legacyColumns, 'action', "'UNKNOWN'")},
+       ${caseSelectExpr(legacyColumns, 'reason', "'No reason provided'")},
+       ${caseSelectExpr(legacyColumns, 'duration', 'NULL')},
+       ${caseSelectExpr(legacyColumns, 'expiresAt', 'NULL')},
+       ${caseSelectExpr(legacyColumns, 'channelId', 'NULL')},
+       ${timestampExpr},
+       COALESCE(${createdAtExpr}, ${timestampExpr}, 0)
+     FROM ${backupName}`,
+    params
+  );
+
+  rawRun(
+    `DROP TABLE ${backupName}`
+  );
+}
+
 function createWarnsTable() {
 
   rawRun(`
@@ -335,9 +513,6 @@ function createWarnsTable() {
   );
 }
 
-// ==================================================
-// 🔇 MUTES
-// ==================================================
 function createMutesTable() {
 
   rawRun(`
@@ -355,9 +530,6 @@ function createMutesTable() {
   `);
 }
 
-// ==================================================
-// ⚙️ GUILD SETTINGS
-// ==================================================
 function createGuildSettingsTable() {
 
   rawRun(`
@@ -388,9 +560,23 @@ function createGuildSettingsTable() {
 
       suggestionLogChannelId TEXT,
 
-      gamblingEnabled INTEGER DEFAULT 1,
+      staffRoleId TEXT,
 
-      robEnabled INTEGER DEFAULT 1
+      adminRoleId TEXT,
+
+      giveawayRoleId TEXT,
+
+      supportCategoryId TEXT,
+
+      applicationCategoryId TEXT,
+
+      giveawayCategoryId TEXT,
+
+      bugCategoryId TEXT,
+
+      linkBlockEnabled INTEGER DEFAULT 0,
+
+      linkBypassRoleId TEXT
     )
   `);
 
@@ -409,8 +595,17 @@ function createGuildSettingsTable() {
     ['ticketLogChannelId', 'TEXT'],
     ['suggestionLogChannelId', 'TEXT'],
 
-    ['gamblingEnabled', 'INTEGER DEFAULT 1'],
-    ['robEnabled', 'INTEGER DEFAULT 1']
+    ['staffRoleId', 'TEXT'],
+    ['adminRoleId', 'TEXT'],
+    ['giveawayRoleId', 'TEXT'],
+
+    ['supportCategoryId', 'TEXT'],
+    ['applicationCategoryId', 'TEXT'],
+    ['giveawayCategoryId', 'TEXT'],
+    ['bugCategoryId', 'TEXT'],
+
+    ['linkBlockEnabled', 'INTEGER DEFAULT 0'],
+    ['linkBypassRoleId', 'TEXT']
   ];
 
   for (
@@ -689,9 +884,6 @@ function createCooldownTable() {
   );
 }
 
-// ==================================================
-// 📱 SOCIAL
-// ==================================================
 function createSocialTables() {
 
   rawRun(`
@@ -702,16 +894,110 @@ function createSocialTables() {
 
       platform TEXT NOT NULL,
 
-      channelId TEXT NOT NULL,
+      creatorId TEXT NOT NULL,
+
+      creatorName TEXT NOT NULL,
+
+      contentType TEXT NOT NULL,
 
       targetChannelId TEXT NOT NULL,
 
+      pingRoleId TEXT,
+
       lastItemId TEXT,
 
-      PRIMARY KEY (guildId, platform, channelId)
+      PRIMARY KEY (
+        guildId,
+        platform,
+        creatorId,
+        contentType
+      )
     )
   `);
 
+ensureColumn(
+  'social_channels',
+  'creatorId',
+  'TEXT'
+);
+
+ensureColumn(
+  'social_channels',
+  'creatorName',
+  'TEXT'
+);
+
+ensureColumn(
+  'social_channels',
+  'contentType',
+  'TEXT'
+);
+
+ensureColumn(
+  'social_channels',
+  'pingRoleId',
+  'TEXT'
+);
+
+ensureColumn(
+  'social_channels',
+  'lastMessageId',
+  'TEXT'
+);
+
+ensureColumn(
+  'social_channels',
+  'lastLiveVideoId',
+  'TEXT'
+);
+
+ensureColumn(
+  'social_channels',
+  'lastLiveMessageId',
+  'TEXT'
+);
+
+ensureColumn(
+  'social_channels',
+  'peakLiveViewers',
+  'INTEGER DEFAULT 0'
+);
+
+ensureColumn(
+  'social_channels',
+  'streamStartTime',
+  'TEXT'
+);
+
+ensureColumn(
+  'social_channels',
+  'lastTwitchStreamId',
+  'TEXT'
+);
+
+ensureColumn(
+  'social_channels',
+  'peakTwitchViewers',
+  'INTEGER DEFAULT 0'
+);
+
+ensureColumn(
+  'social_channels',
+  'twitchStartTime',
+  'TEXT'
+);
+
+ensureColumn(
+  'social_channels',
+  'initialized',
+  'INTEGER DEFAULT 0'
+);
+
+ensureColumn(
+  'social_channels',
+  'addedAt',
+  'INTEGER DEFAULT 0'
+);
   rawRun(`
 
     CREATE TABLE IF NOT EXISTS social_links (
@@ -727,9 +1013,102 @@ function createSocialTables() {
   `);
 }
 
-// ==================================================
-// 📊 POLLS
-// ==================================================
+function createLevelingTables() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS leveling_users (
+
+      guildId TEXT NOT NULL,
+
+      userId TEXT NOT NULL,
+
+      xp INTEGER DEFAULT 0,
+
+      level INTEGER DEFAULT 0,
+
+      messages INTEGER DEFAULT 0,
+
+      lastXpTime INTEGER DEFAULT 0,
+
+      PRIMARY KEY (
+        guildId,
+        userId
+      )
+    )
+  `);
+
+  createIndex(
+
+    'idx_leveling_users',
+
+    `CREATE INDEX IF NOT EXISTS idx_leveling_users
+     ON leveling_users(guildId, xp)`
+  );
+
+rawRun(`
+
+  CREATE TABLE IF NOT EXISTS leveling_config (
+
+    guildId TEXT PRIMARY KEY,
+
+    enabled INTEGER DEFAULT 1,
+
+    xpMin INTEGER DEFAULT 15,
+
+    xpMax INTEGER DEFAULT 25,
+
+    cooldown INTEGER DEFAULT 60,
+
+    levelChannelId TEXT,
+
+    levelMessage TEXT,
+
+    permissionLevel TEXT DEFAULT 'ManageGuild',
+
+    ignoredChannels TEXT,
+
+    ignoredRoles TEXT
+  )
+`);
+
+ensureColumn(
+  'leveling_config',
+  'permissionLevel',
+  "TEXT DEFAULT 'ManageGuild'"
+);
+
+ensureColumn(
+  'leveling_config',
+  'ignoredChannels',
+  'TEXT'
+);
+
+ensureColumn(
+  'leveling_config',
+  'ignoredRoles',
+  'TEXT'
+);
+
+rawRun(`
+
+  CREATE TABLE IF NOT EXISTS leveling_rewards (
+
+    guildId TEXT NOT NULL,
+
+    level INTEGER NOT NULL,
+
+    roleId TEXT NOT NULL,
+
+    PRIMARY KEY (
+      guildId,
+      level
+    )
+  )
+`);
+
+}
+
 function createPollTables() {
 
   rawRun(`
@@ -769,11 +1148,14 @@ function createPollTables() {
       PRIMARY KEY (messageId, userId)
     )
   `);
+
+  createIndex(
+    'idx_poll_votes',
+    `CREATE INDEX IF NOT EXISTS idx_poll_votes
+     ON poll_votes(messageId)`
+  );
 }
 
-// ==================================================
-// 📨 INVITES
-// ==================================================
 function createInviteTables() {
 
   rawRun(`
@@ -806,7 +1188,7 @@ function createInviteTables() {
 
       guildId TEXT NOT NULL,
 
-      userId TEXT NOT NULL PRIMARY KEY,
+      userId TEXT NOT NULL,
 
       inviterId TEXT,
 
@@ -820,7 +1202,9 @@ function createInviteTables() {
 
       fake INTEGER DEFAULT 0,
 
-      bonus INTEGER DEFAULT 0
+      bonus INTEGER DEFAULT 0,
+
+      PRIMARY KEY (guildId, userId)
     )
   `);
 
@@ -869,9 +1253,6 @@ function createInviteTables() {
   );
 }
 
-// ==================================================
-// 🎉 GIVEAWAYS
-// ==================================================
 function createGiveawayTables() {
 
   rawRun(`
@@ -1006,7 +1387,10 @@ function createGiveawayTables() {
 
       rerolled INTEGER DEFAULT 0,
 
-      wonAt INTEGER NOT NULL
+      wonAt INTEGER NOT NULL,
+
+      PRIMARY KEY (messageId, userId)
+
     )
   `);
 
@@ -1045,9 +1429,6 @@ function createGiveawayTables() {
   );
 }
 
-// ==================================================
-// 🚀 INIT DATABASE
-// ==================================================
 function initDatabase() {
 
   createCasesTable();
@@ -1076,6 +1457,8 @@ function initDatabase() {
 
   createSocialTables();
 
+  createLevelingTables();
+
   createPollTables();
 
   createInviteTables();
@@ -1089,17 +1472,11 @@ function initDatabase() {
 
 initDatabase();
 
-// ==================================================
-// 🧹 CLEANUP TASK
-// ==================================================
 const cleanupInterval =
   setInterval(() => {
 
     try {
 
-      // ==========================================
-      // 📜 AUDIT LOGS
-      // ==========================================
       const ninetyDaysAgo =
         Date.now() -
 
@@ -1113,9 +1490,6 @@ const cleanupInterval =
         [ninetyDaysAgo]
       );
 
-      // ==========================================
-      // ⏱ COOLDOWNS
-      // ==========================================
       const sevenDaysAgo =
         Date.now() -
 
@@ -1143,14 +1517,8 @@ const cleanupInterval =
 
   }, 60 * 60 * 1000);
 
-// ==================================================
-// 🚫 DO NOT BLOCK EXIT
-// ==================================================
 cleanupInterval.unref?.();
 
-// ==================================================
-// 📦 EXPORTS
-// ==================================================
 module.exports = {
 
   db,

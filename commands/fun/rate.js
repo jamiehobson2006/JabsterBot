@@ -1,47 +1,119 @@
 const {
-
-  EmbedBuilder,
-
-  SlashCommandBuilder
-
+    EmbedBuilder,
+    SlashCommandBuilder
 } = require('discord.js');
+
+// ==================================================
+// 🤔 LOADING MESSAGES
+// ==================================================
+const loadingMessages = [
+    '🧠 Consulting experts...',
+    '📊 Running calculations...',
+    '🔬 Performing science...',
+    '⚙️ Calibrating rating machine...',
+    '📈 Analyzing data...',
+    '🤖 Processing opinion...'
+];
+
+// ==================================================
+// 💬 VERDICTS
+// ==================================================
+const verdictComments = {
+    perfect: [
+        'Absolute perfection.',
+        'The rating machine is impressed.',
+        'Peak performance detected.'
+    ],
+
+    legendary: [
+        'Exceptional quality.',
+        'Among the best.',
+        'Very hard to beat.'
+    ],
+
+    amazing: [
+        'Highly recommended.',
+        'A strong result.',
+        'Definitely above average.'
+    ],
+
+    average: [
+        'Nothing special.',
+        'Perfectly acceptable.',
+        'Could be better.'
+    ],
+
+    bad: [
+        'Not looking great.',
+        'Questionable quality.',
+        'Needs improvement.'
+    ],
+
+    terrible: [
+        'The machine is disappointed.',
+        'A disaster.',
+        'Please reconsider.'
+    ]
+};
 
 // ==================================================
 // 🎯 REACTIONS
 // ==================================================
 function getReaction(score) {
 
-  if (score === 100) {
+    if (score === 100) return '👑 PERFECT';
+    if (score >= 95) return '🌟 GOD TIER';
+    if (score >= 90) return '🔥 Legendary';
+    if (score >= 80) return '💎 Amazing';
+    if (score >= 70) return '😎 Great';
+    if (score >= 60) return '👍 Pretty Good';
+    if (score >= 50) return '🙂 Decent';
+    if (score >= 40) return '😐 Average';
+    if (score >= 30) return '🤨 Questionable';
+    if (score >= 20) return '💀 Rough';
+    if (score >= 10) return '🤮 Awful';
 
-    return '👑 PERFECT';
-  }
+    return '🚮 Terrible';
+}
 
-  if (score >= 90) {
+// ==================================================
+// 💬 COMMENT
+// ==================================================
+function getComment(score) {
 
-    return '🔥 Legendary';
-  }
+    let pool;
 
-  if (score >= 75) {
+    if (score === 100) {
 
-    return '💎 Amazing';
-  }
+        pool = verdictComments.perfect;
 
-  if (score >= 60) {
+    } else if (score >= 90) {
 
-    return '👍 Pretty Good';
-  }
+        pool = verdictComments.legendary;
 
-  if (score >= 40) {
+    } else if (score >= 75) {
 
-    return '😐 Average';
-  }
+        pool = verdictComments.amazing;
 
-  if (score >= 20) {
+    } else if (score >= 40) {
 
-    return '💀 Rough';
-  }
+        pool = verdictComments.average;
 
-  return '🚮 Terrible';
+    } else if (score >= 20) {
+
+        pool = verdictComments.bad;
+
+    } else {
+
+        pool = verdictComments.terrible;
+    }
+
+    return pool[
+        Math.floor(
+            Math.random() *
+            pool.length
+        )
+    ];
 }
 
 // ==================================================
@@ -49,198 +121,175 @@ function getReaction(score) {
 // ==================================================
 function getColor(score) {
 
-  if (score >= 75) {
+    if (score >= 75) {
+        return 0x57F287;
+    }
 
-    return 0x57F287;
-  }
+    if (score >= 40) {
+        return 0xFEE75C;
+    }
 
-  if (score >= 40) {
-
-    return 0xFEE75C;
-  }
-
-  return 0xED4245;
+    return 0xED4245;
 }
 
 // ==================================================
-// 🎲 SCORE GENERATOR
+// 🎲 SCORE
 // ==================================================
 function generateScore() {
 
-  // ==============================================
-  // 🌟 RARE PERFECT
-  // ==============================================
-  if (Math.random() < 0.01) {
+    if (Math.random() < 0.01) {
+        return 100;
+    }
 
-    return 100;
-  }
+    if (Math.random() < 0.01) {
+        return 0;
+    }
 
-  // ==============================================
-  // 💀 RARE ZERO
-  // ==============================================
-  if (Math.random() < 0.01) {
-
-    return 0;
-  }
-
-  // ==============================================
-  // 🎯 WEIGHTED SCORE
-  // ==============================================
-  return Math.floor(
-
-    (Math.random() + Math.random()) *
-
-    50
-  );
+    return Math.floor(
+        (Math.random() + Math.random()) * 50
+    );
 }
 
 module.exports = {
 
-  cooldown: 2500,
+    cooldown: 2500,
 
-  data:
-    new SlashCommandBuilder()
+    data:
+        new SlashCommandBuilder()
 
-      .setName('rate')
+            .setName('rate')
 
-      .setDescription(
-        'Rate anything out of 100'
-      )
+            .setDescription(
+                'Rate anything out of 100'
+            )
 
-      .addStringOption(option =>
+            .addStringOption(option =>
 
-        option
+                option
 
-          .setName('thing')
+                    .setName('thing')
 
-          .setDescription(
-            'What do you want rated?'
-          )
+                    .setDescription(
+                        'What do you want rated?'
+                    )
 
-          .setRequired(true)
+                    .setRequired(true)
 
-          .setMaxLength(100)
-      ),
+                    .setMaxLength(100)
+            ),
 
-  async execute(interaction) {
+    async execute(interaction) {
 
-    try {
+        try {
 
-      // ==========================================
-      // 📥 INPUT
-      // ==========================================
-      const thing =
-        interaction.options
+            const thing =
+                interaction.options
+                    .getString(
+                        'thing',
+                        true
+                    )
+                    .replace(
+                        /@/g,
+                        '@\u200b'
+                    );
 
-          .getString(
-            'thing',
-            true
-          )
+            await interaction.editReply({
 
-          .replace(/@/g, '@\u200b');
+                content:
+                    loadingMessages[
+                        Math.floor(
+                            Math.random() *
+                            loadingMessages.length
+                        )
+                    ]
+            });
 
-      // ==========================================
-      // ⚡ UX
-      // ==========================================
-      await interaction.editReply({
+            await new Promise(resolve =>
+                setTimeout(resolve, 1000)
+            );
 
-        content:
-          '🤔 Calculating rating...'
-      });
+            const score =
+                generateScore();
 
-      await new Promise(res =>
-        setTimeout(res, 900)
-      );
+            const reaction =
+                getReaction(score);
 
-      // ==========================================
-      // 🎲 SCORE
-      // ==========================================
-      const score =
-        generateScore();
+            const comment =
+                getComment(score);
 
-      const reaction =
-        getReaction(score);
+            const color =
+                getColor(score);
 
-      const color =
-        getColor(score);
+            const embed =
+                new EmbedBuilder()
 
-      // ==========================================
-      // 🎨 EMBED
-      // ==========================================
-      const embed =
-        new EmbedBuilder()
+                    .setColor(color)
 
-          .setColor(color)
+                    .setTitle(
+                        '⭐ Rating Machine'
+                    )
 
-          .setTitle(
-            '⭐ Rating Machine'
-          )
+                    .setDescription(
 
-          .setDescription(
+                        `## ${thing}\n\n` +
 
-            `## ${thing}\n\n` +
+                        '━━━━━━━━━━━━━━\n\n' +
 
-            `### 📊 ${score}/100\n` +
+                        `### 📊 Score\n` +
+                        `${score}/100\n\n` +
 
-            `${reaction}`
-          )
+                        `### 🏆 Verdict\n` +
+                        `${reaction}\n\n` +
 
-          .addFields({
+                        `*${comment}*`
+                    )
 
-            name: '📈 Verdict',
+                    .addFields({
+                        name: '📈 Rating',
+                        value: reaction,
+                        inline: true
+                    })
 
-            value:
-              reaction,
+                    .setFooter({
+                        text:
+                            'Totally scientific rating system.'
+                    })
 
-            inline: true
-          })
+                    .setTimestamp();
 
-          .setFooter({
+            return interaction.editReply({
 
-            text:
-              'Totally scientific rating system.'
-          })
+                content: '',
 
-          .setTimestamp();
+                embeds: [embed]
+            });
 
-      // ==========================================
-      // 📤 RESPONSE
-      // ==========================================
-      return interaction.editReply({
+        } catch (err) {
 
-        content: '',
+            console.error(
+                'Rate Command Error:',
+                err
+            );
 
-        embeds: [embed]
-      });
+            if (
+                interaction.deferred ||
+                interaction.replied
+            ) {
 
-    } catch (err) {
+                return interaction.editReply({
 
-      console.error(
-        'Rate Command Error:',
-        err
-      );
+                    content:
+                        '❌ Failed to rate.'
+                });
+            }
 
-      if (
+            return interaction.reply({
 
-        interaction.deferred ||
+                content:
+                    '❌ Failed to rate.',
 
-        interaction.replied
-      ) {
-
-        return interaction.editReply({
-
-          content:
-            '❌ Failed to rate.'
-        });
-      }
-
-      return interaction.reply({
-
-        content:
-          '❌ Failed to rate.',
-
-        ephemeral: true
-      });
+                ephemeral: true
+            });
+        }
     }
-  }
 };

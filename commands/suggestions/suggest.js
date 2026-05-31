@@ -246,13 +246,9 @@ module.exports = {
             interaction.user.id
           ]
         );
-
-      const suggestionNumber =
-        (stats?.total || 0) + 1;
-
-      // ========================
-      // 🎨 EMBED
-      // ========================
+        
+const suggestionNumber =
+  msg.id;
       const embed =
         new EmbedBuilder()
 
@@ -409,72 +405,6 @@ module.exports = {
         ]
       );
 
-      // ========================
-      // ⏳ UPDATE VOTES
-      // ========================
-      setTimeout(async () => {
-
-        try {
-
-          const fetched =
-            await msg.fetch();
-
-          const upvote =
-            fetched.reactions.cache.get('✅');
-
-          const downvote =
-            fetched.reactions.cache.get('❌');
-
-          const upvotes =
-            Math.max(
-
-              (upvote?.count || 1) - 1,
-
-              0
-            );
-
-          const downvotes =
-            Math.max(
-
-              (downvote?.count || 1) - 1,
-
-              0
-            );
-
-          const updatedEmbed =
-            EmbedBuilder.from(
-
-              fetched.embeds[0]
-            );
-
-          updatedEmbed.data.fields =
-            updatedEmbed.data.fields.map(field => {
-
-              if (
-
-                field.name ===
-                '👍 Votes'
-              ) {
-
-                field.value =
-
-                  `✅ ${upvotes} • ❌ ${downvotes}`;
-              }
-
-              return field;
-            });
-
-          await fetched.edit({
-
-            embeds: [updatedEmbed]
-          });
-
-        } catch {}
-      }, 5000);
-
-      // ========================
-      // ✅ RESPONSE
-      // ========================
       await interaction.editReply({
 
         embeds: [
@@ -526,22 +456,6 @@ module.exports = {
             .setTimestamp()
         ]
       });
-
-      // ========================
-      // 🗑 AUTO DELETE
-      // ========================
-      setTimeout(() => {
-
-        if (!interaction.ephemeral) {
-
-          interaction
-
-            .deleteReply()
-
-            .catch(() => {});
-        }
-
-      }, 4000);
 
     } catch (err) {
 

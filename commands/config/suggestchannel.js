@@ -1,350 +1,352 @@
 const {
-  PermissionsBitField,
-  ChannelType,
-  EmbedBuilder,
-  SlashCommandBuilder
+PermissionsBitField,
+ChannelType,
+EmbedBuilder,
+SlashCommandBuilder
 } = require('discord.js');
 
 const {
-  run
+run
 } = require('../../database');
 
 module.exports = {
 
-  cooldown: 5000,
+cooldown: 5000,
 
-  data: new SlashCommandBuilder()
+data: new SlashCommandBuilder()
+.setName('suggestchannel')
 
-    .setName('suggestchannel')
+.setDescription(
+  'Set the suggestion channel for this server'
+)
+
+.addChannelOption(option =>
+
+  option
+
+    .setName('channel')
 
     .setDescription(
-      'Set the suggestion channel for this server'
+      'The channel where suggestions will be sent'
     )
 
-    .addChannelOption(option =>
+    .addChannelTypes(
 
-      option
+      ChannelType.GuildText,
 
-        .setName('channel')
+      ChannelType.GuildAnnouncement
+    )
 
-        .setDescription(
-          'The channel where suggestions will be sent'
-        )
+    .setRequired(true)
+),
 
-        .addChannelTypes(
+async execute(interaction) {
+  try {
 
-          ChannelType.GuildText,
+  // ==========================================
+  // 🔐 PERMISSION CHECK
+  // ==========================================
+  if (
 
-          ChannelType.GuildAnnouncement
-        )
+    !interaction.memberPermissions.has(
 
-        .setRequired(true)
-    ),
+      PermissionsBitField.Flags.ManageGuild
+    )
+  ) {
 
-  async execute(interaction) {
+    return interaction.editReply({
 
-    try {
+      content:
+        '❌ You need **Manage Server** permission.'
+    });
+  }
 
-      // ==========================================
-      // 🔐 PERMISSION CHECK
-      // ==========================================
-      if (
+  // ==========================================
+  // 📺 CHANNEL
+  // ==========================================
+  const channel =
+    interaction.options.getChannel(
+      'channel',
+      true
+    );
 
-        !interaction.memberPermissions.has(
+  const botMember =
+    interaction.guild.members.me;
 
-          PermissionsBitField.Flags.ManageGuild
-        )
-      ) {
+  // ==========================================
+  // 🤖 BOT PERMISSIONS
+  // ==========================================
+  const perms =
+    channel.permissionsFor(
+      botMember
+    );
 
-        return interaction.editReply({
+  const missing = [];
 
-          content:
-            '❌ You need **Manage Server** permission.'
-        });
-      }
+  if (
 
-      // ==========================================
-      // 📺 CHANNEL
-      // ==========================================
-      const channel =
-        interaction.options.getChannel(
-          'channel',
-          true
-        );
+    !perms?.has(
+      PermissionsBitField.Flags.ViewChannel
+    )
+  ) {
 
-      const botMember =
-        interaction.guild.members.me;
+    missing.push(
+      'View Channel'
+    );
+  }
 
-      // ==========================================
-      // 🛡 CHANNEL VALIDATION
-      // ==========================================
-      if (
+  if (
 
-        ![
+    !perms?.has(
+      PermissionsBitField.Flags.SendMessages
+    )
+  ) {
 
-          ChannelType.GuildText,
+    missing.push(
+      'Send Messages'
+    );
+  }
 
-          ChannelType.GuildAnnouncement
+  if (
 
-        ].includes(channel.type)
-      ) {
+    !perms?.has(
+      PermissionsBitField.Flags.EmbedLinks
+    )
+  ) {
 
-        return interaction.editReply({
+    missing.push(
+      'Embed Links'
+    );
+  }
 
-          content:
-            '❌ Please select a valid text channel.'
-        });
-      }
+  if (
 
-      // ==========================================
-      // 🤖 BOT PERMISSIONS
-      // ==========================================
-      const perms =
-        channel.permissionsFor(
-          botMember
-        );
+    !perms?.has(
+      PermissionsBitField.Flags.AddReactions
+    )
+  ) {
 
-      const missing = [];
+    missing.push(
+      'Add Reactions'
+    );
+  }
 
-      if (
+  if (
 
-        !perms?.has(
-          PermissionsBitField.Flags.ViewChannel
-        )
-      ) {
+    !perms?.has(
+      PermissionsBitField.Flags.SendMessagesInThreads
+    )
+  ) {
 
-        missing.push(
-          'View Channel'
-        );
-      }
+    missing.push(
+      'Send Messages In Threads'
+    );
+  }
 
-      if (
+  if (
 
-        !perms?.has(
-          PermissionsBitField.Flags.SendMessages
-        )
-      ) {
+    !perms?.has(
+      PermissionsBitField.Flags.ReadMessageHistory
+    )
+  ) {
 
-        missing.push(
-          'Send Messages'
-        );
-      }
+    missing.push(
+      'Read Message History'
+    );
+  }
 
-      if (
+  if (missing.length) {
 
-        !perms?.has(
-          PermissionsBitField.Flags.EmbedLinks
-        )
-      ) {
+    return interaction.editReply({
 
-        missing.push(
-          'Embed Links'
-        );
-      }
+      content:
 
-      if (
+        `❌ Missing permissions in ${channel}:\n\n` +
 
-        !perms?.has(
-          PermissionsBitField.Flags.AddReactions
-        )
-      ) {
+        `• ${missing.join('\n• ')}`
+    });
+  }
 
-        missing.push(
-          'Add Reactions'
-        );
-      }
+  // ==========================================
+  // 💾 SAVE
+  // ==========================================
+  run(
 
-      if (
+    `INSERT INTO guild_settings
 
-        !perms?.has(
-          PermissionsBitField.Flags.SendMessagesInThreads
-        )
-      ) {
+    (
 
-        missing.push(
-          'Send Messages In Threads'
-        );
-      }
+      guildId,
+      suggestionChannelId
 
-      if (missing.length) {
+    )
 
-        return interaction.editReply({
+    VALUES (?, ?)
 
-          content:
+    ON CONFLICT(guildId)
 
-            `❌ Missing permissions in ${channel}:\n\n` +
+    DO UPDATE SET
 
-            `• ${missing.join('\n• ')}`
-        });
-      }
+    suggestionChannelId =
+    excluded.suggestionChannelId`,
 
-      // ==========================================
-      // 💾 SAVE
-      // ==========================================
-      run(
+    [
 
-        `INSERT INTO guild_settings
+      interaction.guild.id,
 
-        (
+      channel.id
+    ]
+  );
 
-          guildId,
-          suggestionChannelId
+  // ==========================================
+  // 📩 TEST MESSAGE
+  // ==========================================
+  try {
 
-        )
+    await channel.send({
 
-        VALUES (?, ?)
+      embeds: [
 
-        ON CONFLICT(guildId)
-
-        DO UPDATE SET
-
-        suggestionChannelId =
-        excluded.suggestionChannelId`,
-
-        [
-
-          interaction.guild.id,
-
-          channel.id
-        ]
-      );
-
-      // ==========================================
-      // 📩 TEST MESSAGE
-      // ==========================================
-      await channel.send({
-
-        embeds: [
-
-          new EmbedBuilder()
-
-            .setColor(0x5865F2)
-
-            .setTitle(
-              '💡 Suggestions Enabled'
-            )
-
-            .setDescription(
-
-              'This channel is now configured for suggestions.\n\n' +
-
-              'Users can now submit:\n' +
-
-              '• Suggestions\n' +
-              '• Community ideas\n' +
-              '• Feature requests\n' +
-              '• Feedback'
-            )
-
-            .setFooter({
-
-              text:
-                `Configured by ${interaction.user.tag}`
-            })
-
-            .setTimestamp()
-        ]
-
-      }).catch(() => {});
-
-      // ==========================================
-      // 🎨 RESPONSE EMBED
-      // ==========================================
-      const embed =
         new EmbedBuilder()
 
-          .setColor(0x57F287)
+          .setColor(0x5865F2)
 
           .setTitle(
-            '💡 Suggestion Channel Configured'
+            '💡 Suggestions Enabled'
           )
 
           .setDescription(
 
-            `Suggestions will now be sent in ${channel}`
-          )
+            'This channel is now configured for suggestions.\n\n' +
 
-          .addFields(
+            'Users can now submit:\n\n' +
 
-            {
-
-              name: 'Enabled Features',
-
-              value:
-
-                '• Suggestion submissions\n' +
-                '• Voting reactions\n' +
-                '• Community feedback\n' +
-                '• Suggestion analytics',
-
-              inline: false
-            },
-
-            {
-
-              name: 'Configured By',
-
-              value:
-                `${interaction.user}`,
-
-              inline: true
-            },
-
-            {
-
-              name: 'Channel',
-
-              value:
-                `${channel}`,
-
-              inline: true
-            }
+            '• Suggestions\n' +
+            '• Community ideas\n' +
+            '• Feature requests\n' +
+            '• Feedback\n' +
+            '• Discussion threads'
           )
 
           .setFooter({
 
             text:
-              `Guild ID: ${interaction.guild.id}`
+              `Configured by ${interaction.user.tag}`
           })
 
-          .setTimestamp();
+          .setTimestamp()
+      ]
 
-      // ==========================================
-      // 📤 RESPONSE
-      // ==========================================
-      return interaction.editReply({
+    });
 
-        embeds: [embed]
-      });
+  } catch (messageError) {
 
-    } catch (err) {
-
-      console.error(
-        'SuggestChannel Error:',
-        err
-      );
-
-      if (
-
-        interaction.deferred ||
-
-        interaction.replied
-      ) {
-
-        return interaction.editReply({
-
-          content:
-            '❌ Failed to set suggestion channel.'
-        });
-      }
-
-      return interaction.reply({
-
-        content:
-          '❌ Failed to set suggestion channel.',
-
-        ephemeral: true
-      });
-    }
+    console.warn(
+      'Failed to send suggestion setup message:',
+      messageError
+    );
   }
+
+  // ==========================================
+  // 🎨 RESPONSE EMBED
+  // ==========================================
+  const embed =
+    new EmbedBuilder()
+
+      .setColor(0x57F287)
+
+      .setTitle(
+        '💡 Suggestion Channel Configured'
+      )
+
+      .setDescription(
+
+        `Suggestions will now be sent in ${channel}`
+      )
+
+      .addFields(
+
+        {
+
+          name: 'Enabled Features',
+
+          value:
+
+            '• Suggestion submissions\n' +
+            '• Voting reactions\n' +
+            '• Community feedback\n' +
+            '• Suggestion analytics\n' +
+            '• Discussion threads',
+
+          inline: false
+        },
+
+        {
+
+          name: 'Configured By',
+
+          value:
+            `${interaction.user}`,
+
+          inline: true
+        },
+
+        {
+
+          name: 'Channel',
+
+          value:
+            `${channel}`,
+
+          inline: true
+        }
+      )
+
+      .setFooter({
+
+        text:
+          `Guild ID: ${interaction.guild.id}`
+      })
+
+      .setTimestamp();
+
+  // ==========================================
+  // 📤 RESPONSE
+  // ==========================================
+  return interaction.editReply({
+
+    embeds: [embed]
+  });
+
+} catch (err) {
+
+  console.error(
+    'SuggestChannel Error:',
+    err
+  );
+
+  if (
+
+    interaction.deferred ||
+
+    interaction.replied
+  ) {
+
+    return interaction.editReply({
+
+      content:
+        '❌ Failed to set suggestion channel.'
+    });
+  }
+
+  return interaction.reply({
+
+    content:
+      '❌ Failed to set suggestion channel.',
+
+    ephemeral: true
+  });
+}
+
+}
 };

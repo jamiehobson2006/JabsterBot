@@ -77,18 +77,6 @@ module.exports = {
         );
 
       // ==========================================
-      // 🛡 VALIDATE CHANNEL
-      // ==========================================
-      if (!channel.isTextBased()) {
-
-        return interaction.editReply({
-
-          content:
-            '❌ Invalid text channel.'
-        });
-      }
-
-      // ==========================================
       // 🤖 BOT PERMISSIONS
       // ==========================================
       const perms =
@@ -106,7 +94,9 @@ module.exports = {
 
           PermissionsBitField.Flags.AttachFiles,
 
-          PermissionsBitField.Flags.EmbedLinks
+          PermissionsBitField.Flags.EmbedLinks,
+
+          PermissionsBitField.Flags.ReadMessageHistory
         ])
       ) {
 
@@ -114,7 +104,7 @@ module.exports = {
 
           content:
 
-            '❌ I am missing permissions in that channel.'
+            '❌ I am missing required permissions in that channel.'
         });
       }
 
@@ -182,6 +172,16 @@ module.exports = {
 
             {
 
+              name: 'Important',
+
+              value:
+                'Ensure this channel is only visible to staff members.',
+
+              inline: false
+            },
+
+            {
+
               name: 'Configured By',
 
               value:
@@ -209,9 +209,6 @@ module.exports = {
 
           .setTimestamp();
 
-      // ==========================================
-      // 📤 RESPONSE
-      // ==========================================
       await interaction.editReply({
 
         embeds: [embed]
@@ -220,38 +217,48 @@ module.exports = {
       // ==========================================
       // 🧪 TEST MESSAGE
       // ==========================================
-      await channel.send({
+      try {
 
-        embeds: [
+        await channel.send({
 
-          new EmbedBuilder()
+          embeds: [
 
-            .setColor(0x5865F2)
+            new EmbedBuilder()
 
-            .setTitle(
-              '📜 Transcript Logging Enabled'
-            )
+              .setColor(0x5865F2)
 
-            .setDescription(
+              .setTitle(
+                '📜 Transcript Logging Enabled'
+              )
 
-              'This channel will now receive:\n\n' +
+              .setDescription(
 
-              '• Ticket transcripts\n' +
-              '• Ticket close logs\n' +
-              '• Staff close tracking\n' +
-              '• Ticket analytics\n' +
-              '• Transcript files'
-            )
+                'This channel will now receive:\n\n' +
 
-            .setFooter({
+                '• Ticket transcripts\n' +
+                '• Ticket close logs\n' +
+                '• Staff close tracking\n' +
+                '• Ticket analytics\n' +
+                '• Transcript files'
+              )
 
-              text:
-                `Configured by ${interaction.user.tag}`
-            })
+              .setFooter({
 
-            .setTimestamp()
-        ]
-      });
+                text:
+                  `Configured by ${interaction.user.tag}`
+              })
+
+              .setTimestamp()
+          ]
+        });
+
+      } catch (messageError) {
+
+        console.warn(
+          'Failed to send transcript setup message:',
+          messageError
+        );
+      }
 
     } catch (err) {
 

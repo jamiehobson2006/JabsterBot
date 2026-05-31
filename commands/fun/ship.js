@@ -1,52 +1,64 @@
 const {
-
-  EmbedBuilder,
-
-  SlashCommandBuilder
-
+    EmbedBuilder,
+    SlashCommandBuilder
 } = require('discord.js');
+
+// ==================================================
+// 💘 LOADING MESSAGES
+// ==================================================
+const loadingMessages = [
+    '💘 Consulting Cupid...',
+    '🏹 Firing love arrows...',
+    '❤️ Reading relationship charts...',
+    '✨ Checking destiny...',
+    '🔮 Analyzing romantic energy...',
+    '💞 Calculating compatibility...'
+];
+
+// ==================================================
+// 💬 SPECIAL MESSAGES
+// ==================================================
+const soulmateMessages = [
+    '✨ The stars have aligned.',
+    '👑 A legendary pairing has been discovered.',
+    '🌌 Fate itself approves.',
+    '💘 Written in the stars.',
+    '❤️ This pairing is magical.'
+];
 
 // ==================================================
 // 💘 COMPATIBILITY
 // ==================================================
 function getCompatibility(id1, id2) {
 
-  const [a, b] =
-    [id1, id2].sort();
+    const [a, b] =
+        [id1, id2].sort();
 
-  const combined =
-    a + b;
+    const combined =
+        a + b;
 
-  let hash = 0;
+    let hash = 0;
 
-  for (
-    let i = 0;
+    for (
+        let i = 0;
+        i < combined.length;
+        i++
+    ) {
 
-    i < combined.length;
+        hash =
+            combined.charCodeAt(i) +
+            ((hash << 5) - hash);
+    }
 
-    i++
-  ) {
+    const raw =
+        Math.abs(hash % 101);
 
-    hash =
-
-      combined.charCodeAt(i) +
-
-      ((hash << 5) - hash);
-  }
-
-  const raw =
-    Math.abs(hash % 101);
-
-  // ==============================================
-  // 🎯 WEIGHTED
-  // ==============================================
-  return Math.floor(
-
-    Math.pow(
-      raw / 100,
-      0.75
-    ) * 100
-  );
+    return Math.floor(
+        Math.pow(
+            raw / 100,
+            0.75
+        ) * 100
+    );
 }
 
 // ==================================================
@@ -54,86 +66,58 @@ function getCompatibility(id1, id2) {
 // ==================================================
 function getTier(percent) {
 
-  if (percent === 100) {
+    if (percent === 100) {
+
+        return {
+            text: '👑 Destined Soulmates',
+            color: 0xFF4D6D
+        };
+    }
+
+    if (percent >= 95) {
+
+        return {
+            text: '💞 Soulmates!',
+            color: 0xED4245
+        };
+    }
+
+    if (percent >= 75) {
+
+        return {
+            text: '💖 Perfect Match!',
+            color: 0xFF73FA
+        };
+    }
+
+    if (percent >= 60) {
+
+        return {
+            text: '💕 Strong Connection!',
+            color: 0xF47FFF
+        };
+    }
+
+    if (percent >= 40) {
+
+        return {
+            text: '😐 Could Work...',
+            color: 0x95A5A6
+        };
+    }
+
+    if (percent >= 20) {
+
+        return {
+            text: '💀 Not Looking Good...',
+            color: 0x576574
+        };
+    }
 
     return {
-
-      text:
-        '👑 Destined Soulmates',
-
-      color:
-        0xFF4D6D
+        text: '🚫 Absolute Disaster.',
+        color: 0x2C2F33
     };
-  }
-
-  if (percent >= 95) {
-
-    return {
-
-      text:
-        '💞 Soulmates!',
-
-      color:
-        0xED4245
-    };
-  }
-
-  if (percent >= 75) {
-
-    return {
-
-      text:
-        '💖 Perfect Match!',
-
-      color:
-        0xFF73FA
-    };
-  }
-
-  if (percent >= 60) {
-
-    return {
-
-      text:
-        '💕 Strong Connection!',
-
-      color:
-        0xF47FFF
-    };
-  }
-
-  if (percent >= 40) {
-
-    return {
-
-      text:
-        '😐 Could work...',
-
-      color:
-        0x95A5A6
-    };
-  }
-
-  if (percent >= 20) {
-
-    return {
-
-      text:
-        '💀 Not looking good...',
-
-      color:
-        0x576574
-    };
-  }
-
-  return {
-
-    text:
-      '🚫 Absolute Disaster.',
-
-    color:
-      0x2C2F33
-  };
 }
 
 // ==================================================
@@ -141,23 +125,20 @@ function getTier(percent) {
 // ==================================================
 function createBar(percent) {
 
-  const total = 10;
+    const total = 10;
 
-  const filled =
-    Math.round(
+    const filled =
+        Math.round(
+            (percent / 100) * total
+        );
 
-      (percent / 100) * total
+    const empty =
+        total - filled;
+
+    return (
+        '❤️'.repeat(filled) +
+        '🖤'.repeat(empty)
     );
-
-  const empty =
-    total - filled;
-
-  return (
-
-    '🟥'.repeat(filled) +
-
-    '⬛'.repeat(empty)
-  );
 }
 
 // ==================================================
@@ -165,247 +146,253 @@ function createBar(percent) {
 // ==================================================
 function createShipName(name1, name2) {
 
-  const first =
-    name1.slice(
+    const first =
+        name1.slice(
+            0,
+            Math.max(
+                2,
+                Math.floor(
+                    name1.length / 2
+                )
+            )
+        );
 
-      0,
+    const second =
+        name2.slice(
+            Math.floor(
+                name2.length / 2
+            )
+        );
 
-      Math.max(
-        2,
-
-        Math.floor(
-          name1.length / 2
-        )
-      )
-    );
-
-  const second =
-    name2.slice(
-
-      Math.floor(
-        name2.length / 2
-      )
-    );
-
-  return (
-    first + second
-  );
+    return first + second;
 }
 
 module.exports = {
 
-  cooldown: 3000,
+    cooldown: 3000,
 
-  data:
-    new SlashCommandBuilder()
+    data:
+        new SlashCommandBuilder()
 
-      .setName('ship')
+            .setName('ship')
 
-      .setDescription(
-        'Check compatibility between two users'
-      )
+            .setDescription(
+                'Check compatibility between two users'
+            )
 
-      .addUserOption(option =>
+            .addUserOption(option =>
 
-        option
+                option
 
-          .setName('user1')
+                    .setName('user1')
 
-          .setDescription(
-            'First user'
-          )
+                    .setDescription(
+                        'First user'
+                    )
 
-          .setRequired(true)
-      )
+                    .setRequired(true)
+            )
 
-      .addUserOption(option =>
+            .addUserOption(option =>
 
-        option
+                option
 
-          .setName('user2')
+                    .setName('user2')
 
-          .setDescription(
-            'Second user'
-          )
+                    .setDescription(
+                        'Second user'
+                    )
 
-          .setRequired(true)
-      ),
+                    .setRequired(true)
+            ),
 
-  async execute(interaction) {
+    async execute(interaction) {
 
-    try {
+        try {
 
-      // ==========================================
-      // 👥 USERS
-      // ==========================================
-      const user1 =
-        interaction.options.getUser(
+            const user1 =
+                interaction.options.getUser(
+                    'user1',
+                    true
+                );
 
-          'user1',
+            const user2 =
+                interaction.options.getUser(
+                    'user2',
+                    true
+                );
 
-          true
-        );
+            if (user1.id === user2.id) {
 
-      const user2 =
-        interaction.options.getUser(
+                return interaction.editReply({
 
-          'user2',
+                    content:
+                        '💀 You can’t ship someone with themselves... or can you?'
+                });
+            }
 
-          true
-        );
+            if (
+                user1.bot ||
+                user2.bot
+            ) {
 
-      // ==========================================
-      // 💀 SAME USER
-      // ==========================================
-      if (user1.id === user2.id) {
+                return interaction.editReply({
 
-        return interaction.editReply({
+                    content:
+                        '🤖 Bots don’t do relationships... yet.'
+                });
+            }
 
-          content:
+            await interaction.editReply({
 
-            '💀 You can’t ship someone with themselves... or can you?'
-        });
-      }
+                content:
+                    loadingMessages[
+                        Math.floor(
+                            Math.random() *
+                            loadingMessages.length
+                        )
+                    ]
+            });
 
-      // ==========================================
-      // 🤖 BOTS
-      // ==========================================
-      if (
+            await new Promise(resolve =>
+                setTimeout(resolve, 1000)
+            );
 
-        user1.bot ||
+            // ==========================================
+            // 💥 CHAOS EVENT
+            // ==========================================
+            if (Math.random() < 0.005) {
 
-        user2.bot
-      ) {
+                return interaction.editReply({
 
-        return interaction.editReply({
+                    embeds: [
 
-          content:
+                        new EmbedBuilder()
 
-            '🤖 Bots don’t do relationships... yet.'
-        });
-      }
+                            .setColor(0x9B59B6)
 
-      // ==========================================
-      // 💘 SUSPENSE
-      // ==========================================
-      await interaction.editReply({
+                            .setTitle(
+                                '💥 Compatibility Scanner Failure'
+                            )
 
-        content:
-          '💘 Calculating compatibility...'
-      });
+                            .setDescription(
+                                'Result: **404% Compatibility**\n\nThe love calculator has exploded.'
+                            )
 
-      await new Promise(res =>
-        setTimeout(res, 1000)
-      );
+                            .setTimestamp()
+                    ],
 
-      // ==========================================
-      // 🎲 RESULTS
-      // ==========================================
-      const percent =
-        getCompatibility(
+                    content: ''
+                });
+            }
 
-          user1.id,
+            const percent =
+                getCompatibility(
+                    user1.id,
+                    user2.id
+                );
 
-          user2.id
-        );
+            const tier =
+                getTier(percent);
 
-      const tier =
-        getTier(percent);
+            const bar =
+                createBar(percent);
 
-      const bar =
-        createBar(percent);
+            const shipName =
+                createShipName(
+                    user1.username,
+                    user2.username
+                );
 
-      const shipName =
-        createShipName(
+            let specialMessage = '';
 
-          user1.username,
+            if (percent >= 95) {
 
-          user2.username
-        );
+                specialMessage =
+                    soulmateMessages[
+                        Math.floor(
+                            Math.random() *
+                            soulmateMessages.length
+                        )
+                    ];
+            }
 
-      // ==========================================
-      // 🎨 EMBED
-      // ==========================================
-      const embed =
-        new EmbedBuilder()
+            const embed =
+                new EmbedBuilder()
 
-          .setColor(
-            tier.color
-          )
+                    .setColor(
+                        tier.color
+                    )
 
-          .setTitle(
-            '💘 Ship Result'
-          )
+                    .setTitle(
+                        '💘 Ship Result'
+                    )
 
-          .setDescription(
+                    .setDescription(
 
-            `${user1} ❤️ ${user2}\n\n` +
+                        `${user1} ❤️ ${user2}\n\n` +
 
-            `🏷 **Ship Name:** \`${shipName}\`\n\n` +
+                        `🏷 **Ship Name**\n\`${shipName}\`\n\n` +
 
-            `💖 **Compatibility:** \`${percent}%\`\n` +
+                        `💖 **Compatibility**\n\`${percent}%\`\n\n` +
 
-            `${bar}\n\n` +
+                        `${bar}\n\n` +
 
-            `💬 **Status:** ${tier.text}`
-          )
+                        `💬 **Status**\n${tier.text}` +
 
-          .setThumbnail(
+                        (specialMessage
+                            ? `\n\n${specialMessage}`
+                            : '')
+                    )
 
-            user1.displayAvatarURL({
+                    .setThumbnail(
+                        user1.displayAvatarURL({
+                            dynamic: true,
+                            size: 256
+                        })
+                    )
 
-              dynamic: true,
+                    .setFooter({
 
-              size: 256
-            })
-          )
+                        text:
+                            'Love is unpredictable... or is it?'
+                    })
 
-          .setFooter({
+                    .setTimestamp();
 
-            text:
-              'Love is unpredictable... or is it?'
-          })
+            return interaction.editReply({
 
-          .setTimestamp();
+                content: '',
 
-      // ==========================================
-      // 📤 RESPONSE
-      // ==========================================
-      return interaction.editReply({
+                embeds: [embed]
+            });
 
-        content: '',
+        } catch (err) {
 
-        embeds: [embed]
-      });
+            console.error(
+                'Ship Command Error:',
+                err
+            );
 
-    } catch (err) {
+            if (
+                interaction.deferred ||
+                interaction.replied
+            ) {
 
-      console.error(
-        'Ship Command Error:',
-        err
-      );
+                return interaction.editReply({
 
-      if (
+                    content:
+                        '❌ Shipping failed.'
+                });
+            }
 
-        interaction.deferred ||
+            return interaction.reply({
 
-        interaction.replied
-      ) {
+                content:
+                    '❌ Shipping failed.',
 
-        return interaction.editReply({
-
-          content:
-            '❌ Shipping failed.'
-        });
-      }
-
-      return interaction.reply({
-
-        content:
-          '❌ Shipping failed.',
-
-        ephemeral: true
-      });
+                ephemeral: true
+            });
+        }
     }
-  }
 };

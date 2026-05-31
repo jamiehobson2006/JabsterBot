@@ -1,19 +1,12 @@
 const {
-
   SlashCommandBuilder,
-
   PermissionsBitField,
-
   EmbedBuilder
-
 } = require('discord.js');
 
 const {
-
   get,
-
   run
-
 } = require('../../database');
 
 module.exports = {
@@ -122,6 +115,9 @@ module.exports = {
         ]
       );
 
+      const removedAt =
+        Math.floor(Date.now() / 1000);
+
       // ==========================================
       // 📩 DM USER
       // ==========================================
@@ -140,6 +136,29 @@ module.exports = {
             .setDescription(
 
               `You have been removed from the giveaway blacklist in **${interaction.guild.name}**.`
+            )
+
+            .addFields(
+
+              {
+
+                name: '🛡 Moderator',
+
+                value:
+                  interaction.user.tag,
+
+                inline: true
+              },
+
+              {
+
+                name: '📅 Removed',
+
+                value:
+                  `<t:${removedAt}:F>`,
+
+                inline: true
+              }
             )
 
             .setFooter({
@@ -190,7 +209,10 @@ module.exports = {
               name: '🛡 Moderator',
 
               value:
-                `${interaction.user.tag}`,
+
+                `${interaction.user.tag}\n` +
+
+                `\`${interaction.user.id}\``,
 
               inline: true
             },
@@ -203,11 +225,7 @@ module.exports = {
 
                 existing.addedAt
 
-                  ? `<t:${Math.floor(
-
-                      existing.addedAt / 1000
-
-                    )}:F>`
+                  ? `<t:${existing.addedAt}:F>`
 
                   : 'Unknown',
 
@@ -222,6 +240,16 @@ module.exports = {
                 existing.reason ||
 
                 'No reason provided',
+
+              inline: false
+            },
+
+            {
+
+              name: '📅 Removed',
+
+              value:
+                `<t:${removedAt}:F>`,
 
               inline: false
             }

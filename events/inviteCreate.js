@@ -1,6 +1,6 @@
 const {
   addInvite
-} = require('../utils/cache');
+} = require('../utils/giveaways/cache');
 
 module.exports = {
 

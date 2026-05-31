@@ -4,7 +4,7 @@ const {
 
 const {
   findUsedInvite
-} = require('../utils/cache');
+} = require('../utils/giveaways/cache');
 
 const {
   get,

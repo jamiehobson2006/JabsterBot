@@ -5,7 +5,7 @@ const {
 
 const {
   loadGuildInvites
-} = require('../utils/cache');
+} = require('../utils/giveaways/cache');
 
 module.exports = {
 
@@ -187,10 +187,11 @@ module.exports = {
 
               {
 
-                name: status,
+                name:
+                  'games made by JabsterStudios on roblox',
 
                 type:
-                  ActivityType.Watching
+                  ActivityType.Playing
               }
             ],
 

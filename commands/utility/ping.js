@@ -273,20 +273,7 @@ module.exports = {
 
         embeds: [embed]
       });
-
-      // ========================
-      // 🗑 AUTO DELETE
-      // ========================
-      setTimeout(() => {
-
-        interaction
-
-          .deleteReply()
-
-          .catch(() => {});
-
-      }, 5000);
-
+      
     } catch (err) {
 
       console.error(

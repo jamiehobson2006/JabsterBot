@@ -213,7 +213,7 @@ async function getLogChannel(
     const settings =
       get(
 
-        `SELECT ${column}
+        `SELECT ${column}, modlogChannelId
          FROM guild_settings
          WHERE guildId = ?`,
 
@@ -221,7 +221,8 @@ async function getLogChannel(
       );
 
     const channelId =
-      settings?.[column];
+      settings?.[column] ||
+      settings?.modlogChannelId;
 
     if (!channelId) {
 

@@ -589,6 +589,19 @@ module.exports = {
             interaction.commandName
           );
 
+        const earlyAcknowledged =
+          await safelyDeferReply(
+
+            interaction,
+
+            shouldBeEphemeral
+          );
+
+        if (!earlyAcknowledged) {
+
+          return;
+        }
+
         // ==========================================
         // ⏱️ COOLDOWN
         // ==========================================

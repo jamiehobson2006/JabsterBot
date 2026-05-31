@@ -3,6 +3,13 @@ const {
   get
 } = require('../database');
 
+const {
+  calculateLevel
+} = require('../utils/leveling');
+
+const LevelingService =
+  require('../utils/LevelingService');
+
 // ==================================================
 // ⏱ MESSAGE COOLDOWN CACHE
 // ==================================================
@@ -320,9 +327,6 @@ module.exports = {
         monthlyReset = now;
       }
 
-      // ==========================================
-      // 💾 UPDATE STATS
-      // ==========================================
       run(
 
         `UPDATE message_stats
@@ -357,6 +361,10 @@ module.exports = {
           userId
         ]
       );
+
+      await LevelingService.handleMessage(
+  message
+);
 
     } catch (err) {
 

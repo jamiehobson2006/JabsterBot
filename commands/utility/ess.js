@@ -45,15 +45,16 @@ module.exports = {
 
           .setDescription(
 
-            '⚡ **Build insane combo streaks, unlock powerful upgrades, and become the richest player in paradise.**\n\n' +
+            '⚡ **Build massive combo streaks, prestige for permanent bonuses, unlock powerful upgrades, and become the richest player in paradise.**\n\n' +
 
             '🌊 Collect glowing orbs across vibrant islands\n' +
             '🔥 Trigger powerful world events\n' +
             '💰 Upgrade your stats and multiply your earnings\n' +
+            '⭐ Prestige for permanent boosts\n' +
             '🏝️ Compete on global leaderboards\n' +
             '✨ Discover rare orb types and massive combo chains\n\n' +
 
-            '**Start small → grind massive multipliers → become unstoppable.**'
+            '**Start small → build huge combos → prestige → dominate the leaderboards.**'
           )
 
           .addFields(
@@ -83,7 +84,7 @@ module.exports = {
 
                 '• Orb Rarities\n' +
                 '• World Events\n' +
-                '• Upgrade System\n' +
+                '• Prestige System\n' +
                 '• Combo Multipliers\n' +
                 '• Global Leaderboards',
 
@@ -97,11 +98,11 @@ module.exports = {
 
               value:
 
-                '• Prestige System\n' +
+                '• Underwater World\n' +
                 '• Quest Expansion\n' +
-                '• New Worlds\n' +
-                '• UI Overhaul\n' +
-                '• More Events',
+                '• UI & Icon Overhaul\n' +
+                '• More Global Events\n' +
+                '• New Progression Features',
 
               inline: false
             }

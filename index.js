@@ -10,7 +10,9 @@
 
   ActivityType,
 
-  Options
+  Options,
+
+  PermissionFlagsBits
 
 } = require('discord.js');
 
@@ -31,10 +33,11 @@ const {
 } = require('./utils/giveaways/giveawayLoop');
 
 const {
-
   loadGuildInvites
+} = require('./utils/giveaways/cache');
 
-} = require('./utils/cache');
+const socialMonitor =
+  require('./utils/socialMonitor');
 
 // ==================================================
 // 🔐 TOKEN CHECK
@@ -546,7 +549,7 @@ client.once(
             !me ||
 
             !me.permissions.has(
-              GatewayIntentBits.GuildInvites
+               PermissionFlagsBits.ManageGuild
             )
           ) {
 
@@ -575,65 +578,41 @@ client.once(
         `✅ Invite cache loaded for ${cachedGuilds} guild(s)`
       );
 
-      // ======================================
-      // 🎉 GIVEAWAY LOOP
-      // ======================================
-      startGiveawayLoop(
-        client
-      );
+     startGiveawayLoop(
+  client
+);
+
+console.log(
+  '✅ Giveaway loop started'
+);
+
+socialMonitor.start(
+  client
+);
+
+console.log(
+  '✅ Social monitor started'
+);
 
       console.log(
         '✅ Giveaway loop started'
       );
 
       // ======================================
-      // 🎮 ROTATING STATUS
+      // 🎮 BOT ACTIVITY
       // ======================================
-      const statuses = [
+      client.user.setPresence({
 
-        '🎟 Managing tickets',
+        activities: [
 
-        '🎉 Hosting giveaways',
+          {
+            name: 'games made by JabsterStudios on roblox',
+            type: ActivityType.Playing
+          }
+        ],
 
-        '📨 Tracking invites',
-
-        '🛡 Moderating servers',
-
-        `🌍 ${client.guilds.cache.size} servers`
-      ];
-
-      let index = 0;
-
-      setInterval(() => {
-
-        client.user.setPresence({
-
-          activities: [
-
-            {
-
-              name:
-                statuses[index],
-
-              type:
-                ActivityType.Watching
-            }
-          ],
-
-          status:
-            'online'
-        });
-
-        index++;
-
-        if (
-          index >= statuses.length
-        ) {
-
-          index = 0;
-        }
-
-      }, 15000);
+        status: 'online'
+      });
 
       console.log(
         '✅ Systems initialized'

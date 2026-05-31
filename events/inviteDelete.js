@@ -1,6 +1,6 @@
 const {
   removeInvite
-} = require('../utils/cache');
+} = require('../utils/giveaways/cache');
 
 module.exports = {
 

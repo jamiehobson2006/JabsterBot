@@ -229,6 +229,8 @@ const permissionDefaults = {
 // ==================================================
 const commands = [];
 
+const DEPLOY_ONE_COMMAND = false;
+
 const loadedNames =
   new Set();
 
@@ -422,13 +424,13 @@ for (
         commandJson.dm_permission =
           false;
       }
+commands.push(
+  commandJson
+);
 
-      // ==========================================
-      // 📦 STORE
-      // ==========================================
-      commands.push(
-        commandJson
-      );
+console.log(
+  `${commands.length}: ${commandJson.name}`
+);
 
       console.log(
 
@@ -518,51 +520,50 @@ const rest =
     if (DEV_GUILD_ID) {
 
       console.log(
-        '🧹 Clearing old guild commands...'
-      );
-
-      await rest.put(
-
-        Routes.applicationGuildCommands(
-
-          CLIENT_ID,
-
-          DEV_GUILD_ID
-        ),
-
-        {
-
-          body: []
-        }
-      );
-
-      console.log(
-        '✅ Old guild commands cleared'
-      );
-
-      console.log(
         '⚡ Deploying guild commands...'
       );
 
-      await rest.put(
-
-        Routes.applicationGuildCommands(
-
-          CLIENT_ID,
-
-          DEV_GUILD_ID
-        ),
-
-        {
-
-          body: commands
-        }
-      );
-
       console.log(
+  'Testing command:',
+  commands[0]?.name
+);
 
-        `✅ Commands deployed to guild ${DEV_GUILD_ID}`
-      );
+const result = await Promise.race([
+
+  rest.put(
+
+    Routes.applicationGuildCommands(
+
+      CLIENT_ID,
+
+      DEV_GUILD_ID
+    ),
+
+    {
+
+     body: commands.slice(0, 50)
+    }
+  ),
+
+  new Promise((_, reject) =>
+    setTimeout(
+      () =>
+        reject(
+          new Error(
+            'Deploy timed out after 30 seconds'
+          )
+        ),
+      30000
+    )
+  )
+]);
+
+console.log(
+  'Discord returned:',
+  result.length,
+  'commands'
+);
+
     }
 
     // ==========================================
@@ -619,12 +620,33 @@ const rest =
 
     console.log('━━━━━━━━━━━━━━━━━━━━━━');
 
-  } catch (error) {
+} catch (error) {
 
+  console.error('❌ Deploy Error:');
+
+  console.error(error);
+
+  if (error.rawError) {
     console.error(
-      '❌ Deploy Error:',
-      error
+      'Raw Error:',
+      JSON.stringify(
+        error.rawError,
+        null,
+        2
+      )
     );
   }
+
+  if (error.errors) {
+    console.error(
+      'Validation Errors:',
+      JSON.stringify(
+        error.errors,
+        null,
+        2
+      )
+    );
+  }
+}
 
 })();

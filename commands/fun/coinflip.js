@@ -1,209 +1,215 @@
 const {
-
-  EmbedBuilder,
-
-  SlashCommandBuilder
-
+    EmbedBuilder,
+    SlashCommandBuilder
 } = require('discord.js');
 
 module.exports = {
 
-  cooldown: 2000,
+    cooldown: 2000,
 
-  data:
-    new SlashCommandBuilder()
+    data: new SlashCommandBuilder()
+        .setName('coinflip')
+        .setDescription('Flip a coin')
+        .addStringOption(option =>
+            option
+                .setName('guess')
+                .setDescription(
+                    'Choose heads or tails (optional)'
+                )
+                .addChoices(
+                    {
+                        name: 'Heads',
+                        value: 'heads'
+                    },
+                    {
+                        name: 'Tails',
+                        value: 'tails'
+                    }
+                )
+        ),
 
-      .setName('coinflip')
+    async execute(interaction) {
 
-      .setDescription(
-        'Flip a coin'
-      )
+        try {
 
-      .addStringOption(option =>
+            const guess =
+                interaction.options.getString(
+                    'guess'
+                );
 
-        option
+            // ==========================================
+            // 🪙 FLIPPING ANIMATION
+            // ==========================================
+            await interaction.editReply({
 
-          .setName('guess')
+                embeds: [
 
-          .setDescription(
-            'Choose heads or tails (optional)'
-          )
+                    new EmbedBuilder()
 
-          .addChoices(
+                        .setColor(0x5865F2)
 
-            {
+                        .setTitle(
+                            '🪙 Coin Flip'
+                        )
 
-              name: 'Heads',
+                        .setDescription(
+                            '🔄 Flipping the coin...'
+                        )
+                ]
+            });
 
-              value: 'heads'
-            },
+            await new Promise(resolve =>
+                setTimeout(resolve, 1200)
+            );
 
-            {
+            // ==========================================
+            // 🎲 RESULT
+            // ==========================================
+            let result;
 
-              name: 'Tails',
+            const edgeChance =
+                Math.random();
 
-              value: 'tails'
+            if (edgeChance < 0.005) {
+
+                result = 'edge';
+
+            } else {
+
+                result =
+                    Math.random() < 0.5
+                        ? 'heads'
+                        : 'tails';
             }
-          )
-      ),
 
-  async execute(interaction) {
+            // ==========================================
+            // 🎨 RESULT DATA
+            // ==========================================
+            let color = 0xFEE75C;
+            let resultEmoji = '🪙';
+            let statusText;
 
-    try {
+            if (result === 'edge') {
 
-      // ==========================================
-      // 🎯 USER GUESS
-      // ==========================================
-      const guess =
-        interaction.options.getString(
-          'guess'
-        );
+                color = 0x9B59B6;
 
-      // ==========================================
-      // ⏳ FLIP DELAY
-      // ==========================================
-      await new Promise(res =>
-        setTimeout(res, 1000)
-      );
+                resultEmoji = '✨';
 
-      // ==========================================
-      // 🎲 RESULT
-      // ==========================================
-      const result =
+                statusText =
+                    '🌟 The coin somehow landed on its edge. Incredible!';
 
-        Math.random() < 0.5
+            } else if (guess) {
 
-          ? 'heads'
+                const won =
+                    guess === result;
 
-          : 'tails';
+                if (won) {
 
-      // ==========================================
-      // 🎨 RESULT DATA
-      // ==========================================
-      const resultEmoji =
+                    color = 0x57F287;
 
-        result === 'heads'
+                    statusText =
+                        `🎉 You guessed **${guess}** and got it right!`;
 
-          ? '🪙'
+                } else {
 
-          : '🎯';
+                    color = 0xED4245;
 
-      let color = 0xFEE75C;
+                    statusText =
+                        `💀 You guessed **${guess}** but it landed on **${result}**.`;
+                }
 
-      let statusText;
+                resultEmoji =
+                    result === 'heads'
+                        ? '👑'
+                        : '🪙';
 
-      // ==========================================
-      // 🎯 GUESS CHECK
-      // ==========================================
-      if (guess) {
+            } else {
 
-        const won =
-          guess === result;
+                resultEmoji =
+                    result === 'heads'
+                        ? '👑'
+                        : '🪙';
 
-        if (won) {
+                statusText =
+                    `The coin landed on **${result.toUpperCase()}**.`;
+            }
 
-          color = 0x57F287;
+            // ==========================================
+            // 🎨 EMBED
+            // ==========================================
+            const embed =
+                new EmbedBuilder()
 
-          statusText =
+                    .setColor(color)
 
-            `🎉 You guessed **${guess}** and got it right!`;
+                    .setTitle(
+                        '🪙 Coin Flip'
+                    )
 
-        } else {
+                    .setDescription(
 
-          color = 0xED4245;
+                        `# ${resultEmoji} ${result.toUpperCase()}\n\n` +
 
-          statusText =
+                        '━━━━━━━━━━━━━━\n\n' +
 
-            `💀 You guessed **${guess}** but it landed on **${result}**.`;
+                        `${statusText}`
+                    )
+
+                    .addFields(
+                        {
+                            name: '🎲 Result',
+                            value:
+                                result.toUpperCase(),
+                            inline: true
+                        },
+                        {
+                            name: '🎯 Guess',
+                            value:
+                                guess
+                                    ? guess.toUpperCase()
+                                    : 'None',
+                            inline: true
+                        }
+                    )
+
+                    .setFooter({
+                        text:
+                            'Heads or tails?'
+                    })
+
+                    .setTimestamp();
+
+            return interaction.editReply({
+
+                embeds: [embed]
+            });
+
+        } catch (err) {
+
+            console.error(
+                'Coinflip Error:',
+                err
+            );
+
+            if (
+                interaction.deferred ||
+                interaction.replied
+            ) {
+
+                return interaction.editReply({
+
+                    content:
+                        '❌ Coinflip failed.'
+                });
+            }
+
+            return interaction.reply({
+
+                content:
+                    '❌ Coinflip failed.',
+
+                ephemeral: true
+            });
         }
-
-      } else {
-
-        statusText =
-
-          `The coin landed on **${result.toUpperCase()}**.`;
-      }
-
-      // ==========================================
-      // 🎨 EMBED
-      // ==========================================
-      const embed =
-        new EmbedBuilder()
-
-          .setColor(color)
-
-          .setTitle(
-            '🪙 Coin Flip'
-          )
-
-          .setDescription(
-
-            `# ${resultEmoji} ${result.toUpperCase()}\n\n` +
-
-            `${statusText}`
-          )
-
-          .addFields({
-
-            name: '🎲 Result',
-
-            value:
-              result.toUpperCase(),
-
-            inline: true
-          })
-
-          .setThumbnail(
-            interaction.user.displayAvatarURL({
-
-              size: 256
-            })
-          )
-
-          .setFooter({
-
-            text:
-              'Heads or tails?'
-          })
-
-          .setTimestamp();
-
-      // ==========================================
-      // 📤 RESPONSE
-      // ==========================================
-      return interaction.editReply({
-
-        embeds: [embed]
-      });
-
-    } catch (err) {
-
-      console.error(
-        'Coinflip Error:',
-        err
-      );
-
-      if (
-
-        interaction.deferred ||
-
-        interaction.replied
-      ) {
-
-        return interaction.editReply({
-
-          content:
-            '❌ Coinflip failed.'
-        });
-      }
-
-      return interaction.reply({
-
-        content:
-          '❌ Coinflip failed.',
-
-        ephemeral: true
-      });
     }
-  }
 };

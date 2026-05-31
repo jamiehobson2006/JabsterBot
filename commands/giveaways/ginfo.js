@@ -1,19 +1,12 @@
 const {
-
   SlashCommandBuilder,
-
   PermissionsBitField,
-
   EmbedBuilder
-
 } = require('discord.js');
 
 const {
-
   get,
-
   all
-
 } = require('../../database');
 
 module.exports = {
@@ -141,13 +134,60 @@ module.exports = {
 
         requirements =
           JSON.parse(
-
             giveaway.requirements || '{}'
           );
 
       } catch {
 
         requirements = {};
+      }
+
+      // ==========================================
+      // 📊 STATUS
+      // ==========================================
+      const now = Date.now();
+
+      let status =
+        giveaway.ended
+          ? '🔴 Ended'
+          : '🟢 Active';
+
+      if (
+
+        !giveaway.ended &&
+
+        giveaway.endsAt - now <=
+        60 * 60 * 1000
+      ) {
+
+        status = '🟡 Ending Soon';
+      }
+
+      // ==========================================
+      // 🏆 WINNER DISPLAY
+      // ==========================================
+      let winnerDisplay =
+        'No winners yet';
+
+      if (winners.length) {
+
+        const displayed =
+          winners
+            .slice(0, 20)
+            .map(w =>
+              `<@${w.userId}>`
+            )
+            .join('\n');
+
+        winnerDisplay =
+          displayed;
+
+        if (winners.length > 20) {
+
+          winnerDisplay +=
+
+            `\n+ ${winners.length - 20} more...`;
+        }
       }
 
       // ==========================================
@@ -179,7 +219,10 @@ module.exports = {
               name: '👤 Host',
 
               value:
-                `<@${giveaway.hostId}>`,
+
+                `<@${giveaway.hostId}>\n` +
+
+                `\`${giveaway.hostId}\``,
 
               inline: true
             },
@@ -189,7 +232,7 @@ module.exports = {
               name: '🏆 Winners',
 
               value:
-                `${giveaway.winners}`,
+                `${giveaway.winners || giveaway.winnerCount || 1}`,
 
               inline: true
             },
@@ -219,12 +262,24 @@ module.exports = {
               name: '📌 Status',
 
               value:
+                status,
+
+              inline: true
+            },
+
+            {
+
+              name: '⏳ Remaining',
+
+              value:
 
                 giveaway.ended
 
-                  ? '🔴 Ended'
+                  ? 'Ended'
 
-                  : '🟢 Active',
+                  : `<t:${Math.floor(
+                      giveaway.endsAt / 1000
+                    )}:R>`,
 
               inline: true
             },
@@ -236,9 +291,7 @@ module.exports = {
               value:
 
                 `<t:${Math.floor(
-
                   giveaway.createdAt / 1000
-
                 )}:F>`,
 
               inline: true
@@ -251,9 +304,7 @@ module.exports = {
               value:
 
                 `<t:${Math.floor(
-
                   giveaway.endsAt / 1000
-
                 )}:F>`,
 
               inline: true
@@ -264,19 +315,7 @@ module.exports = {
               name: '🏆 Winner History',
 
               value:
-
-                winners.length
-
-                  ? winners
-
-                      .map(w =>
-
-                        `<@${w.userId}>`
-                      )
-
-                      .join('\n')
-
-                  : 'No winners yet',
+                winnerDisplay,
 
               inline: false
             },
@@ -334,7 +373,6 @@ function formatRequirements(req) {
   if (req.minInvites) {
 
     lines.push(
-
       `📨 ${req.minInvites}+ invites`
     );
   }
@@ -342,7 +380,6 @@ function formatRequirements(req) {
   if (req.weeklyMessages) {
 
     lines.push(
-
       `💬 ${req.weeklyMessages}+ weekly messages`
     );
   }
@@ -350,7 +387,6 @@ function formatRequirements(req) {
   if (req.monthlyMessages) {
 
     lines.push(
-
       `🗓 ${req.monthlyMessages}+ monthly messages`
     );
   }
@@ -362,36 +398,26 @@ function formatRequirements(req) {
     );
   }
 
-  if (
-
-    req.requiredRoles?.length
-  ) {
+  if (req.requiredRoles?.length) {
 
     lines.push(
 
       `🎭 Required Roles:\n` +
 
       req.requiredRoles
-
         .map(id => `<@&${id}>`)
-
         .join(', ')
     );
   }
 
-  if (
-
-    req.blacklistedRoles?.length
-  ) {
+  if (req.blacklistedRoles?.length) {
 
     lines.push(
 
       `🚫 Blacklisted Roles:\n` +
 
       req.blacklistedRoles
-
         .map(id => `<@&${id}>`)
-
         .join(', ')
     );
   }

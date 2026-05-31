@@ -70,18 +70,6 @@ module.exports = {
         );
 
       // ==========================================
-      // 🛡 VALIDATE TEXT CHANNEL
-      // ==========================================
-      if (!channel.isTextBased()) {
-
-        return interaction.editReply({
-
-          content:
-            '❌ Invalid text channel.'
-        });
-      }
-
-      // ==========================================
       // 🤖 BOT PERMISSIONS
       // ==========================================
       const perms =
@@ -97,7 +85,9 @@ module.exports = {
 
           PermissionsBitField.Flags.SendMessages,
 
-          PermissionsBitField.Flags.EmbedLinks
+          PermissionsBitField.Flags.EmbedLinks,
+
+          PermissionsBitField.Flags.ReadMessageHistory
         ])
       ) {
 
@@ -105,7 +95,7 @@ module.exports = {
 
           content:
 
-            '❌ I am missing permissions in that channel.'
+            '❌ I am missing required permissions in that channel.'
         });
       }
 
@@ -117,7 +107,7 @@ module.exports = {
         `INSERT INTO guild_settings (
 
           guildId,
-          inviteLogChannelId
+          inviteChannelId
 
         )
 
@@ -127,8 +117,8 @@ module.exports = {
 
         DO UPDATE SET
 
-        inviteLogChannelId =
-        excluded.inviteLogChannelId`,
+        inviteChannelId =
+        excluded.inviteChannelId`,
 
         [
 
@@ -207,40 +197,50 @@ module.exports = {
       // ==========================================
       // 🧪 TEST MESSAGE
       // ==========================================
-      await channel.send({
+      try {
 
-        embeds: [
+        await channel.send({
 
-          new EmbedBuilder()
+          embeds: [
 
-            .setColor(0x5865F2)
+            new EmbedBuilder()
 
-            .setTitle(
-              '📨 Invite Tracking Enabled'
-            )
+              .setColor(0x5865F2)
 
-            .setDescription(
+              .setTitle(
+                '📨 Invite Tracking Enabled'
+              )
 
-              'This channel will now receive:\n\n' +
+              .setDescription(
 
-              '• Member joins\n' +
-              '• Invite tracking\n' +
-              '• Fake invite detection\n' +
-              '• Alt/fresh account alerts\n' +
-              '• Invite leave tracking\n' +
-              '• Invite statistics\n' +
-              '• Invite leaderboard updates'
-            )
+                'This channel will now receive:\n\n' +
 
-            .setFooter({
+                '• Member joins\n' +
+                '• Invite tracking\n' +
+                '• Fake invite detection\n' +
+                '• Alt/fresh account alerts\n' +
+                '• Invite leave tracking\n' +
+                '• Invite statistics\n' +
+                '• Invite leaderboard updates'
+              )
 
-              text:
-                `Configured by ${interaction.user.tag}`
-            })
+              .setFooter({
 
-            .setTimestamp()
-        ]
-      });
+                text:
+                  `Configured by ${interaction.user.tag}`
+              })
+
+              .setTimestamp()
+          ]
+        });
+
+      } catch (messageError) {
+
+        console.warn(
+          'Failed to send invite setup message:',
+          messageError
+        );
+      }
 
     } catch (err) {
 

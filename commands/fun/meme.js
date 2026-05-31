@@ -1,213 +1,256 @@
 const {
-
-  EmbedBuilder,
-
-  SlashCommandBuilder
-
+    EmbedBuilder,
+    SlashCommandBuilder
 } = require('discord.js');
+
+// ==================================================
+// 😂 LOADING MESSAGES
+// ==================================================
+const loadingMessages = [
+    '😂 Stealing memes...',
+    '🧠 Searching Reddit...',
+    '📡 Contacting the meme servers...',
+    '🔥 Finding something cursed...',
+    '🎭 Looking for comedy...',
+    '🚀 Launching meme retrieval system...'
+];
 
 // ==================================================
 // 😂 FETCH MEME
 // ==================================================
 async function fetchMeme() {
 
-  for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 3; i++) {
 
-    try {
+        try {
 
-      const controller =
-        new AbortController();
+            const controller =
+                new AbortController();
 
-      const timeout =
-        setTimeout(() => {
+            const timeout =
+                setTimeout(() => {
 
-          controller.abort();
+                    controller.abort();
 
-        }, 5000);
+                }, 5000);
 
-      const res =
-        await fetch(
+            const res =
+                await fetch(
+                    'https://meme-api.com/gimme',
+                    {
+                        signal:
+                            controller.signal
+                    }
+                );
 
-          'https://meme-api.com/gimme',
+            clearTimeout(timeout);
 
-          {
+            if (!res.ok) {
+                continue;
+            }
 
-            signal:
-              controller.signal
-          }
-        );
+            const data =
+                await res.json();
 
-      clearTimeout(timeout);
+            // ==========================================
+            // 🛡 VALIDATION
+            // ==========================================
+            if (
+                !data ||
+                !data.url ||
+                data.nsfw ||
+                !data.url.startsWith('http')
+            ) {
+                continue;
+            }
 
-      if (!res.ok) {
+            // Skip videos
+            if (
+                data.url.endsWith('.mp4') ||
+                data.url.endsWith('.gifv')
+            ) {
+                continue;
+            }
 
-        continue;
-      }
+            return data;
 
-      const data =
-        await res.json();
+        } catch (err) {
 
-      // ==========================================
-      // 🛡 VALIDATION
-      // ==========================================
-      if (
-
-        !data ||
-
-        !data.url ||
-
-        data.nsfw ||
-
-        !data.url.startsWith('http')
-      ) {
-
-        continue;
-      }
-
-      return data;
-
-    } catch (err) {
-
-      console.error(
-        'Meme Fetch Error:',
-        err
-      );
+            console.error(
+                'Meme Fetch Error:',
+                err
+            );
+        }
     }
-  }
 
-  return null;
+    return null;
 }
 
 module.exports = {
 
-  cooldown: 4000,
+    cooldown: 4000,
 
-  data:
-    new SlashCommandBuilder()
+    data:
+        new SlashCommandBuilder()
 
-      .setName('meme')
+            .setName('meme')
 
-      .setDescription(
-        'Get a random meme'
-      ),
+            .setDescription(
+                'Get a random meme'
+            ),
 
-  async execute(interaction) {
+    async execute(interaction) {
 
-    try {
+        try {
 
-      // ==========================================
-      // ⚡ LOADING
-      // ==========================================
-      await interaction.editReply({
+            // ==========================================
+            // ⚡ LOADING
+            // ==========================================
+            await interaction.editReply({
 
-        content:
-          '😂 Fetching a fresh meme...'
-      });
+                content:
+                    loadingMessages[
+                        Math.floor(
+                            Math.random() *
+                            loadingMessages.length
+                        )
+                    ]
+            });
 
-      // ==========================================
-      // 📥 FETCH
-      // ==========================================
-      const data =
-        await fetchMeme();
+            // ==========================================
+            // 🎲 EASTER EGG
+            // ==========================================
+            if (Math.random() < 0.01) {
 
-      if (!data) {
+                return interaction.editReply({
 
-        return interaction.editReply({
+                    embeds: [
 
-          content:
-            '❌ Failed to fetch a meme.'
-        });
-      }
+                        new EmbedBuilder()
 
-      // ==========================================
-      // 🎨 EMBED
-      // ==========================================
-      const embed =
-        new EmbedBuilder()
+                            .setColor(0xFEE75C)
 
-          .setColor(0x5865F2)
+                            .setTitle(
+                                '😂 Meme Machine Offline'
+                            )
 
-          .setTitle(
-            data.title || '😂 Meme'
-          )
+                            .setDescription(
+                                'The meme machine broke.\n\nPlease laugh manually.'
+                            )
 
-          .setURL(
-            data.postLink || null
-          )
+                            .setTimestamp()
+                    ],
 
-          .setImage(
-            data.url
-          )
-
-          .addFields(
-
-            {
-
-              name: '📍 Subreddit',
-
-              value:
-                `r/${data.subreddit}`,
-
-              inline: true
-            },
-
-            {
-
-              name: '⬆️ Upvotes',
-
-              value:
-                `${data.ups || 0}`,
-
-              inline: true
+                    content: ''
+                });
             }
-          )
 
-          .setFooter({
+            // ==========================================
+            // 📥 FETCH MEME
+            // ==========================================
+            const data =
+                await fetchMeme();
 
-            text:
-              'Powered by meme-api'
-          })
+            if (!data) {
 
-          .setTimestamp();
+                return interaction.editReply({
 
-      // ==========================================
-      // 📤 RESPONSE
-      // ==========================================
-      return interaction.editReply({
+                    content:
+                        '❌ Failed to fetch a meme.'
+                });
+            }
 
-        content: '',
+            // ==========================================
+            // 🎨 EMBED
+            // ==========================================
+            const embed =
+                new EmbedBuilder()
 
-        embeds: [embed]
-      });
+                    .setColor(0x5865F2)
 
-    } catch (err) {
+                    .setTitle(
+                        data.title || '😂 Meme'
+                    )
 
-      console.error(
-        'Meme Command Error:',
-        err
-      );
+                    .setURL(
+                        data.postLink || null
+                    )
 
-      if (
+                    .setImage(
+                        data.url
+                    )
 
-        interaction.deferred ||
+                    .addFields(
+                        {
+                            name: '📍 Subreddit',
+                            value:
+                                `r/${data.subreddit}`,
+                            inline: true
+                        },
+                        {
+                            name: '⬆️ Upvotes',
+                            value:
+                                `${data.ups || 0}`,
+                            inline: true
+                        },
+                        {
+                            name: '💬 Comments',
+                            value:
+                                `${data.numComments || 0}`,
+                            inline: true
+                        },
+                        {
+                            name: '👤 Author',
+                            value:
+                                data.author || 'Unknown',
+                            inline: true
+                        }
+                    )
 
-        interaction.replied
-      ) {
+                    .setFooter({
 
-        return interaction.editReply({
+                        text:
+                            `r/${data.subreddit} • Powered by meme-api`
+                    })
 
-          content:
-            '❌ Error fetching meme.'
-        });
-      }
+                    .setTimestamp();
 
-      return interaction.reply({
+            // ==========================================
+            // 📤 RESPONSE
+            // ==========================================
+            return interaction.editReply({
 
-        content:
-          '❌ Error fetching meme.',
+                content: '',
 
-        ephemeral: true
-      });
+                embeds: [embed]
+            });
+
+        } catch (err) {
+
+            console.error(
+                'Meme Command Error:',
+                err
+            );
+
+            if (
+                interaction.deferred ||
+                interaction.replied
+            ) {
+
+                return interaction.editReply({
+
+                    content:
+                        '❌ Error fetching meme.'
+                });
+            }
+
+            return interaction.reply({
+
+                content:
+                    '❌ Error fetching meme.',
+
+                ephemeral: true
+            });
+        }
     }
-  }
 };
