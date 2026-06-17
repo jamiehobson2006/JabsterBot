@@ -11,16 +11,28 @@ const {
   run
 } = require('../database');
 
+const {
+  createMemberJoinEmbed,
+  sendLog
+} = require('../utils/logger');
+
 module.exports = {
 
   name: 'guildMemberAdd',
 
-  async execute(member) {
+  async execute(member, client) {
 
     try {
 
       const guild =
         member.guild;
+
+      await sendLog(
+        client,
+        guild.id,
+        'MEMBERS',
+        createMemberJoinEmbed(member)
+      );
 
       // ==========================================
       // 📨 FIND USED INVITE

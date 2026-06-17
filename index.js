@@ -39,6 +39,9 @@ const {
 const socialMonitor =
   require('./utils/socialMonitor');
 
+  const DailyFactService =
+  require('./services/DailyFactService');
+
 // ==================================================
 // 🔐 TOKEN CHECK
 // ==================================================
@@ -592,6 +595,14 @@ socialMonitor.start(
 
 console.log(
   '✅ Social monitor started'
+);
+
+DailyFactService.start(
+  client
+);
+
+console.log(
+  '✅ Daily Fact Service Started'
 );
 
       console.log(

@@ -82,7 +82,7 @@ function run(
       err.message
     );
 
-    return null;
+    throw err;
   }
 }
 
@@ -105,7 +105,7 @@ function get(
       err.message
     );
 
-    return null;
+    throw err;
   }
 }
 
@@ -128,7 +128,7 @@ function all(
       err.message
     );
 
-    return [];
+    throw err;
   }
 }
 
@@ -1429,6 +1429,29 @@ function createGiveawayTables() {
   );
 }
 
+function createDailyFactTable() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS dailyfact_config (
+
+      guildId TEXT PRIMARY KEY,
+
+      enabled INTEGER DEFAULT 0,
+
+      channelId TEXT,
+
+      category TEXT DEFAULT 'random',
+
+      hour INTEGER DEFAULT 12,
+
+      minute INTEGER DEFAULT 0,
+
+      lastSent TEXT
+    )
+  `);
+}
+
 function initDatabase() {
 
   createCasesTable();
@@ -1461,13 +1484,15 @@ function initDatabase() {
 
   createPollTables();
 
-  createInviteTables();
+createInviteTables();
 
-  createGiveawayTables();
+createGiveawayTables();
 
-  console.log(
-    '✅ Database initialized'
-  );
+createDailyFactTable();
+
+console.log(
+  '✅ Database initialized'
+);
 }
 
 initDatabase();

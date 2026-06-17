@@ -7,16 +7,28 @@ const {
   run
 } = require('../database');
 
+const {
+  createMemberLeaveEmbed,
+  sendLog
+} = require('../utils/logger');
+
 module.exports = {
 
   name: 'guildMemberRemove',
 
-  async execute(member) {
+  async execute(member, client) {
 
     try {
 
       const guild =
         member.guild;
+
+      await sendLog(
+        client,
+        guild.id,
+        'MEMBERS',
+        createMemberLeaveEmbed(member)
+      );
 
       // ==========================================
       // 🔍 GET INVITE DATA

@@ -1,0 +1,34 @@
+{
+  "random": [
+    "Octopuses have three hearts.",
+    "Honey never spoils and has been found edible in ancient tombs.",
+    "A day on Venus is longer than a year on Venus.",
+    "Penguins can drink seawater thanks to a special salt-filtering gland.",
+    "Bananas are berries, but strawberries are not.",
+    "Sharks existed before trees.",
+    "The Eiffel Tower can grow taller in summer due to heat expansion.",
+    "A group of flamingos is called a flamboyance.",
+    "The human brain contains roughly 86 billion neurons.",
+    "Scotland's national animal is the unicorn."
+  ],
+
+  "space": [
+    "A day on Venus is longer than its year.",
+    "Neutron stars can spin over 600 times per second.",
+    "There are more stars in the universe than grains of sand on Earth.",
+    "The Sun contains over 99% of the Solar System's mass."
+  ],
+
+  "animals": [
+    "Octopuses have three hearts.",
+    "Penguins can drink seawater.",
+    "A group of flamingos is called a flamboyance.",
+    "Cows have best friends and become stressed when separated."
+  ],
+
+  "science": [
+    "The human brain contains roughly 86 billion neurons.",
+    "Water can boil and freeze at the same time under specific conditions.",
+    "Lightning is five times hotter than the surface of the Sun."
+  ]
+}

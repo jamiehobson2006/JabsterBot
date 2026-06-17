@@ -43,6 +43,7 @@ const ephemeralCommands =
     'setstaffrole',
     'setadminrole',
     'settranscriptchannel',
+    'linkblock',
     'ticketsetup',
     'ticketpanel'
   ]);

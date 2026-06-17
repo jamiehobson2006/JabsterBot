@@ -166,6 +166,9 @@ const permissionDefaults = {
   settranscriptchannel:
     PermissionFlagsBits.Administrator,
 
+  linkblock:
+    PermissionFlagsBits.ManageGuild,
+
   ticketpanel:
     PermissionFlagsBits.Administrator,
 
@@ -221,6 +224,21 @@ const permissionDefaults = {
     PermissionFlagsBits.ManageGuild,
 
   setinvitechannel:
+    PermissionFlagsBits.ManageGuild,
+
+  dailyfact:
+    PermissionFlagsBits.ManageGuild,
+
+  leveling:
+    PermissionFlagsBits.ManageGuild,
+
+  levelreward:
+    PermissionFlagsBits.ManageGuild,
+
+  socialadd:
+    PermissionFlagsBits.ManageGuild,
+
+  socialremove:
     PermissionFlagsBits.ManageGuild
 };
 
@@ -523,11 +541,6 @@ const rest =
         '⚡ Deploying guild commands...'
       );
 
-      console.log(
-  'Testing command:',
-  commands[0]?.name
-);
-
 const result = await Promise.race([
 
   rest.put(
@@ -541,7 +554,7 @@ const result = await Promise.race([
 
     {
 
-     body: commands.slice(0, 50)
+     body: commands
     }
   ),
 

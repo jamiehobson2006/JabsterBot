@@ -76,7 +76,7 @@ module.exports = {
             ChannelType.GuildCategory
           )
 
-          .setRequired(true)
+          .setRequired(false)
       )
 
       // ==========================================
@@ -92,7 +92,7 @@ module.exports = {
             'Staff role for tickets'
           )
 
-          .setRequired(true)
+          .setRequired(false)
       )
 
       // ==========================================
@@ -108,7 +108,7 @@ module.exports = {
             'Enable this ticket type'
           )
 
-          .setRequired(true)
+          .setRequired(false)
       ),
 
   async execute(interaction) {
@@ -144,20 +144,23 @@ module.exports = {
       const category =
         interaction.options.getChannel(
           'category',
-          true
+          false
         );
 
       const role =
         interaction.options.getRole(
           'staff_role',
-          true
+          false
+        );
+
+      const enabledOption =
+        interaction.options.getBoolean(
+          'enabled',
+          false
         );
 
       const enabled =
-        interaction.options.getBoolean(
-          'enabled',
-          true
-        );
+        enabledOption ?? true;
 
       const botMember =
         interaction.guild.members.me;
@@ -166,14 +169,17 @@ module.exports = {
       // 🛡 CATEGORY VALIDATION
       // ==========================================
       const perms =
-        category.permissionsFor(
-          botMember
-        );
+        category
+          ? category.permissionsFor(
+              botMember
+            )
+          : null;
 
       const missing = [];
 
       if (
 
+        category &&
         !perms?.has(
           PermissionsBitField.Flags.ViewChannel
         )
@@ -186,6 +192,7 @@ module.exports = {
 
       if (
 
+        category &&
         !perms?.has(
           PermissionsBitField.Flags.SendMessages
         )
@@ -198,6 +205,7 @@ module.exports = {
 
       if (
 
+        category &&
         !perms?.has(
           PermissionsBitField.Flags.ManageChannels
         )
@@ -225,6 +233,7 @@ module.exports = {
       // ==========================================
       if (
 
+        role &&
         role.position >=
         botMember.roles.highest.position
       ) {
@@ -274,9 +283,9 @@ module.exports = {
 
           enabled ? 1 : 0,
 
-          category.id,
+          category?.id || null,
 
-          role.id
+          role?.id || null
         ]
       );
 
@@ -336,7 +345,9 @@ module.exports = {
               name: '📂 Category',
 
               value:
-                `${category}`,
+                category
+                  ? `${category}`
+                  : 'No category set',
 
               inline: true
             },
@@ -346,7 +357,9 @@ module.exports = {
               name: '👮 Staff Role',
 
               value:
-                `${role}`,
+                role
+                  ? `${role}`
+                  : 'No staff role set',
 
               inline: true
             },

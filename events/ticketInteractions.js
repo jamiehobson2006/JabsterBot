@@ -257,10 +257,23 @@ module.exports = {
 
         try {
 
-          await closeTicket({
+          const result =
+            await closeTicket({
 
-            interaction
-          });
+              interaction
+            });
+
+          if (result?.channelDeleted === false) {
+
+            return safelyReply(
+              interaction,
+              {
+
+                content:
+                  'Ticket closed, but transcript generation failed so the channel was kept.'
+              }
+            );
+          }
 
           return safelyReply(
             interaction,

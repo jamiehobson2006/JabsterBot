@@ -1,7 +1,16 @@
 const {
+  PermissionsBitField
+} = require('discord.js');
+
+const {
   run,
   get
 } = require('../database');
+
+const {
+  createAuditEmbed,
+  logAudit
+} = require('../utils/logger');
 
 const {
   calculateLevel
@@ -15,6 +24,144 @@ const LevelingService =
 // ==================================================
 const messageCooldowns =
   new Map();
+
+const linkPattern =
+  /\b(?:https?:\/\/|www\.|discord\.gg\/|discord(?:app)?\.com\/invite\/)[^\s<]*/i;
+
+function findBlockedLink(content) {
+
+  if (
+    typeof content !== 'string'
+  ) {
+
+    return null;
+  }
+
+  const match =
+    content.match(linkPattern);
+
+  return match?.[0] || null;
+}
+
+function canBypassLinkBlock(
+  message,
+  settings
+) {
+
+  if (
+    message.member?.permissions.has(
+      PermissionsBitField.Flags.Administrator
+    ) ||
+    message.member?.permissions.has(
+      PermissionsBitField.Flags.ManageMessages
+    )
+  ) {
+
+    return true;
+  }
+
+  return Boolean(
+    settings?.linkBypassRoleId &&
+    message.member?.roles.cache.has(
+      settings.linkBypassRoleId
+    )
+  );
+}
+
+async function handleLinkBlock(
+  message,
+  client
+) {
+
+  const blockedLink =
+    findBlockedLink(
+      message.content
+    );
+
+  if (!blockedLink) {
+
+    return false;
+  }
+
+  const settings =
+    get(
+
+      `SELECT linkBlockEnabled, linkBypassRoleId
+       FROM guild_settings
+       WHERE guildId = ?`,
+
+      [message.guild.id]
+    );
+
+  if (
+    Number(settings?.linkBlockEnabled || 0) !== 1 ||
+    canBypassLinkBlock(message, settings)
+  ) {
+
+    return false;
+  }
+
+  await message.delete()
+    .catch(err => {
+
+      console.error(
+        'Link block delete failed:',
+        err.message
+      );
+    });
+
+  await message.channel.send({
+
+    content:
+      `${message.author}, links are blocked in this server.`,
+
+    allowedMentions: {
+      users: [message.author.id],
+      roles: [],
+      parse: []
+    }
+  })
+
+    .then(sent =>
+
+      setTimeout(
+        () => sent.delete().catch(() => {}),
+        5000
+      )
+    )
+
+    .catch(() => {});
+
+  await logAudit(
+
+    client,
+
+    message.guild.id,
+
+    {
+      action: 'LINK_BLOCKED',
+      targetId: message.author.id,
+      executorId: client.user?.id,
+      type: 'MESSAGES',
+      metadata: {
+        channelId: message.channel.id,
+        link: blockedLink
+      },
+      embed: createAuditEmbed({
+        action: 'Link Blocked',
+        target: `${message.author.tag}\n<@${message.author.id}>`,
+        executor: client.user
+          ? `${client.user.tag}\n<@${client.user.id}>`
+          : 'Bot',
+        channel: `<#${message.channel.id}>`,
+        extra: `Blocked link: ${blockedLink}`,
+        color: 0xED4245
+      })
+    }
+  );
+
+  return true;
+}
 
 // ==================================================
 // ⏱ RESET HELPERS
@@ -166,6 +313,16 @@ module.exports = {
 
       const now =
         Date.now();
+
+      if (
+        await handleLinkBlock(
+          message,
+          client
+        )
+      ) {
+
+        return;
+      }
 
       // ==========================================
       // ⏱ ANTI-SPAM COOLDOWN

@@ -396,6 +396,25 @@ async function closeTicket({
       'Transcript generation error:',
       err
     );
+
+    await interaction.channel.send({
+      content:
+        'Transcript generation failed, so this ticket channel was not deleted automatically.'
+    }).catch(() => {});
+
+    return {
+
+      success: true,
+
+      transcriptSaved: false,
+
+      channelDeleted: false,
+
+      closedBy:
+        interaction.user.id,
+
+      handleTime
+    };
   }
 
   // ==============================================
@@ -423,6 +442,10 @@ async function closeTicket({
   return {
 
     success: true,
+
+    transcriptSaved: true,
+
+    channelDeleted: true,
 
     closedBy:
       interaction.user.id,

@@ -1,12 +1,26 @@
 const {
+  AuditLogEvent
+} = require('discord.js');
+
+const {
   removeInvite
 } = require('../utils/giveaways/cache');
+
+const {
+  createAuditEmbed,
+  logAudit
+} = require('../utils/logger');
+
+const {
+  findRecentAuditLog,
+  formatExecutor
+} = require('../utils/auditLookup');
 
 module.exports = {
 
   name: 'inviteDelete',
 
-  async execute(invite) {
+  async execute(invite, client) {
 
     try {
 
@@ -42,6 +56,37 @@ module.exports = {
         invite.guild.id,
 
         invite.code
+      );
+
+      const audit =
+        await findRecentAuditLog(
+          invite.guild,
+          AuditLogEvent.InviteDelete,
+          invite.code
+        );
+
+      await logAudit(
+        client,
+        invite.guild.id,
+        {
+          action: 'INVITE_DELETED',
+          executorId: audit?.executor?.id,
+          type: 'INVITES',
+          metadata: {
+            code: invite.code,
+            channelId: invite.channel?.id
+          },
+          embed: createAuditEmbed({
+            action: 'Invite Deleted',
+            executor: formatExecutor(audit),
+            channel: invite.channel
+              ? `<#${invite.channel.id}>`
+              : 'Unknown',
+            reason: audit?.reason || undefined,
+            extra: `Code: ${invite.code}`,
+            color: 0xED4245
+          })
+        }
       );
 
       // ==========================================
