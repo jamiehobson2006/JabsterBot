@@ -42,6 +42,19 @@ function parseRequirements(data) {
   }
 }
 
+function getSavedWinners(messageId) {
+
+  return all(
+
+    `SELECT userId
+     FROM giveaway_winners
+     WHERE messageId = ?
+     AND COALESCE(rerolled, 0) = 0`,
+
+    [messageId]
+  ).map(row => row.userId);
+}
+
 // ==================================================
 // 🎉 END GIVEAWAY
 // ==================================================
@@ -78,6 +91,17 @@ async function endGiveaway(
       !channel.isTextBased()
     ) {
 
+      run(
+
+        `UPDATE giveaways
+         SET ended = 1,
+             ending = 0
+         WHERE messageId = ?
+         AND ended = 0`,
+
+        [giveaway.messageId]
+      );
+
       return;
     }
 
@@ -90,6 +114,34 @@ async function endGiveaway(
         .catch(() => null);
 
     if (!message) {
+
+      run(
+
+        `UPDATE giveaways
+         SET ended = 1,
+             ending = 0
+         WHERE messageId = ?
+         AND ended = 0`,
+
+        [giveaway.messageId]
+      );
+
+      return;
+    }
+
+    const savedWinners =
+      getSavedWinners(
+        giveaway.messageId
+      );
+
+    if (savedWinners.length) {
+
+      await finishGiveaway({
+
+        giveaway,
+        message,
+        winners: savedWinners
+      });
 
       return;
     }
@@ -123,13 +175,19 @@ async function endGiveaway(
     // ==========================================
     if (!entries.length) {
 
-      await finishGiveaway({
+      const finished =
+        await finishGiveaway({
 
-        giveaway,
-        message,
+          giveaway,
+          message,
 
-        winners: []
-      });
+          winners: []
+        });
+
+      if (!finished) {
+
+        return;
+      }
 
       return channel.send({
 
@@ -172,7 +230,10 @@ async function endGiveaway(
       // ======================================
       const member =
         await message.guild.members
-          .fetch(entry.userId)
+          .fetch({
+            user: entry.userId,
+            force: true
+          })
           .catch(() => null);
 
       if (!member) {
@@ -262,13 +323,19 @@ async function endGiveaway(
     // ==========================================
     if (!validEntries.length) {
 
-      await finishGiveaway({
+      const finished =
+        await finishGiveaway({
 
-        giveaway,
-        message,
+          giveaway,
+          message,
 
-        winners: []
-      });
+          winners: []
+        });
+
+      if (!finished) {
+
+        return;
+      }
 
       return channel.send({
 
@@ -335,7 +402,7 @@ async function endGiveaway(
       // ======================================
       run(
 
-        `INSERT INTO giveaway_winners (
+        `INSERT OR IGNORE INTO giveaway_winners (
 
           messageId,
           guildId,
@@ -362,13 +429,19 @@ async function endGiveaway(
     // ==========================================
     // 🏁 FINISH GIVEAWAY
     // ==========================================
-    await finishGiveaway({
+    const finished =
+      await finishGiveaway({
 
-      giveaway,
-      message,
+        giveaway,
+        message,
 
-      winners
-    });
+        winners
+      });
+
+    if (!finished) {
+
+      return;
+    }
 
     // ==========================================
     // 🎉 WINNER ANNOUNCEMENT
@@ -391,6 +464,7 @@ async function endGiveaway(
       err
     );
   }
+
 }
 
 // ==================================================
@@ -404,25 +478,33 @@ async function finishGiveaway({
 
 }) {
 
+  const result =
+    run(
+
+      `UPDATE giveaways
+       SET ended = 1,
+           ending = 0
+       WHERE messageId = ?
+       AND ended = 0`,
+
+      [
+        giveaway.messageId
+      ]
+    );
+
+  if (
+    !result ||
+    result.changes === 0
+  ) {
+
+    return false;
+  }
+
   try {
 
     // ==========================================
     // 💾 MARK ENDED
     // ==========================================
-    run(
-
-      `UPDATE giveaways
-
-       SET ended = 1
-
-       WHERE messageId = ?`,
-
-      [
-
-        giveaway.messageId
-      ]
-    );
-
     // ==========================================
     // 🚫 NO EMBED
     // ==========================================
@@ -430,7 +512,7 @@ async function finishGiveaway({
       !message.embeds?.length
     ) {
 
-      return;
+      return true;
     }
 
     // ==========================================
@@ -510,6 +592,8 @@ async function finishGiveaway({
       err
     );
   }
+
+  return true;
 }
 
 module.exports = {

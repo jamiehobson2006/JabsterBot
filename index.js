@@ -559,11 +559,15 @@ client.once(
             continue;
           }
 
-          await loadGuildInvites(
+          const inviteCache =
+            await loadGuildInvites(
             guild
           );
 
-          cachedGuilds++;
+          if (inviteCache) {
+
+            cachedGuilds++;
+          }
 
         } catch (err) {
 
@@ -604,10 +608,6 @@ DailyFactService.start(
 console.log(
   '✅ Daily Fact Service Started'
 );
-
-      console.log(
-        '✅ Giveaway loop started'
-      );
 
       // ======================================
       // 🎮 BOT ACTIVITY

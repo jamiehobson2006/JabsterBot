@@ -22,9 +22,6 @@ const LevelingService =
 // ==================================================
 // ⏱ MESSAGE COOLDOWN CACHE
 // ==================================================
-const messageCooldowns =
-  new Map();
-
 const linkPattern =
   /\b(?:https?:\/\/|www\.|discord\.gg\/|discord(?:app)?\.com\/invite\/)[^\s<]*/i;
 
@@ -262,7 +259,7 @@ module.exports = {
 
   name: 'messageCreate',
 
-  async execute(message) {
+  async execute(message, client) {
 
     try {
 
@@ -327,38 +324,9 @@ module.exports = {
       // ==========================================
       // ⏱ ANTI-SPAM COOLDOWN
       // ==========================================
-      const cooldownKey =
-        `${guildId}:${userId}`;
-
-      const lastMessage =
-        messageCooldowns.get(
-          cooldownKey
-        );
-
-      if (
-        lastMessage &&
-        now - lastMessage < 10000
-      ) {
-
-        return;
-      }
-
-      messageCooldowns.set(
-        cooldownKey,
-        now
-      );
-
       // ==========================================
       // 🧹 CLEANUP CACHE
       // ==========================================
-      setTimeout(() => {
-
-        messageCooldowns.delete(
-          cooldownKey
-        );
-
-      }, 15000);
-
       // ==========================================
       // 📊 FETCH STATS
       // ==========================================

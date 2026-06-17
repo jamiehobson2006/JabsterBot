@@ -27,6 +27,139 @@ db.pragma(
   'cache_size = -32000'
 );
 
+let repairingDatabase =
+  false;
+
+function isIndexCorruption(
+  err
+) {
+
+  return (
+    err?.code === 'SQLITE_CORRUPT_INDEX' ||
+    /corrupt.*index|index.*corrupt|database disk image is malformed/i.test(
+      err?.message || ''
+    )
+  );
+}
+
+function repairCorruptIndexes() {
+
+  if (repairingDatabase) {
+
+    return false;
+  }
+
+  repairingDatabase =
+    true;
+
+  try {
+
+    console.error(
+      'SQLite index corruption detected. Attempting REINDEX...'
+    );
+
+    db.exec('REINDEX');
+
+    console.log(
+      'SQLite REINDEX completed.'
+    );
+
+    return true;
+
+  } catch (repairErr) {
+
+    console.error(
+      'SQLite REINDEX failed:',
+      repairErr.message
+    );
+
+    return false;
+
+  } finally {
+
+    repairingDatabase =
+      false;
+  }
+}
+
+function checkDatabaseIntegrity() {
+
+  try {
+
+    const rows =
+      db.pragma(
+        'integrity_check'
+      );
+
+    const messages =
+      rows.map(row =>
+        Object.values(row)[0]
+      );
+
+    if (
+      messages.length === 1 &&
+      messages[0] === 'ok'
+    ) {
+
+      return;
+    }
+
+    console.error(
+      'SQLite integrity check reported:',
+      messages.slice(0, 5).join(' | ')
+    );
+
+    if (
+      repairCorruptIndexes()
+    ) {
+
+      const retryRows =
+        db.pragma(
+          'integrity_check'
+        );
+
+      const retryMessages =
+        retryRows.map(row =>
+          Object.values(row)[0]
+        );
+
+      if (
+        retryMessages.length === 1 &&
+        retryMessages[0] === 'ok'
+      ) {
+
+        console.log(
+          'SQLite integrity check passed after REINDEX.'
+        );
+
+        return;
+      }
+
+      console.error(
+        'SQLite still reports integrity issues:',
+        retryMessages.slice(0, 5).join(' | ')
+      );
+    }
+
+  } catch (err) {
+
+    if (
+      isIndexCorruption(err)
+    ) {
+
+      repairCorruptIndexes();
+      return;
+    }
+
+    console.error(
+      'SQLite integrity check failed:',
+      err.message
+    );
+  }
+}
+
+checkDatabaseIntegrity();
+
 // ==================================================
 // ⚡ RAW DATABASE METHODS
 // ==================================================
@@ -77,6 +210,17 @@ function run(
 
   } catch (err) {
 
+    if (
+      isIndexCorruption(err) &&
+      repairCorruptIndexes()
+    ) {
+
+      return rawRun(
+        sql,
+        params
+      );
+    }
+
     console.error(
       'DB run error:',
       err.message
@@ -100,6 +244,17 @@ function get(
 
   } catch (err) {
 
+    if (
+      isIndexCorruption(err) &&
+      repairCorruptIndexes()
+    ) {
+
+      return rawGet(
+        sql,
+        params
+      );
+    }
+
     console.error(
       'DB get error:',
       err.message
@@ -122,6 +277,17 @@ function all(
     );
 
   } catch (err) {
+
+    if (
+      isIndexCorruption(err) &&
+      repairCorruptIndexes()
+    ) {
+
+      return rawAll(
+        sql,
+        params
+      );
+    }
 
     console.error(
       'DB all error:',

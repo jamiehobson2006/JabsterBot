@@ -174,7 +174,10 @@ module.exports = {
       // ==========================================
       const member =
         await interaction.guild.members
-          .fetch(interaction.user.id)
+          .fetch({
+            user: interaction.user.id,
+            force: true
+          })
           .catch(() => null);
 
       if (!member) {

@@ -50,6 +50,40 @@ function startGiveawayLoop(
         const now =
           Date.now();
 
+        run(
+
+          `UPDATE giveaways
+           SET ended = 1,
+               ending = 0
+           WHERE ended = 0
+           AND endsAt <= ?
+           AND EXISTS (
+             SELECT 1
+             FROM giveaway_winners
+             WHERE giveaway_winners.messageId = giveaways.messageId
+             AND COALESCE(giveaway_winners.rerolled, 0) = 0
+           )`,
+
+          [now]
+        );
+
+        run(
+
+          `UPDATE giveaways
+           SET ending = 0
+           WHERE ended = 0
+           AND COALESCE(ending, 0) = 1
+           AND endsAt <= ?
+           AND NOT EXISTS (
+             SELECT 1
+             FROM giveaway_winners
+             WHERE giveaway_winners.messageId = giveaways.messageId
+             AND COALESCE(giveaway_winners.rerolled, 0) = 0
+           )`,
+
+          [now]
+        );
+
         // ==========================================
         // 📊 FETCH ACTIVE GIVEAWAYS
         // ==========================================
@@ -61,6 +95,7 @@ function startGiveawayLoop(
 
              WHERE ended = 0
              AND paused = 0
+             AND COALESCE(ending, 0) = 0
              AND endsAt <= ?`,
 
             [now]
@@ -101,6 +136,7 @@ function startGiveawayLoop(
                  SET ending = 1
 
                  WHERE messageId = ?
+                 AND ended = 0
                  AND ending = 0`,
 
                 [
