@@ -28,6 +28,8 @@ module.exports = {
 
   cooldown: 5000,
 
+  ephemeral: true,
+
   data:
     new SlashCommandBuilder()
 
@@ -456,7 +458,6 @@ await interaction.editReply({
       .setTimestamp()
   ],
 
-  ephemeral: true
 });
 
     } catch (err) {
