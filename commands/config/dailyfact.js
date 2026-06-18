@@ -64,16 +64,61 @@ module.exports = {
         )
     )
 
-    .addSubcommand(subcommand =>
+.addSubcommand(subcommand =>
 
-      subcommand
+  subcommand
 
-        .setName('disable')
+    .setName('disable')
+
+    .setDescription(
+      'Disable daily facts'
+    )
+)
+
+.addSubcommand(subcommand =>
+
+  subcommand
+
+    .setName('time')
+
+    .setDescription(
+      'Set posting time'
+    )
+
+    .addIntegerOption(option =>
+
+      option
+
+        .setName('hour')
 
         .setDescription(
-          'Disable daily facts'
+          'Hour (0-23)'
         )
-    ),
+
+        .setMinValue(0)
+
+        .setMaxValue(23)
+
+        .setRequired(true)
+    )
+
+    .addIntegerOption(option =>
+
+      option
+
+        .setName('minute')
+
+        .setDescription(
+          'Minute (0-59)'
+        )
+
+        .setMinValue(0)
+
+        .setMaxValue(59)
+
+        .setRequired(true)
+    )
+),
 
   async execute(
     interaction
@@ -194,5 +239,46 @@ module.exports = {
         }
       });
     }
+    if (
+  subcommand === 'time'
+) {
+
+  const hour =
+    interaction.options.getInteger(
+      'hour'
+    );
+
+  const minute =
+    interaction.options.getInteger(
+      'minute'
+    );
+
+  run(
+
+    `UPDATE dailyfact_config
+
+     SET hour = ?,
+         minute = ?
+
+     WHERE guildId = ?`,
+
+    [
+
+      hour,
+      minute,
+      guildId
+    ]
+  );
+
+  return interaction.editReply({
+
+    content:
+      `✅ Daily fact time set to ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
+
+    allowedMentions: {
+      parse: []
+    }
+  });
+}
   }
 };

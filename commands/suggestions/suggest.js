@@ -246,9 +246,7 @@ module.exports = {
             interaction.user.id
           ]
         );
-        
-const suggestionNumber =
-  msg.id;
+
       const embed =
         new EmbedBuilder()
 
@@ -294,15 +292,14 @@ const suggestionNumber =
               inline: true
             },
 
-            {
+{
+  name: '🆔 Suggestion ID',
 
-              name: '🆔 Suggestion ID',
+  value:
+    'Generating...',
 
-              value:
-                `#${suggestionNumber}`,
-
-              inline: true
-            }
+  inline: true
+}
           )
 
           .setThumbnail(
@@ -357,13 +354,16 @@ const suggestionNumber =
       // ========================
       // 📤 SEND MESSAGE
       // ========================
-      const msg =
-        await channel.send({
+const msg =
+  await channel.send({
 
-          embeds: [embed],
+    embeds: [embed],
 
-          components: [row]
-        });
+    components: [row]
+  });
+
+const suggestionNumber =
+  msg.id;
 
       // ========================
       // 👍 COMMUNITY VOTING
