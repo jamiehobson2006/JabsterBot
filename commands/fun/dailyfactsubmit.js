@@ -1,6 +1,18 @@
 const {
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
 } = require('discord.js');
+
+const {
+  get,
+  run
+} = require('../../database');
+
+const REVIEW_CHANNEL_ID =
+  '1517165828556980295';
 
 module.exports = {
 
@@ -106,10 +118,186 @@ module.exports = {
     interaction
   ) {
 
+    const category =
+      interaction.options.getString(
+        'category'
+      );
+
+    const fact =
+      interaction.options.getString(
+        'fact'
+      );
+
+    const result =
+      run(
+
+        `INSERT INTO dailyfact_submissions (
+
+          guildId,
+          userId,
+          fact,
+          category,
+          submittedAt
+
+        )
+
+        VALUES (?, ?, ?, ?, ?)`,
+
+        [
+
+          interaction.guild.id,
+
+          interaction.user.id,
+
+          fact,
+
+          category,
+
+          Date.now()
+        ]
+      );
+
+    const submissionId =
+      result.lastInsertRowid;
+
+    const reviewChannel =
+      interaction.client.channels.cache.get(
+        REVIEW_CHANNEL_ID
+      );
+
+    if (reviewChannel) {
+
+      const embed =
+        new EmbedBuilder()
+
+          .setColor(
+            0x5865F2
+          )
+
+          .setTitle(
+            '🧠 Daily Fact Submission'
+          )
+
+          .addFields(
+
+            {
+
+              name: '🆔 Submission ID',
+
+              value:
+                `#${submissionId}`,
+
+              inline: true
+            },
+
+            {
+
+              name: '📂 Category',
+
+              value:
+                category,
+
+              inline: true
+            },
+
+            {
+
+              name: '👤 Submitted By',
+
+              value:
+                `${interaction.user}`,
+
+              inline: true
+            },
+
+            {
+
+              name: '📖 Fact',
+
+              value:
+                fact
+            }
+          )
+
+          .setFooter({
+
+            text:
+              `User ID: ${interaction.user.id}`
+          })
+
+          .setTimestamp();
+
+      const row =
+        new ActionRowBuilder()
+
+          .addComponents(
+
+            new ButtonBuilder()
+
+              .setCustomId(
+                `dailyfact_approve_${submissionId}`
+              )
+
+              .setLabel(
+                'Approve'
+              )
+
+              .setEmoji(
+                '✅'
+              )
+
+              .setStyle(
+                ButtonStyle.Success
+              ),
+
+            new ButtonBuilder()
+
+              .setCustomId(
+                `dailyfact_deny_${submissionId}`
+              )
+
+              .setLabel(
+                'Deny'
+              )
+
+              .setEmoji(
+                '❌'
+              )
+
+              .setStyle(
+                ButtonStyle.Danger
+              )
+          );
+
+      const reviewMessage =
+        await reviewChannel.send({
+
+          embeds: [embed],
+
+          components: [row]
+        });
+
+      run(
+
+        `UPDATE dailyfact_submissions
+
+         SET reviewMessageId = ?
+
+         WHERE id = ?`,
+
+        [
+
+          reviewMessage.id,
+
+          submissionId
+        ]
+      );
+    }
+
     return interaction.editReply({
 
       content:
-        '✅ Command created successfully. Submission system coming next.'
+        `✅ Daily Fact #${submissionId} submitted for review.`
     });
   }
 };

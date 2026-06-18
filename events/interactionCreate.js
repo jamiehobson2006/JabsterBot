@@ -233,9 +233,148 @@ module.exports = {
             customId
           } = interaction;
 
-          // ==========================================
-          // 💡 SUGGESTIONS
-          // ==========================================
+          if (
+  customId.startsWith(
+    'dailyfact_'
+  )
+) {
+
+  await interaction.deferUpdate();
+
+  const parts =
+    customId.split('_');
+
+  const action =
+    parts[1];
+
+  const submissionId =
+    Number(parts[2]);
+
+  const submission =
+    get(
+
+      `SELECT *
+       FROM dailyfact_submissions
+       WHERE id = ?`,
+
+      [submissionId]
+    );
+
+  if (!submission) {
+
+    return interaction.followUp({
+
+      content:
+        '❌ Submission not found.',
+
+      flags:
+        MessageFlags.Ephemeral
+    });
+  }
+
+  if (
+    submission.status !==
+    'PENDING'
+  ) {
+
+    return interaction.followUp({
+
+      content:
+        `⚠️ Already ${submission.status}.`,
+
+      flags:
+        MessageFlags.Ephemeral
+    });
+  }
+
+  const embed =
+    EmbedBuilder.from(
+      interaction.message.embeds[0]
+    );
+
+  if (
+    action === 'approve'
+  ) {
+
+    run(
+
+      `UPDATE dailyfact_submissions
+
+       SET status = ?,
+           reviewerId = ?,
+           approvedAt = ?
+
+       WHERE id = ?`,
+
+      [
+
+        'APPROVED',
+
+        interaction.user.id,
+
+        Date.now(),
+
+        submissionId
+      ]
+    );
+
+    embed
+
+      .setColor(
+        0x57F287
+      )
+
+      .setFooter({
+
+        text:
+          `✅ Approved by ${interaction.user.tag}`
+      });
+  }
+
+  else if (
+    action === 'deny'
+  ) {
+
+    run(
+
+      `UPDATE dailyfact_submissions
+
+       SET status = ?,
+           reviewerId = ?
+
+       WHERE id = ?`,
+
+      [
+
+        'DENIED',
+
+        interaction.user.id,
+
+        submissionId
+      ]
+    );
+
+    embed
+
+      .setColor(
+        0xED4245
+      )
+
+      .setFooter({
+
+        text:
+          `❌ Denied by ${interaction.user.tag}`
+      });
+  }
+
+  return interaction.message.edit({
+
+    embeds: [embed],
+
+    components: []
+  });
+}
+
           if (
             customId.startsWith(
               'suggest_'
