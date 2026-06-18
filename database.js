@@ -1618,6 +1618,55 @@ function createDailyFactTable() {
   `);
 }
 
+function createDailyFactSubmissionTable() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS dailyfact_submissions (
+
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+      guildId TEXT NOT NULL,
+
+      userId TEXT NOT NULL,
+
+      fact TEXT NOT NULL,
+
+      status TEXT DEFAULT 'PENDING',
+
+      reviewerId TEXT,
+
+      submittedAt INTEGER NOT NULL
+    )
+  `);
+
+  ensureColumn(
+  'dailyfact_submissions',
+  'category',
+  "TEXT DEFAULT 'random'"
+);
+
+ensureColumn(
+  'dailyfact_submissions',
+  'approvedAt',
+  'INTEGER'
+);
+
+ensureColumn(
+  'dailyfact_submissions',
+  'reviewMessageId',
+  'TEXT'
+);
+
+  createIndex(
+
+    'idx_dailyfact_submissions',
+
+    `CREATE INDEX IF NOT EXISTS idx_dailyfact_submissions
+     ON dailyfact_submissions(status)`
+  );
+}
+
 function initDatabase() {
 
   createCasesTable();
@@ -1655,6 +1704,8 @@ createInviteTables();
 createGiveawayTables();
 
 createDailyFactTable();
+
+createDailyFactSubmissionTable();
 
 console.log(
   '✅ Database initialized'
