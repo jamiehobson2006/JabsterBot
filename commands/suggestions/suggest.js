@@ -405,57 +405,59 @@ const suggestionNumber =
         ]
       );
 
-      await interaction.editReply({
+await interaction.editReply({
 
-        embeds: [
+  embeds: [
 
-          new EmbedBuilder()
+    new EmbedBuilder()
 
-            .setColor(
-              0x57F287
-            )
+      .setColor(
+        0x57F287
+      )
 
-            .setTitle(
-              '✅ Suggestion Submitted'
-            )
+      .setTitle(
+        '✅ Suggestion Submitted'
+      )
 
-            .setDescription(
+      .setDescription(
 
-              `Your suggestion has been posted in ${channel}`
-            )
+        `Your suggestion has been posted in ${channel}`
+      )
 
-            .addFields(
+      .addFields(
 
-              {
+        {
 
-                name: '🆔 Suggestion ID',
+          name: '🆔 Suggestion ID',
 
-                value:
-                  `#${suggestionNumber}`,
+          value:
+            `#${suggestionNumber}`,
 
-                inline: true
-              },
+          inline: true
+        },
 
-              {
+        {
 
-                name: '🔗 Message',
+          name: '🔗 Message',
 
-                value:
-                  `[Jump to Suggestion](${msg.url})`,
+          value:
+            `[Jump to Suggestion](${msg.url})`,
 
-                inline: true
-              }
-            )
+          inline: true
+        }
+      )
 
-            .setFooter({
+      .setFooter({
 
-              text:
-                `${interaction.guild.name} Suggestions`
-            })
+        text:
+          `${interaction.guild.name} Suggestions`
+      })
 
-            .setTimestamp()
-        ]
-      });
+      .setTimestamp()
+  ],
+
+  ephemeral: true
+});
 
     } catch (err) {
 
