@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 
 const fs =
   require('fs');
@@ -582,7 +582,7 @@ console.log(
     // ==========================================
     // 🌍 GLOBAL MODE
     // ==========================================
-    else {
+    {
 
       console.log(
         '🌍 Clearing old global commands...'
