@@ -9,6 +9,11 @@ const {
   run
 } = require('../../database');
 
+const {
+  FACT_CATEGORIES,
+  categoryName
+} = require('../../utils/dailyFacts');
+
 module.exports = {
 
   ephemeral: true,
@@ -75,6 +80,45 @@ module.exports = {
     )
 )
 
+.addSubcommand(subcommand => {
+
+  subcommand
+
+    .setName('category')
+
+    .setDescription(
+      'Set the type of facts to post'
+    );
+
+  const option =
+    optionBuilder =>
+
+      optionBuilder
+
+        .setName('category')
+
+        .setDescription(
+          'Random uses every approved and coded fact'
+        )
+
+        .setRequired(true)
+
+        .addChoices(
+          {
+            name: 'Random / All Facts',
+            value: 'random'
+          },
+          ...FACT_CATEGORIES.map(category => ({
+            name: category.name,
+            value: category.value
+          }))
+        );
+
+  return subcommand.addStringOption(
+    option
+  );
+})
+
 .addSubcommand(subcommand =>
 
   subcommand
@@ -117,6 +161,17 @@ module.exports = {
         .setMaxValue(59)
 
         .setRequired(true)
+    )
+)
+
+.addSubcommand(subcommand =>
+
+  subcommand
+
+    .setName('settings')
+
+    .setDescription(
+      'View daily fact settings'
     )
 ),
 
@@ -239,6 +294,42 @@ module.exports = {
         }
       });
     }
+
+    if (
+      subcommand === 'category'
+    ) {
+
+      const category =
+        interaction.options.getString(
+          'category',
+          true
+        );
+
+      run(
+
+        `UPDATE dailyfact_config
+
+         SET category = ?
+
+         WHERE guildId = ?`,
+
+        [
+          category,
+          guildId
+        ]
+      );
+
+      return interaction.editReply({
+
+        content:
+          `✅ Daily fact category set to **${categoryName(category)}**.`,
+
+        allowedMentions: {
+          parse: []
+        }
+      });
+    }
+
     if (
   subcommand === 'time'
 ) {
@@ -274,6 +365,36 @@ module.exports = {
 
     content:
       `✅ Daily fact time set to ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
+
+    allowedMentions: {
+      parse: []
+    }
+  });
+}
+
+if (
+  subcommand === 'settings'
+) {
+
+  const current =
+    get(
+
+      `SELECT *
+       FROM dailyfact_config
+       WHERE guildId = ?`,
+
+      [guildId]
+    );
+
+  return interaction.editReply({
+
+    content:
+      [
+        `Enabled: **${current?.enabled ? 'Yes' : 'No'}**`,
+        `Channel: ${current?.channelId ? `<#${current.channelId}>` : '**Not set**'}`,
+        `Category: **${categoryName(current?.category || 'random')}**`,
+        `Time: **${String(current?.hour ?? 12).padStart(2, '0')}:${String(current?.minute ?? 0).padStart(2, '0')}**`
+      ].join('\n'),
 
     allowedMentions: {
       parse: []

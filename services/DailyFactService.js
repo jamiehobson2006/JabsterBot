@@ -1,138 +1,153 @@
-const fs = require('fs');
-const path = require('path');
-
 const {
   all,
   run
 } = require('../database');
 
-const facts = require(
-  '../data/dailyFacts.json'
-);
+const {
+  categoryName,
+  getFactsForCategory
+} = require('../utils/dailyFacts');
 
 class DailyFactService {
 
+  static interval =
+    null;
+
   static start(client) {
 
+    if (DailyFactService.interval) {
+
+      console.log(
+        'Daily Fact Service already running'
+      );
+
+      return;
+    }
+
     console.log(
-      '🧠 Daily Fact Service Started'
+      'Daily Fact Service Started'
     );
 
-    setInterval(async () => {
+    DailyFactService.interval =
+      setInterval(
+        () => {
+          DailyFactService.tick(client)
+            .catch(err => {
+              console.error(
+                'Daily Fact Service Error:',
+                err
+              );
+            });
+        },
+        60000
+      );
 
-      const configs =
-        all(
+    DailyFactService.interval.unref?.();
+  }
 
-          `SELECT *
-           FROM dailyfact_config
-           WHERE enabled = 1`
-        );
+  static async tick(client) {
 
-      const now =
-        new Date();
+    const configs =
+      all(
 
-      const today =
-        now.toISOString()
-          .split('T')[0];
+        `SELECT *
+         FROM dailyfact_config
+         WHERE enabled = 1`
+      );
 
-      for (
-        const config of configs
+    const now =
+      new Date();
+
+    const today =
+      now.toISOString()
+        .split('T')[0];
+
+    for (const config of configs) {
+
+      if (
+        config.lastSent === today ||
+        now.getHours() !== Number(config.hour ?? 12) ||
+        now.getMinutes() !== Number(config.minute ?? 0)
       ) {
 
-        if (
-          config.lastSent === today
-        ) {
-          continue;
-        }
-
-        if (
-          now.getHours() !==
-          config.hour
-        ) {
-          continue;
-        }
-
-        if (
-          now.getMinutes() !==
-          config.minute
-        ) {
-          continue;
-        }
-
-        const guild =
-          client.guilds.cache.get(
-            config.guildId
-          );
-
-        if (!guild) {
-          continue;
-        }
-
-        const channel =
-          guild.channels.cache.get(
-            config.channelId
-          );
-
-        if (!channel) {
-          continue;
-        }
-
-        const category =
-          facts[
-            config.category
-          ] || facts.random;
-
-        const fact =
-          category[
-            Math.floor(
-              Math.random() *
-              category.length
-            )
-          ];
-
-        await channel.send({
-
-          embeds: [
-
-            {
-              color: 0x5865F2,
-
-              title:
-                '🧠 Daily Fact',
-
-              description:
-                fact,
-
-              footer: {
-
-                text:
-                  'JabsterBot Daily Facts'
-              },
-
-              timestamp:
-                new Date()
-            }
-          ]
-        });
-
-        run(
-
-          `UPDATE dailyfact_config
-
-           SET lastSent = ?
-
-           WHERE guildId = ?`,
-
-          [
-
-            today,
-            config.guildId
-          ]
-        );
+        continue;
       }
 
-    }, 60000);
+      const channel =
+        await client.channels.fetch(
+          config.channelId
+        ).catch(() => null);
 
+      if (
+        !channel ||
+        !channel.isTextBased()
+      ) {
+
+        continue;
+      }
+
+      const category =
+        config.category || 'random';
+
+      const categoryFacts =
+        getFactsForCategory(category);
+
+      if (!categoryFacts.length) {
+
+        continue;
+      }
+
+      const picked =
+        categoryFacts[
+          Math.floor(
+            Math.random() * categoryFacts.length
+          )
+        ];
+
+      await channel.send({
+
+        embeds: [
+
+          {
+            color: 0x5865F2,
+            title: 'Daily Fact',
+            description: picked.fact,
+            fields: [
+              {
+                name: 'Category',
+                value: category === 'random'
+                  ? 'Random / All Facts'
+                  : categoryName(picked.category),
+                inline: true
+              },
+              {
+                name: 'Source',
+                value: picked.source === 'submission'
+                  ? 'Community approved'
+                  : 'JabsterBot facts',
+                inline: true
+              }
+            ],
+            footer: {
+              text: 'JabsterBot Daily Facts'
+            },
+            timestamp: new Date()
+          }
+        ]
+      });
+
+      run(
+
+        `UPDATE dailyfact_config
+         SET lastSent = ?
+         WHERE guildId = ?`,
+
+        [
+          today,
+          config.guildId
+        ]
+      );
+    }
   }
 }
 

@@ -1,34 +1,131 @@
 {
   "random": [
-    "Octopuses have three hearts.",
-    "Honey never spoils and has been found edible in ancient tombs.",
-    "A day on Venus is longer than a year on Venus.",
-    "Penguins can drink seawater thanks to a special salt-filtering gland.",
-    "Bananas are berries, but strawberries are not.",
-    "Sharks existed before trees.",
-    "The Eiffel Tower can grow taller in summer due to heat expansion.",
-    "A group of flamingos is called a flamboyance.",
-    "The human brain contains roughly 86 billion neurons.",
-    "Scotland's national animal is the unicorn."
+    "The fingerprints of a koala are so similar to humans that they can confuse crime scene investigators.",
+    "The shortest war in history lasted just 38 to 45 minutes.",
+    "A bolt of lightning contains enough energy to toast around 100,000 slices of bread.",
+    "Sea otters hold hands while sleeping so they don't drift apart.",
+    "The world's largest desert is Antarctica.",
+    "Some turtles can breathe through their rear ends during hibernation.",
+    "The inventor of the Frisbee was turned into a Frisbee after he died, according to his wishes.",
+    "A cloud can weigh more than a million pounds.",
+    "The first alarm clock could only ring at 4 a.m.",
+    "Your stomach gets a completely new lining every few days."
   ],
 
   "space": [
-    "A day on Venus is longer than its year.",
-    "Neutron stars can spin over 600 times per second.",
-    "There are more stars in the universe than grains of sand on Earth.",
-    "The Sun contains over 99% of the Solar System's mass."
+    "One million Earths could fit inside the Sun.",
+    "Mars has the tallest volcano in the Solar System: Olympus Mons.",
+    "A year on Mercury lasts just 88 Earth days.",
+    "Jupiter's Great Red Spot is a storm that has raged for centuries.",
+    "Saturn is so low in density that it would float in water if there were an ocean large enough.",
+    "The Moon is slowly moving about 3.8 centimetres farther from Earth every year.",
+    "The International Space Station travels at roughly 28,000 km/h.",
+    "Pluto has five known moons.",
+    "The footprints left by Apollo astronauts could remain on the Moon for millions of years.",
+    "The Milky Way galaxy is estimated to contain over 100 billion stars."
   ],
 
   "animals": [
-    "Octopuses have three hearts.",
-    "Penguins can drink seawater.",
-    "A group of flamingos is called a flamboyance.",
-    "Cows have best friends and become stressed when separated."
+    "A snail can sleep for up to three years.",
+    "Wombats produce cube-shaped droppings.",
+    "Elephants are the only mammals that cannot jump.",
+    "Dolphins have unique signature whistles that act like names.",
+    "A shrimp's heart is located inside its head.",
+    "Owls cannot move their eyes, so they rotate their heads instead.",
+    "Cheetahs can accelerate from 0 to 60 mph in about three seconds.",
+    "Some frogs can survive being frozen during winter.",
+    "Giraffes only need around 30 minutes to 2 hours of sleep each day.",
+    "Bees communicate the location of flowers using a special waggle dance."
   ],
 
   "science": [
-    "The human brain contains roughly 86 billion neurons.",
-    "Water can boil and freeze at the same time under specific conditions.",
-    "Lightning is five times hotter than the surface of the Sun."
+    "Sound travels about four times faster through water than through air.",
+    "DNA in a single human cell is about 2 metres long when fully stretched.",
+    "Absolute zero is the coldest temperature theoretically possible.",
+    "The human body contains enough carbon to make around 900 pencils.",
+    "Glass is made primarily from heated sand.",
+    "A teaspoon of neutron star material would weigh billions of tonnes on Earth.",
+    "Diamonds and graphite are both made entirely of carbon.",
+    "Water expands when it freezes, unlike most liquids.",
+    "The speed of light in a vacuum is approximately 299,792 kilometres per second.",
+    "Every atom in your body was forged inside ancient stars."
+  ],
+
+  "history": [
+    "The Great Wall of China was built and rebuilt over many centuries, not all at once.",
+    "Ancient Egyptians used a writing system called hieroglyphics.",
+    "The first modern Olympic Games were held in Athens in 1896.",
+    "The printing press helped books spread much faster across Europe.",
+    "The Roman Empire built roads, aqueducts, and cities across large parts of Europe.",
+    "The Rosetta Stone helped scholars understand Egyptian hieroglyphics.",
+    "The first successful powered airplane flight by the Wright brothers happened in 1903.",
+    "Paper was invented in ancient China.",
+    "The Library of Alexandria was one of the ancient world's most famous centres of learning.",
+    "The Magna Carta was sealed in England in 1215."
+  ],
+
+  "technology": [
+    "The first computer mouse was made mostly of wood.",
+    "QR codes were invented in Japan in the 1990s.",
+    "The word robot comes from a Czech word meaning forced labour.",
+    "Bluetooth is named after Harald Bluetooth, a Viking-age king.",
+    "The first text message was sent in 1992.",
+    "A gigabyte is roughly one billion bytes.",
+    "Early computer programs were sometimes stored on punched cards.",
+    "The World Wide Web was proposed by Tim Berners-Lee in 1989.",
+    "GPS uses signals from satellites to calculate position on Earth.",
+    "Touchscreens existed decades before smartphones became common."
+  ],
+
+  "geography": [
+    "Mount Everest is the highest mountain above sea level.",
+    "The Nile is often listed among the longest rivers in the world.",
+    "Australia is both a country and a continent.",
+    "The Pacific Ocean is Earth's largest ocean.",
+    "The Sahara is the largest hot desert in the world.",
+    "Iceland sits on the boundary between two tectonic plates.",
+    "The Amazon rainforest spans several South American countries.",
+    "Canada has more lakes than any other country.",
+    "The Dead Sea is famous for its extremely salty water.",
+    "Greenland is the world's largest island that is not a continent."
+  ],
+
+  "nature": [
+    "Bamboo can grow extremely quickly under the right conditions.",
+    "Some trees communicate stress signals through chemical compounds.",
+    "A single sunflower head can contain hundreds or thousands of tiny flowers.",
+    "Mosses do not have true roots like flowering plants do.",
+    "Rainbows form when sunlight is refracted, reflected, and dispersed by water droplets.",
+    "Some plants can move their leaves in response to touch or light.",
+    "Fungi are more closely related to animals than to plants.",
+    "The rings of a tree can reveal clues about its age and growing conditions.",
+    "Mangrove forests help protect coastlines from erosion.",
+    "Lightning helps convert nitrogen in the air into forms plants can use."
+  ],
+
+  "humanbody": [
+    "The adult human body has 206 bones.",
+    "The heart beats around 100,000 times on an average day.",
+    "The human brain uses a large amount of the body's energy for its size.",
+    "Your skin is the largest organ of your body.",
+    "Taste buds are found mostly on the tongue, but also in other parts of the mouth.",
+    "Red blood cells carry oxygen around the body.",
+    "The smallest bones in the human body are found in the middle ear.",
+    "Humans blink thousands of times per day.",
+    "Your body makes new blood cells inside bone marrow.",
+    "The human nose can detect a huge range of different smells."
+  ],
+
+  "ocean": [
+    "More than 70 percent of Earth's surface is covered by ocean.",
+    "The Mariana Trench is the deepest known ocean trench.",
+    "Coral reefs support a huge variety of marine life.",
+    "Some deep-sea animals create their own light through bioluminescence.",
+    "Ocean tides are mainly caused by the Moon's gravity.",
+    "Kelp forests can grow very quickly and provide habitat for marine animals.",
+    "The ocean helps regulate Earth's climate by storing heat.",
+    "Some whales migrate thousands of kilometres each year.",
+    "Seahorses are fish.",
+    "Hydrothermal vents support ecosystems deep in the ocean without sunlight."
   ]
 }

@@ -21,8 +21,14 @@ const TOKEN =
 const CLIENT_ID =
   process.env.CLIENT_ID;
 
-const DEV_GUILD_ID =
-  process.env.DEV_GUILD_ID || null;
+const guildCommandCleanupIds =
+  [
+    process.env.DEV_GUILD_ID,
+    process.env.GUILD_ID,
+    ...(process.env.LEGACY_GUILD_IDS || '')
+      .split(',')
+      .map(id => id.trim())
+  ].filter(Boolean);
 
 // ==================================================
 // 🛡 ENV VALIDATION
@@ -59,16 +65,14 @@ console.log(
 
 console.log(
   'Mode:',
-  DEV_GUILD_ID
-    ? 'Development'
-    : 'Global'
+  'Global'
 );
 
-if (DEV_GUILD_ID) {
+if (guildCommandCleanupIds.length) {
 
   console.log(
-    'Dev Guild:',
-    DEV_GUILD_ID
+    'Guild command cleanup:',
+    guildCommandCleanupIds.join(', ')
   );
 }
 
@@ -532,98 +536,67 @@ const rest =
       `📦 Deploying ${commands.length} commands...`
     );
 
-    // ==========================================
-    // ⚡ DEVELOPMENT MODE
-    // ==========================================
-    if (DEV_GUILD_ID) {
+    for (
+      const guildId of
+      new Set(guildCommandCleanupIds)
+    ) {
 
       console.log(
-        '⚡ Deploying guild commands...'
-      );
-
-const result = await Promise.race([
-
-  rest.put(
-
-    Routes.applicationGuildCommands(
-
-      CLIENT_ID,
-
-      DEV_GUILD_ID
-    ),
-
-    {
-
-     body: commands
-    }
-  ),
-
-  new Promise((_, reject) =>
-    setTimeout(
-      () =>
-        reject(
-          new Error(
-            'Deploy timed out after 30 seconds'
-          )
-        ),
-      30000
-    )
-  )
-]);
-
-console.log(
-  'Discord returned:',
-  result.length,
-  'commands'
-);
-
-    }
-
-    // ==========================================
-    // 🌍 GLOBAL MODE
-    // ==========================================
-    else {
-
-      console.log(
-        '🌍 Clearing old global commands...'
+        `🧹 Clearing guild commands for ${guildId}...`
       );
 
       await rest.put(
 
-        Routes.applicationCommands(
-          CLIENT_ID
+        Routes.applicationGuildCommands(
+          CLIENT_ID,
+          guildId
         ),
 
         {
-
           body: []
         }
       );
 
       console.log(
-        '✅ Old global commands cleared'
+        `✅ Guild commands cleared for ${guildId}`
       );
+    }
 
-      console.log(
-        '🌍 Deploying global commands...'
-      );
+    console.log(
+      '🌍 Deploying global commands...'
+    );
 
-      await rest.put(
+    const result = await Promise.race([
+
+      rest.put(
 
         Routes.applicationCommands(
           CLIENT_ID
         ),
 
         {
-
           body: commands
         }
-      );
+      ),
 
-      console.log(
-        '✅ Global commands deployed'
-      );
-    }
+      new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                'Deploy timed out after 30 seconds'
+              )
+            ),
+          30000
+        )
+      )
+    ]);
+
+    console.log(
+      'Discord returned:',
+      result.length,
+      'global commands'
+    );
 
     console.log('━━━━━━━━━━━━━━━━━━━━━━');
 

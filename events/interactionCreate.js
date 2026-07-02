@@ -1,8 +1,21 @@
 const {
+
   EmbedBuilder,
+
   MessageFlags,
+
   PermissionsBitField,
-  InteractionType
+
+  InteractionType,
+
+  ModalBuilder,
+
+  TextInputBuilder,
+
+  TextInputStyle,
+
+  ActionRowBuilder
+
 } = require('discord.js');
 
 const {
@@ -235,7 +248,7 @@ module.exports = {
 
           if (
   customId.startsWith(
-    'dailyfact_'
+    'dailyfact_disabled_'
   )
 ) {
 
@@ -292,44 +305,168 @@ module.exports = {
       interaction.message.embeds[0]
     );
 
-  if (
-    action === 'approve'
-  ) {
+    if (
+  action === 'edit'
+) {
 
-    run(
+  const modal =
+    new ModalBuilder()
 
-      `UPDATE dailyfact_submissions
-
-       SET status = ?,
-           reviewerId = ?,
-           approvedAt = ?
-
-       WHERE id = ?`,
-
-      [
-
-        'APPROVED',
-
-        interaction.user.id,
-
-        Date.now(),
-
-        submissionId
-      ]
-    );
-
-    embed
-
-      .setColor(
-        0x57F287
+      .setCustomId(
+        `dailyfact_editmodal_${submissionId}`
       )
 
-      .setFooter({
+      .setTitle(
+        'Edit & Approve Daily Fact'
+      );
 
-        text:
-          `✅ Approved by ${interaction.user.tag}`
-      });
+  const input =
+    new TextInputBuilder()
+
+      .setCustomId(
+        'fact'
+      )
+
+      .setLabel(
+        'Daily Fact'
+      )
+
+      .setStyle(
+        TextInputStyle.Paragraph
+      )
+
+      .setRequired(
+        true
+      )
+
+      .setValue(
+        submission.fact
+      )
+
+      .setMaxLength(
+        500
+      );
+
+  modal.addComponents(
+
+    new ActionRowBuilder()
+
+      .addComponents(
+        input
+      )
+  );
+
+  return interaction.showModal(
+    modal
+  );
+}
+
+    if (
+  action === 'approve'
+) {
+
+  run(
+
+    `UPDATE dailyfact_submissions
+
+     SET status = ?,
+         reviewerId = ?,
+         approvedAt = ?
+
+     WHERE id = ?`,
+
+    [
+
+      'APPROVED',
+
+      interaction.user.id,
+
+      Date.now(),
+
+      submissionId
+    ]
+  );
+
+  embed
+
+    .setColor(
+      0x57F287
+    )
+
+    .setFooter({
+
+      text:
+        `✅ Approved by ${interaction.user.tag}`
+    });
+
+  const user =
+    await interaction.client.users.fetch(
+      submission.userId
+    ).catch(() => null);
+
+  if (user) {
+
+    await user.send({
+
+      embeds: [
+
+        new EmbedBuilder()
+
+          .setColor(
+            0x57F287
+          )
+
+          .setTitle(
+            '🧠 Daily Fact Approved'
+          )
+
+          .setDescription(
+            'Your Daily Fact submission has been approved and added to JabsterBot\'s global fact database!'
+          )
+
+          .addFields(
+
+            {
+
+              name: '📂 Category',
+
+              value:
+                submission.category,
+
+              inline: true
+            },
+
+            {
+
+              name: '🆔 Submission ID',
+
+              value:
+                `#${submissionId}`,
+
+              inline: true
+            },
+
+            {
+
+              name: '📖 Fact',
+
+              value:
+                submission.fact
+            }
+          )
+
+          .setFooter({
+
+            text:
+              'Thank you for helping improve JabsterBot!'
+          })
+
+          .setTimestamp()
+      ]
+
+    }).catch(() => {});
   }
+}
 
   else if (
     action === 'deny'
@@ -657,16 +794,182 @@ module.exports = {
       }
 
       // ==================================================
-      // 📝 MODAL SUBMITS
-      // ==================================================
-      if (
-        interaction.type ===
-        InteractionType.ModalSubmit
-      ) {
+// 📝 MODAL SUBMITS
+// ==================================================
+if (
+  interaction.type ===
+  InteractionType.ModalSubmit
+) {
 
-        // handled by ticketModals.js
-        return;
+  if (
+    interaction.customId.startsWith(
+      'dailyfact_disabled_editmodal_'
+    )
+  ) {
+
+    await interaction.deferUpdate();
+
+    const submissionId =
+      Number(
+        interaction.customId.split('_')[2]
+      );
+
+    const editedFact =
+      interaction.fields.getTextInputValue(
+        'fact'
+      );
+
+    const submission =
+      get(
+
+        `SELECT *
+         FROM dailyfact_submissions
+         WHERE id = ?`,
+
+        [submissionId]
+      );
+
+    if (!submission) {
+
+      return interaction.followUp({
+
+        content:
+          '❌ Submission not found.',
+
+        flags:
+          MessageFlags.Ephemeral
+      });
+    }
+
+    run(
+
+      `UPDATE dailyfact_submissions
+
+       SET fact = ?,
+           status = ?,
+           reviewerId = ?,
+           approvedAt = ?
+
+       WHERE id = ?`,
+
+      [
+
+        editedFact,
+
+        'APPROVED',
+
+        interaction.user.id,
+
+        Date.now(),
+
+        submissionId
+      ]
+    );
+
+    const embed =
+      EmbedBuilder.from(
+        interaction.message.embeds[0]
+      );
+
+    embed.setColor(
+      0x57F287
+    );
+
+    embed.spliceFields(
+
+      3,
+
+      1,
+
+      {
+
+        name: '📖 Fact',
+
+        value: editedFact
       }
+    );
+
+    embed.setFooter({
+
+      text:
+        `✅ Approved by ${interaction.user.tag}`
+    });
+
+    const user =
+      await interaction.client.users.fetch(
+        submission.userId
+      ).catch(() => null);
+
+    if (user) {
+
+      await user.send({
+
+        embeds: [
+
+          new EmbedBuilder()
+
+            .setColor(
+              0x57F287
+            )
+
+            .setTitle(
+              '🧠 Daily Fact Approved'
+            )
+
+            .setDescription(
+              'Your Daily Fact submission has been approved and added to JabsterBot\'s global fact database!'
+            )
+
+            .addFields(
+
+              {
+
+                name: '📂 Category',
+
+                value:
+                  submission.category,
+
+                inline: true
+              },
+
+              {
+
+                name: '🆔 Submission ID',
+
+                value:
+                  `#${submissionId}`,
+
+                inline: true
+              },
+
+              {
+
+                name: '📖 Fact',
+
+                value:
+                  editedFact
+              }
+            )
+
+            .setTimestamp()
+        ]
+
+      }).catch(() => {});
+    }
+
+    await interaction.message.edit({
+
+      embeds: [embed],
+
+      components: []
+    });
+
+    return;
+  }
+
+  // handled by ticketModals.js
+  return;
+}
 
       // ==================================================
       // 📋 SELECT MENUS

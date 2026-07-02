@@ -1632,15 +1632,55 @@ function createDailyFactSubmissionTable() {
 
       fact TEXT NOT NULL,
 
+      normalizedFact TEXT,
+
+      category TEXT DEFAULT 'random',
+
       status TEXT DEFAULT 'PENDING',
 
       reviewerId TEXT,
+
+      decisionAt INTEGER,
+
+      duplicateOf TEXT,
+
+      reviewMessageId TEXT,
 
       submittedAt INTEGER NOT NULL
     )
   `);
 
   ensureColumn(
+    'dailyfact_config',
+    'category',
+    "TEXT DEFAULT 'random'"
+  );
+
+  ensureColumn(
+    'dailyfact_config',
+    'hour',
+    'INTEGER DEFAULT 12'
+  );
+
+  ensureColumn(
+    'dailyfact_config',
+    'minute',
+    'INTEGER DEFAULT 0'
+  );
+
+  ensureColumn(
+    'dailyfact_config',
+    'lastSent',
+    'TEXT'
+  );
+
+  ensureColumn(
+  'dailyfact_submissions',
+  'normalizedFact',
+  'TEXT'
+);
+
+ensureColumn(
   'dailyfact_submissions',
   'category',
   "TEXT DEFAULT 'random'"
@@ -1658,12 +1698,32 @@ ensureColumn(
   'TEXT'
 );
 
+ensureColumn(
+  'dailyfact_submissions',
+  'decisionAt',
+  'INTEGER'
+);
+
+ensureColumn(
+  'dailyfact_submissions',
+  'duplicateOf',
+  'TEXT'
+);
+
   createIndex(
 
     'idx_dailyfact_submissions',
 
     `CREATE INDEX IF NOT EXISTS idx_dailyfact_submissions
      ON dailyfact_submissions(status)`
+  );
+
+  createIndex(
+
+    'idx_dailyfact_submissions_normalized',
+
+    `CREATE INDEX IF NOT EXISTS idx_dailyfact_submissions_normalized
+     ON dailyfact_submissions(normalizedFact)`
   );
 }
 
