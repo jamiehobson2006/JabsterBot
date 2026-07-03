@@ -217,7 +217,7 @@ module.exports = {
         content:
           '❌ Failed to load game info.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

@@ -1,38 +1,14 @@
 const {
-
-  EmbedBuilder,
-
-  MessageFlags,
-
-  PermissionsBitField,
-
-  InteractionType,
-
-  ModalBuilder,
-
-  TextInputBuilder,
-
-  TextInputStyle,
-
-  ActionRowBuilder
-
+  MessageFlags
 } = require('discord.js');
-
-const {
-  get,
-  run
-} = require('../database');
 
 const {
   useCooldown
 } = require('../utils/cooldowns');
 
-// ========================
-// 🫥 EPHEMERAL COMMANDS
-// ========================
 const ephemeralCommands =
   new Set([
-
+    'application',
     'ban',
     'kick',
     'mute',
@@ -58,63 +34,42 @@ const ephemeralCommands =
     'settranscriptchannel',
     'linkblock',
     'ticketsetup',
-    'ticketpanel'
+    'ticketpanel',
+    'ticketstats',
+    'dailyfact'
   ]);
 
-// ========================
-// 🚫 STALE INTERACTIONS
-// ========================
 function isStaleInteractionError(error) {
-
   return (
-
     error?.code === 10062 ||
-
     error?.code === 40060 ||
-
     error?.code === 10015
   );
 }
 
-// ========================
-// ⏳ SAFE DEFER
-// ========================
 async function safelyDeferReply(
   interaction,
   ephemeral
 ) {
-
   if (
-
     interaction.deferred ||
-
     interaction.replied
   ) {
-
     return true;
   }
 
   try {
-
     await interaction.deferReply({
-
       flags:
-
         ephemeral
-
           ? MessageFlags.Ephemeral
-
           : undefined
     });
 
     return true;
 
   } catch (error) {
-
-    if (
-      !isStaleInteractionError(error)
-    ) {
-
+    if (!isStaleInteractionError(error)) {
       console.error(
         'Failed to defer interaction:',
         error
@@ -125,84 +80,41 @@ async function safelyDeferReply(
   }
 }
 
-// ========================
-// 💬 SAFE REPLY
-// ========================
 async function safelyReply(
   interaction,
   payload
 ) {
-
   try {
-
-    // ======================================
-    // ✏ EDIT EXISTING
-    // ======================================
     if (
-
       interaction.deferred ||
-
       interaction.replied
     ) {
-
       try {
-
         return await interaction.editReply(
           payload
         );
 
-      } catch (editError) {
-
-        // ==============================
-        // 🔁 FALLBACK FOLLOWUP
-        // ==============================
-        try {
-
-          return await interaction.followUp({
-
-            ...payload,
-
-            flags:
-
-              payload.flags ||
-
-              MessageFlags.Ephemeral
-          });
-
-        } catch (followError) {
-
-          if (
-            !isStaleInteractionError(
-              followError
-            )
-          ) {
-
-            console.error(
-              'Failed followUp reply:',
-              followError
-            );
-          }
-
-          return null;
-        }
+      } catch {
+        return await interaction.followUp({
+          ...payload,
+          flags:
+            payload.flags ||
+            MessageFlags.Ephemeral
+        });
       }
     }
 
-    // ======================================
-    // 💬 NORMAL REPLY
-    // ======================================
-    return await interaction.reply(
-      payload
-    );
+    return await interaction.reply({
+      ...payload,
+      flags:
+        payload.flags ||
+        MessageFlags.Ephemeral
+    });
 
   } catch (error) {
-
-    if (
-      !isStaleInteractionError(error)
-    ) {
-
+    if (!isStaleInteractionError(error)) {
       console.error(
-        'Failed to respond:',
+        'Failed to reply to interaction:',
         error
       );
     }
@@ -212,981 +124,122 @@ async function safelyReply(
 }
 
 module.exports = {
-
-  name:
-    'interactionCreate',
+  name: 'interactionCreate',
 
   async execute(
     interaction,
     client
   ) {
+    if (
+      !interaction.guild ||
+      !interaction.isChatInputCommand()
+    ) {
+      return;
+    }
+
+    const command =
+      client.commands.get(
+        interaction.commandName
+      );
+
+    if (!command) {
+      return safelyReply(
+        interaction,
+        {
+          content:
+            'This command is outdated. Try redeploying slash commands.',
+          flags: MessageFlags.Ephemeral
+        }
+      );
+    }
+
+    const shouldBeEphemeral =
+      command.ephemeral ||
+      ephemeralCommands.has(
+        interaction.commandName
+      );
+
+    const acknowledged =
+      await safelyDeferReply(
+        interaction,
+        shouldBeEphemeral
+      );
+
+    if (!acknowledged) {
+      return;
+    }
 
     try {
-
-      // ==========================================
-      // 🛡 GUILD ONLY
-      // ==========================================
-      if (
-        !interaction.guild
-      ) {
-
-        return;
-      }
-
-      // ==================================================
-      // 🔘 BUTTON INTERACTIONS
-      // ==================================================
-      if (
-        interaction.isButton()
-      ) {
-
-        try {
-
-          const {
-            customId
-          } = interaction;
-
-          if (
-  customId.startsWith(
-    'dailyfact_disabled_'
-  )
-) {
-
-  await interaction.deferUpdate();
-
-  const parts =
-    customId.split('_');
-
-  const action =
-    parts[1];
-
-  const submissionId =
-    Number(parts[2]);
-
-  const submission =
-    get(
-
-      `SELECT *
-       FROM dailyfact_submissions
-       WHERE id = ?`,
-
-      [submissionId]
-    );
-
-  if (!submission) {
-
-    return interaction.followUp({
-
-      content:
-        '❌ Submission not found.',
-
-      flags:
-        MessageFlags.Ephemeral
-    });
-  }
-
-  if (
-    submission.status !==
-    'PENDING'
-  ) {
-
-    return interaction.followUp({
-
-      content:
-        `⚠️ Already ${submission.status}.`,
-
-      flags:
-        MessageFlags.Ephemeral
-    });
-  }
-
-  const embed =
-    EmbedBuilder.from(
-      interaction.message.embeds[0]
-    );
-
-    if (
-  action === 'edit'
-) {
-
-  const modal =
-    new ModalBuilder()
-
-      .setCustomId(
-        `dailyfact_editmodal_${submissionId}`
-      )
-
-      .setTitle(
-        'Edit & Approve Daily Fact'
-      );
-
-  const input =
-    new TextInputBuilder()
-
-      .setCustomId(
-        'fact'
-      )
-
-      .setLabel(
-        'Daily Fact'
-      )
-
-      .setStyle(
-        TextInputStyle.Paragraph
-      )
-
-      .setRequired(
-        true
-      )
-
-      .setValue(
-        submission.fact
-      )
-
-      .setMaxLength(
-        500
-      );
-
-  modal.addComponents(
-
-    new ActionRowBuilder()
-
-      .addComponents(
-        input
-      )
-  );
-
-  return interaction.showModal(
-    modal
-  );
-}
-
-    if (
-  action === 'approve'
-) {
-
-  run(
-
-    `UPDATE dailyfact_submissions
-
-     SET status = ?,
-         reviewerId = ?,
-         approvedAt = ?
-
-     WHERE id = ?`,
-
-    [
-
-      'APPROVED',
-
-      interaction.user.id,
-
-      Date.now(),
-
-      submissionId
-    ]
-  );
-
-  embed
-
-    .setColor(
-      0x57F287
-    )
-
-    .setFooter({
-
-      text:
-        `✅ Approved by ${interaction.user.tag}`
-    });
-
-  const user =
-    await interaction.client.users.fetch(
-      submission.userId
-    ).catch(() => null);
-
-  if (user) {
-
-    await user.send({
-
-      embeds: [
-
-        new EmbedBuilder()
-
-          .setColor(
-            0x57F287
-          )
-
-          .setTitle(
-            '🧠 Daily Fact Approved'
-          )
-
-          .setDescription(
-            'Your Daily Fact submission has been approved and added to JabsterBot\'s global fact database!'
-          )
-
-          .addFields(
-
-            {
-
-              name: '📂 Category',
-
-              value:
-                submission.category,
-
-              inline: true
-            },
-
-            {
-
-              name: '🆔 Submission ID',
-
-              value:
-                `#${submissionId}`,
-
-              inline: true
-            },
-
-            {
-
-              name: '📖 Fact',
-
-              value:
-                submission.fact
-            }
-          )
-
-          .setFooter({
-
-            text:
-              'Thank you for helping improve JabsterBot!'
-          })
-
-          .setTimestamp()
-      ]
-
-    }).catch(() => {});
-  }
-}
-
-  else if (
-    action === 'deny'
-  ) {
-
-    run(
-
-      `UPDATE dailyfact_submissions
-
-       SET status = ?,
-           reviewerId = ?
-
-       WHERE id = ?`,
-
-      [
-
-        'DENIED',
-
-        interaction.user.id,
-
-        submissionId
-      ]
-    );
-
-    embed
-
-      .setColor(
-        0xED4245
-      )
-
-      .setFooter({
-
-        text:
-          `❌ Denied by ${interaction.user.tag}`
-      });
-  }
-
-  return interaction.message.edit({
-
-    embeds: [embed],
-
-    components: []
-  });
-}
-
-          if (
-            customId.startsWith(
-              'suggest_'
-            )
-          ) {
-
-            // 🔐 ADMIN ONLY
-            if (
-              !interaction.memberPermissions?.has(
-                PermissionsBitField.Flags.Administrator
-              )
-            ) {
-
-              return safelyReply(
-                interaction,
-                {
-
-                  content:
-                    '❌ Admin only.',
-
-                  flags:
-                    MessageFlags.Ephemeral
-                }
-              );
-            }
-
-            await interaction.deferUpdate();
-
-            const messageId =
-              interaction.message.id;
-
-            const suggestion =
-              get(
-
-                `SELECT *
-                 FROM suggestions
-                 WHERE messageId = ?`,
-
-                [messageId]
-              );
-
-            if (!suggestion) {
-
-              return interaction.followUp({
-
-                content:
-                  '❌ Suggestion not found.',
-
-                flags:
-                  MessageFlags.Ephemeral
-              });
-            }
-
-            if (
-              suggestion.status !==
-              'PENDING'
-            ) {
-
-              return interaction.followUp({
-
-                content:
-                  `⚠️ Already ${suggestion.status}.`,
-
-                flags:
-                  MessageFlags.Ephemeral
-              });
-            }
-
-            // ==========================================
-            // 🧠 SAFE EMBED
-            // ==========================================
-            const existingEmbed =
-              interaction.message.embeds?.[0];
-
-            if (!existingEmbed) {
-
-              return interaction.followUp({
-
-                content:
-                  '❌ Suggestion embed missing.',
-
-                flags:
-                  MessageFlags.Ephemeral
-              });
-            }
-
-            const embed =
-              EmbedBuilder.from(
-                existingEmbed
-              );
-
-            // ==========================================
-            // 🧹 REMOVE OLD VOTE FIELD
-            // ==========================================
-            const filteredFields =
-              (
-                embed.data.fields || []
-              ).filter(
-
-                field =>
-
-                  field.name !==
-                  '📊 Community Votes'
-              );
-
-            embed.setFields(
-              filteredFields
-            );
-
-            // ==========================================
-            // 👍 COMMUNITY VOTES
-            // ==========================================
-            let upvotes = 0;
-            let downvotes = 0;
-
-            try {
-
-              const fetched =
-                await interaction.message.fetch();
-
-              const upvoteReaction =
-                fetched.reactions.cache.get('✅');
-
-              const downvoteReaction =
-                fetched.reactions.cache.get('❌');
-
-              upvotes =
-                Math.max(
-                  (upvoteReaction?.count || 1) - 1,
-                  0
-                );
-
-              downvotes =
-                Math.max(
-                  (downvoteReaction?.count || 1) - 1,
-                  0
-                );
-
-            } catch {}
-
-            // ==========================================
-            // ✅ ACCEPT
-            // ==========================================
-            if (
-              customId.startsWith(
-                'suggest_accept'
-              )
-            ) {
-
-              embed
-
-                .setColor(
-                  0x57F287
-                )
-
-                .setFooter({
-
-                  text:
-                    `✅ Accepted by ${interaction.user.tag}`
-                })
-
-                .addFields({
-
-                  name:
-                    '📊 Community Votes',
-
-                  value:
-
-                    `✅ Upvotes: ${upvotes}\n` +
-
-                    `❌ Downvotes: ${downvotes}`
-                });
-
-              run(
-
-                `UPDATE suggestions
-
-                 SET status = ?,
-                 moderatorId = ?
-
-                 WHERE messageId = ?`,
-
-                [
-                  'ACCEPTED',
-                  interaction.user.id,
-                  messageId
-                ]
-              );
-            }
-
-            // ==========================================
-            // ❌ DENY
-            // ==========================================
-            else if (
-              customId.startsWith(
-                'suggest_deny'
-              )
-            ) {
-
-              embed
-
-                .setColor(
-                  0xED4245
-                )
-
-                .setFooter({
-
-                  text:
-                    `❌ Denied by ${interaction.user.tag}`
-                })
-
-                .addFields({
-
-                  name:
-                    '📊 Community Votes',
-
-                  value:
-
-                    `✅ Upvotes: ${upvotes}\n` +
-
-                    `❌ Downvotes: ${downvotes}`
-                });
-
-              run(
-
-                `UPDATE suggestions
-
-                 SET status = ?,
-                 moderatorId = ?
-
-                 WHERE messageId = ?`,
-
-                [
-                  'DENIED',
-                  interaction.user.id,
-                  messageId
-                ]
-              );
-            }
-
-            // ==========================================
-            // 🔄 UPDATE MESSAGE
-            // ==========================================
-            return interaction.message.edit({
-
-              embeds: [embed],
-
-              components: []
-            });
-          }
-
-          return;
-        } catch (err) {
-
-          console.error(
-            'Button Error:',
-            err
-          );
-
-          if (
-
-            !interaction.replied &&
-
-            !interaction.deferred
-          ) {
-
-            return safelyReply(
-              interaction,
-              {
-
-                content:
-                  '❌ Error handling button.',
-
-                flags:
-                  MessageFlags.Ephemeral
-              }
-            );
-          }
-        }
-      }
-
-      // ==================================================
-// 📝 MODAL SUBMITS
-// ==================================================
-if (
-  interaction.type ===
-  InteractionType.ModalSubmit
-) {
-
-  if (
-    interaction.customId.startsWith(
-      'dailyfact_disabled_editmodal_'
-    )
-  ) {
-
-    await interaction.deferUpdate();
-
-    const submissionId =
-      Number(
-        interaction.customId.split('_')[2]
-      );
-
-    const editedFact =
-      interaction.fields.getTextInputValue(
-        'fact'
-      );
-
-    const submission =
-      get(
-
-        `SELECT *
-         FROM dailyfact_submissions
-         WHERE id = ?`,
-
-        [submissionId]
-      );
-
-    if (!submission) {
-
-      return interaction.followUp({
-
-        content:
-          '❌ Submission not found.',
-
-        flags:
-          MessageFlags.Ephemeral
-      });
-    }
-
-    run(
-
-      `UPDATE dailyfact_submissions
-
-       SET fact = ?,
-           status = ?,
-           reviewerId = ?,
-           approvedAt = ?
-
-       WHERE id = ?`,
-
-      [
-
-        editedFact,
-
-        'APPROVED',
-
-        interaction.user.id,
-
-        Date.now(),
-
-        submissionId
-      ]
-    );
-
-    const embed =
-      EmbedBuilder.from(
-        interaction.message.embeds[0]
-      );
-
-    embed.setColor(
-      0x57F287
-    );
-
-    embed.spliceFields(
-
-      3,
-
-      1,
-
-      {
-
-        name: '📖 Fact',
-
-        value: editedFact
-      }
-    );
-
-    embed.setFooter({
-
-      text:
-        `✅ Approved by ${interaction.user.tag}`
-    });
-
-    const user =
-      await interaction.client.users.fetch(
-        submission.userId
-      ).catch(() => null);
-
-    if (user) {
-
-      await user.send({
-
-        embeds: [
-
-          new EmbedBuilder()
-
-            .setColor(
-              0x57F287
-            )
-
-            .setTitle(
-              '🧠 Daily Fact Approved'
-            )
-
-            .setDescription(
-              'Your Daily Fact submission has been approved and added to JabsterBot\'s global fact database!'
-            )
-
-            .addFields(
-
-              {
-
-                name: '📂 Category',
-
-                value:
-                  submission.category,
-
-                inline: true
-              },
-
-              {
-
-                name: '🆔 Submission ID',
-
-                value:
-                  `#${submissionId}`,
-
-                inline: true
-              },
-
-              {
-
-                name: '📖 Fact',
-
-                value:
-                  editedFact
-              }
-            )
-
-            .setTimestamp()
-        ]
-
-      }).catch(() => {});
-    }
-
-    await interaction.message.edit({
-
-      embeds: [embed],
-
-      components: []
-    });
-
-    return;
-  }
-
-  // handled by ticketModals.js
-  return;
-}
-
-      // ==================================================
-      // 📋 SELECT MENUS
-      // ==================================================
-      if (
-        interaction.isStringSelectMenu()
-      ) {
-
-        // handled by ticketMenus.js
-        return;
-      }
-
-      // ==================================================
-      // 💬 SLASH COMMANDS
-      // ==================================================
-      if (
-        !interaction.isChatInputCommand()
-      ) {
-
-        return;
-      }
-
-      // ==========================================
-      // 🔍 FIND COMMAND
-      // ==========================================
-      const command =
-        client.commands.get(
-          interaction.commandName
+      const cooldown =
+        await useCooldown(
+          interaction.guild.id,
+          interaction.user.id,
+          interaction.commandName,
+          command.cooldown || 1500
         );
 
-      // ❌ COMMAND MISSING
-      if (!command) {
-
+      if (cooldown > 0) {
         return safelyReply(
           interaction,
           {
-
             content:
-
-              '❌ This command is outdated.\n' +
-
-              'Try redeploying slash commands.',
-
-            flags:
-              MessageFlags.Ephemeral
+              `Slow down. Try again in **${Math.ceil(cooldown / 1000)}s**.`,
+            flags: MessageFlags.Ephemeral
           }
         );
       }
 
-      try {
+      await command.execute(
+        interaction,
+        client
+      );
 
-        // ==========================================
-        // 🫥 EPHEMERAL
-        // ==========================================
-        const shouldBeEphemeral =
-
-          command.ephemeral ||
-
-          ephemeralCommands.has(
-            interaction.commandName
-          );
-
-        const earlyAcknowledged =
-          await safelyDeferReply(
-
-            interaction,
-
-            shouldBeEphemeral
-          );
-
-        if (!earlyAcknowledged) {
-
-          return;
-        }
-
-        // ==========================================
-        // ⏱️ COOLDOWN
-        // ==========================================
-        const cooldown =
-          await useCooldown(
-
-            interaction.guild.id,
-
-            interaction.user.id,
-
-            interaction.commandName,
-
-            command.cooldown || 1500
-          );
-
-        if (cooldown > 0) {
-
-          return safelyReply(
-            interaction,
-            {
-
-              content:
-
-                `⏳ Slow down!\n\n` +
-
-                `Try again in ` +
-
-                `**${Math.ceil(cooldown / 1000)}s**.`,
-
-              flags:
-                MessageFlags.Ephemeral
-            }
-          );
-        }
-
-        // ==========================================
-        // ⏳ SAFE DEFER
-        // ==========================================
-        const acknowledged =
-          await safelyDeferReply(
-
-            interaction,
-            shouldBeEphemeral
-          );
-
-        if (!acknowledged) {
-
-          return;
-        }
-
-        // ==========================================
-        // 🚀 EXECUTE COMMAND
-        // ==========================================
-        await command.execute(
-          interaction,
-          client
-        );
-
-      } catch (error) {
-
-        console.error(
-
-          `Command Error (${interaction.commandName}):`,
-
-          error
-        );
-
-        // ==========================================
-        // 🚫 MISSING PERMISSIONS
-        // ==========================================
-        if (
-          error?.code === 50013
-        ) {
-
-          return safelyReply(
-            interaction,
-            {
-
-              content:
-
-                '❌ I am missing permissions ' +
-
-                'to perform that action.'
-            }
-          );
-        }
-
-        // ==========================================
-        // 🚫 UNKNOWN CHANNEL
-        // ==========================================
-        if (
-          error?.code === 10003
-        ) {
-
-          return safelyReply(
-            interaction,
-            {
-
-              content:
-                '❌ Channel not found.'
-            }
-          );
-        }
-
-        // ==========================================
-        // 🚫 UNKNOWN MEMBER
-        // ==========================================
-        if (
-          error?.code === 10007
-        ) {
-
-          return safelyReply(
-            interaction,
-            {
-
-              content:
-                '❌ User not found.'
-            }
-          );
-        }
-
-        // ==========================================
-        // ❌ GENERIC ERROR
-        // ==========================================
-        return safelyReply(
-          interaction,
-          {
-
-            content:
-              '❌ Something went wrong.',
-
-            flags:
-              MessageFlags.Ephemeral
-          }
-        );
-      }
-
-    } catch (fatalError) {
-
+    } catch (error) {
       console.error(
-        'Fatal interactionCreate error:',
-        fatalError
+        `Command Error (${interaction.commandName}):`,
+        error
+      );
+
+      if (error?.code === 50013) {
+        return safelyReply(
+          interaction,
+          {
+            content:
+              'I am missing permissions to perform that action.',
+            flags: MessageFlags.Ephemeral
+          }
+        );
+      }
+
+      if (error?.code === 10003) {
+        return safelyReply(
+          interaction,
+          {
+            content:
+              'Channel not found.',
+            flags: MessageFlags.Ephemeral
+          }
+        );
+      }
+
+      if (error?.code === 10007) {
+        return safelyReply(
+          interaction,
+          {
+            content:
+              'User not found.',
+            flags: MessageFlags.Ephemeral
+          }
+        );
+      }
+
+      return safelyReply(
+        interaction,
+        {
+          content:
+            'Something went wrong.',
+          flags: MessageFlags.Ephemeral
+        }
       );
     }
   }

@@ -526,7 +526,7 @@ module.exports = {
         content:
           '❌ Failed to create poll.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

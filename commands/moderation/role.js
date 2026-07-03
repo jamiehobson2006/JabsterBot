@@ -789,7 +789,7 @@ module.exports = {
         content:
           '❌ Failed to manage role.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

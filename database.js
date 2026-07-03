@@ -1,11 +1,15 @@
 ﻿const Database =
   require('better-sqlite3');
 
+const databasePath =
+  process.env.DATABASE_PATH ||
+  './database.db';
+
 const db =
-  new Database('./database.db');
+  new Database(databasePath);
 
 // ==================================================
-// ⚡ SQLITE PRAGMAS
+// ? SQLITE PRAGMAS
 // ==================================================
 db.pragma(
   'journal_mode = WAL'
@@ -158,10 +162,9 @@ function checkDatabaseIntegrity() {
   }
 }
 
-checkDatabaseIntegrity();
 
 // ==================================================
-// ⚡ RAW DATABASE METHODS
+// ? RAW DATABASE METHODS
 // ==================================================
 function rawRun(
   sql,
@@ -194,7 +197,7 @@ function rawAll(
 }
 
 // ==================================================
-// 🧠 SAFE WRAPPERS
+// ?? SAFE WRAPPERS
 // ==================================================
 function run(
   sql,
@@ -299,7 +302,7 @@ function all(
 }
 
 // ==================================================
-// 🧠 TABLE HELPERS
+// ?? TABLE HELPERS
 // ==================================================
 function tableExists(
   tableName
@@ -350,7 +353,7 @@ function columnNames(
 }
 
 // ==================================================
-// 🧠 SAFE COLUMN CHECK
+// ?? SAFE COLUMN CHECK
 // ==================================================
 function ensureColumn(
 
@@ -379,7 +382,7 @@ function ensureColumn(
 
       console.log(
 
-        `➕ Added column ${columnName} to ${tableName}`
+        `Added column ${columnName} to ${tableName}`
       );
     }
 
@@ -395,7 +398,7 @@ function ensureColumn(
 }
 
 // ==================================================
-// 🧠 SAFE INDEX
+// ?? SAFE INDEX
 // ==================================================
 function createIndex(
   name,
@@ -418,7 +421,7 @@ function createIndex(
 }
 
 // ==================================================
-// 📜 CASES TABLE
+// ?? CASES TABLE
 // ==================================================
 function createCasesTable() {
 
@@ -708,6 +711,10 @@ function createGuildSettingsTable() {
 
       suggestionChannelId TEXT,
 
+      acceptedSuggestionChannelId TEXT,
+
+      deniedSuggestionChannelId TEXT,
+
       transcriptChannelId TEXT,
 
       inviteChannelId TEXT,
@@ -750,6 +757,8 @@ function createGuildSettingsTable() {
 
     ['modlogChannelId', 'TEXT'],
     ['suggestionChannelId', 'TEXT'],
+    ['acceptedSuggestionChannelId', 'TEXT'],
+    ['deniedSuggestionChannelId', 'TEXT'],
     ['transcriptChannelId', 'TEXT'],
     ['inviteChannelId', 'TEXT'],
     ['giveawayChannelId', 'TEXT'],
@@ -787,7 +796,7 @@ function createGuildSettingsTable() {
 }
 
 // ==================================================
-// 📜 LOG SETTINGS
+// ?? LOG SETTINGS
 // ==================================================
 function createLogSettingsTable() {
 
@@ -809,7 +818,7 @@ function createLogSettingsTable() {
 }
 
 // ==================================================
-// 🎫 TICKET SETTINGS
+// ?? TICKET SETTINGS
 // ==================================================
 function createTicketSettingsTable() {
 
@@ -833,7 +842,7 @@ function createTicketSettingsTable() {
 }
 
 // ==================================================
-// 🎫 TICKETS
+// ?? TICKETS
 // ==================================================
 function createTicketsTable() {
 
@@ -889,7 +898,7 @@ function createTicketsTable() {
 }
 
 // ==================================================
-// 👮 TICKET STATS
+// ?? TICKET STATS
 // ==================================================
 function createTicketStatsTable() {
 
@@ -915,7 +924,7 @@ function createTicketStatsTable() {
 }
 
 // ==================================================
-// 💡 SUGGESTIONS
+// ?? SUGGESTIONS
 // ==================================================
 function createSuggestionTables() {
 
@@ -939,6 +948,8 @@ function createSuggestionTables() {
 
       reason TEXT,
 
+      decisionAt INTEGER,
+
       timestamp INTEGER NOT NULL
     )
   `);
@@ -955,6 +966,12 @@ function createSuggestionTables() {
     'TEXT'
   );
 
+  ensureColumn(
+    'suggestions',
+    'decisionAt',
+    'INTEGER'
+  );
+
   createIndex(
 
     'idx_suggestions',
@@ -965,7 +982,7 @@ function createSuggestionTables() {
 }
 
 // ==================================================
-// 📜 AUDIT LOGS
+// ?? AUDIT LOGS
 // ==================================================
 function createAuditTables() {
 
@@ -999,7 +1016,7 @@ function createAuditTables() {
 }
 
 // ==================================================
-// 🌙 AFK
+// ?? AFK
 // ==================================================
 function createAfkTable() {
 
@@ -1021,7 +1038,7 @@ function createAfkTable() {
 }
 
 // ==================================================
-// ⏱ COOLDOWNS
+// ? COOLDOWNS
 // ==================================================
 function createCooldownTable() {
 
@@ -1727,7 +1744,197 @@ ensureColumn(
   );
 }
 
+function createDailyFactFactsTable() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS dailyfact_facts (
+
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+      fact TEXT NOT NULL,
+
+      normalizedFact TEXT NOT NULL UNIQUE,
+
+      category TEXT DEFAULT 'random',
+
+      sourceSubmissionId INTEGER,
+
+      submittedBy TEXT,
+
+      approvedBy TEXT,
+
+      approvedAt INTEGER NOT NULL
+    )
+  `);
+
+  ensureColumn(
+    'dailyfact_facts',
+    'category',
+    "TEXT DEFAULT 'random'"
+  );
+
+  ensureColumn(
+    'dailyfact_facts',
+    'sourceSubmissionId',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'dailyfact_facts',
+    'submittedBy',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'dailyfact_facts',
+    'approvedBy',
+    'TEXT'
+  );
+
+  createIndex(
+
+    'idx_dailyfact_facts_category',
+
+    `CREATE INDEX IF NOT EXISTS idx_dailyfact_facts_category
+     ON dailyfact_facts(category)`
+  );
+
+  run(
+
+    `INSERT OR IGNORE INTO dailyfact_facts (
+       fact,
+       normalizedFact,
+       category,
+       sourceSubmissionId,
+       submittedBy,
+       approvedBy,
+       approvedAt
+     )
+     SELECT
+       fact,
+       normalizedFact,
+       COALESCE(category, 'random'),
+       id,
+       userId,
+       reviewerId,
+       COALESCE(approvedAt, decisionAt, submittedAt)
+     FROM dailyfact_submissions
+     WHERE status = 'APPROVED'
+     AND normalizedFact IS NOT NULL
+     AND normalizedFact != ''`
+  );
+}
+
+function createApplicationTables() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS application_forms (
+
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+      guildId TEXT NOT NULL,
+
+      name TEXT NOT NULL,
+
+      normalizedName TEXT NOT NULL,
+
+      description TEXT,
+
+      enabled INTEGER DEFAULT 1,
+
+      createdBy TEXT,
+
+      createdAt INTEGER NOT NULL,
+
+      updatedAt INTEGER NOT NULL,
+
+      UNIQUE(guildId, normalizedName)
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS application_questions (
+
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+      guildId TEXT NOT NULL,
+
+      formId INTEGER NOT NULL,
+
+      question TEXT NOT NULL,
+
+      position INTEGER NOT NULL,
+
+      required INTEGER DEFAULT 1,
+
+      createdAt INTEGER NOT NULL
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS application_responses (
+
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+      guildId TEXT NOT NULL,
+
+      formId INTEGER NOT NULL,
+
+      ticketId INTEGER,
+
+      channelId TEXT,
+
+      userId TEXT NOT NULL,
+
+      answersJson TEXT NOT NULL,
+
+      submittedAt INTEGER NOT NULL
+    )
+  `);
+
+  createIndex(
+
+    'idx_application_forms_guild',
+
+    `CREATE INDEX IF NOT EXISTS idx_application_forms_guild
+     ON application_forms(guildId, enabled)`
+  );
+
+  createIndex(
+
+    'idx_application_questions_form',
+
+    `CREATE INDEX IF NOT EXISTS idx_application_questions_form
+     ON application_questions(formId, position)`
+  );
+
+  createIndex(
+
+    'idx_application_responses_form',
+
+    `CREATE INDEX IF NOT EXISTS idx_application_responses_form
+     ON application_responses(guildId, formId, submittedAt)`
+  );
+}
+
+let databaseInitialized =
+  false;
+
+let cleanupInterval =
+  null;
+
 function initDatabase() {
+
+  if (databaseInitialized) {
+
+    return;
+  }
+
+  checkDatabaseIntegrity();
 
   createCasesTable();
 
@@ -1767,15 +1974,27 @@ createDailyFactTable();
 
 createDailyFactSubmissionTable();
 
+createDailyFactFactsTable();
+
+createApplicationTables();
+
+databaseInitialized =
+  true;
+
 console.log(
-  '✅ Database initialized'
+  'Database initialized'
 );
 }
 
-initDatabase();
+function startDatabaseCleanup() {
 
-const cleanupInterval =
-  setInterval(() => {
+  if (cleanupInterval) {
+
+    return cleanupInterval;
+  }
+
+  cleanupInterval =
+    setInterval(() => {
 
     try {
 
@@ -1806,7 +2025,7 @@ const cleanupInterval =
       );
 
       console.log(
-        '🧹 Database cleanup complete'
+        'Database cleanup complete'
       );
 
     } catch (err) {
@@ -1820,6 +2039,9 @@ const cleanupInterval =
   }, 60 * 60 * 1000);
 
 cleanupInterval.unref?.();
+
+  return cleanupInterval;
+}
 
 module.exports = {
 
@@ -1843,5 +2065,11 @@ module.exports = {
 
   columnNames,
 
-  ensureColumn
+  ensureColumn,
+
+  initDatabase,
+
+  startDatabaseCleanup,
+
+  checkDatabaseIntegrity
 };

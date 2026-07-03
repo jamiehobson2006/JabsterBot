@@ -11,6 +11,10 @@ const {
   getChannel
 } = require('../../utils/youtube');
 
+const {
+  getUser
+} = require('../../utils/twitch');
+
 module.exports = {
 
   cooldown: 3000,
@@ -108,7 +112,28 @@ module.exports = {
           channelInfo.id;
       }
 
-      run(
+      if (platform === 'twitch') {
+
+        const user =
+          await getUser(
+            creator
+          );
+
+        if (!user) {
+
+          return interaction.editReply({
+
+            content:
+              '❌ Could not find that Twitch channel.'
+          });
+        }
+
+        creatorId =
+          user.id;
+      }
+
+      const result =
+        run(
 
         `DELETE FROM social_channels
 
@@ -128,6 +153,15 @@ module.exports = {
           contentType
         ]
       );
+
+      if (!result?.changes) {
+
+        return interaction.editReply({
+
+          content:
+            '❌ No matching social feed was found.'
+        });
+      }
 
       await interaction.editReply({
 

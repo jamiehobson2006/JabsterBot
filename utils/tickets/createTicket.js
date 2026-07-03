@@ -68,7 +68,9 @@ async function createTicket({
 
   type,
 
-  reason = null
+  reason = null,
+
+  application = null
 }) {
 
   // ==========================================
@@ -379,6 +381,11 @@ async function createTicket({
   // ==========================================
   // 🎨 EMBED
   // ==========================================
+  const applicationAnswers =
+    Array.isArray(application?.answers)
+      ? application.answers
+      : [];
+
   const embed =
     new EmbedBuilder()
 
@@ -391,11 +398,13 @@ async function createTicket({
 
       .setDescription(
 
-        `Welcome ${interaction.user}\n\n` +
-
-        `Please describe your issue.\n` +
-
-        `A staff member will assist you shortly.`
+        application
+          ? `Welcome ${interaction.user}\n\n` +
+            `Your application has been submitted.\n` +
+            `A staff member will review it shortly.`
+          : `Welcome ${interaction.user}\n\n` +
+            `Please describe your issue.\n` +
+            `A staff member will assist you shortly.`
       )
 
       .addFields(
@@ -436,7 +445,8 @@ async function createTicket({
   // 📝 REASON
   // ==========================================
   if (
-    cleanReason
+    cleanReason &&
+    !application
   ) {
 
     embed.addFields({
@@ -452,6 +462,40 @@ async function createTicket({
   // ==========================================
   // 📨 SEND TICKET MESSAGE
   // ==========================================
+  if (application) {
+
+    embed.addFields({
+
+      name:
+        'Application',
+
+      value:
+        application.form?.name ||
+        cleanReason ||
+        'Application'
+    });
+
+    for (const [index, item] of applicationAnswers.entries()) {
+
+      const question =
+        String(item.question || `Question ${index + 1}`)
+          .slice(0, 240);
+
+      const answer =
+        String(item.answer || 'No answer provided')
+          .slice(0, 1000);
+
+      embed.addFields({
+
+        name:
+          `${index + 1}. ${question}`,
+
+        value:
+          answer
+      });
+    }
+  }
+
   const msg =
     await channel.send({
 
@@ -471,7 +515,8 @@ async function createTicket({
   // ==========================================
   // 💾 SAVE DATABASE
   // ==========================================
-  run(
+  const ticketResult =
+    run(
 
     `INSERT INTO tickets
 
@@ -504,6 +549,36 @@ async function createTicket({
       'OPEN'
     ]
   );
+
+  const ticketId =
+    ticketResult.lastInsertRowid;
+
+  if (application) {
+
+    run(
+
+      `INSERT INTO application_responses (
+         guildId,
+         formId,
+         ticketId,
+         channelId,
+         userId,
+         answersJson,
+         submittedAt
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+
+      [
+        interaction.guild.id,
+        application.form.id,
+        ticketId,
+        channel.id,
+        interaction.user.id,
+        JSON.stringify(applicationAnswers),
+        Date.now()
+      ]
+    );
+  }
 
   // ==========================================
   // ✅ RETURN

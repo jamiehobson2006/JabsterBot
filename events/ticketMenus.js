@@ -1,4 +1,4 @@
-const {
+﻿const {
 
   ModalBuilder,
 
@@ -8,12 +8,18 @@ const {
 
   ActionRowBuilder,
 
+  StringSelectMenuBuilder,
+
   MessageFlags
 
 } = require('discord.js');
 
+const {
+  listForms
+} = require('../utils/applications');
+
 // ==================================================
-// 🚫 STALE INTERACTIONS
+// ðŸš« STALE INTERACTIONS
 // ==================================================
 function isStaleInteractionError(error) {
 
@@ -28,7 +34,7 @@ function isStaleInteractionError(error) {
 }
 
 // ==================================================
-// 💬 SAFE REPLY
+// ðŸ’¬ SAFE REPLY
 // ==================================================
 async function safelyReply(
   interaction,
@@ -95,7 +101,7 @@ module.exports = {
     try {
 
       // ==================================================
-      // 🎟 TICKET MENU ONLY
+      // ðŸŽŸ TICKET MENU ONLY
       // ==================================================
       if (
 
@@ -109,7 +115,7 @@ module.exports = {
       }
 
       // ==============================================
-      // 🎫 VALIDATE TYPE
+      // ðŸŽ« VALIDATE TYPE
       // ==============================================
       const type =
         interaction.values?.[0];
@@ -121,13 +127,13 @@ module.exports = {
           {
 
             content:
-              '❌ Invalid ticket type.'
+              'âŒ Invalid ticket type.'
           }
         );
       }
 
       // ==============================================
-      // 🧹 CLEAN TYPE
+      // ðŸ§¹ CLEAN TYPE
       // ==============================================
       const safeType =
         type
@@ -136,8 +142,58 @@ module.exports = {
 
           .slice(0, 30);
 
+      if (safeType === 'application') {
+
+        const forms =
+          listForms(
+            interaction.guild.id,
+            {
+              enabledOnly: true
+            }
+          );
+
+        if (!forms.length) {
+
+          return safelyReply(
+            interaction,
+            {
+              content:
+                'No applications are available right now.'
+            }
+          );
+        }
+
+        const menu =
+          new StringSelectMenuBuilder()
+            .setCustomId('application_select')
+            .setPlaceholder('Choose an application')
+            .addOptions(
+              forms.slice(0, 25).map(form => ({
+                label:
+                  form.name.slice(0, 100),
+                description:
+                  (form.description || 'Application form')
+                    .slice(0, 100),
+                value:
+                  String(form.id)
+              }))
+            );
+
+        return safelyReply(
+          interaction,
+          {
+            content:
+              'Choose the application you want to submit.',
+            components: [
+              new ActionRowBuilder()
+                .addComponents(menu)
+            ]
+          }
+        );
+      }
+
       // ==============================================
-      // 📝 MODAL
+      // ðŸ“ MODAL
       // ==============================================
       const modal =
         new ModalBuilder()
@@ -151,7 +207,7 @@ module.exports = {
           );
 
       // ==============================================
-      // 📝 REASON INPUT
+      // ðŸ“ REASON INPUT
       // ==============================================
       const reasonInput =
         new TextInputBuilder()
@@ -180,7 +236,7 @@ module.exports = {
           .setMaxLength(1000);
 
       // ==============================================
-      // 📦 ROW
+      // ðŸ“¦ ROW
       // ==============================================
       const row =
         new ActionRowBuilder()
@@ -192,7 +248,7 @@ module.exports = {
       modal.addComponents(row);
 
       // ==============================================
-      // 📤 SHOW MODAL
+      // ðŸ“¤ SHOW MODAL
       // ==============================================
       await interaction.showModal(
         modal
@@ -217,7 +273,7 @@ module.exports = {
         {
 
           content:
-            '❌ Failed to open ticket menu.'
+            'âŒ Failed to open ticket menu.'
         }
       );
     }

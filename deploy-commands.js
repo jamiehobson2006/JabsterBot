@@ -36,6 +36,7 @@ if (!CLIENT_ID) {
 }
 
 const permissionDefaults = {
+  application: PermissionFlagsBits.Administrator,
   ban: PermissionFlagsBits.BanMembers,
   unban: PermissionFlagsBits.BanMembers,
   kick: PermissionFlagsBits.KickMembers,
@@ -87,6 +88,36 @@ const permissionDefaults = {
   socialadd: PermissionFlagsBits.ManageGuild,
   socialremove: PermissionFlagsBits.ManageGuild
 };
+
+async function getGuildCommandCleanupIds(rest) {
+
+  const ids =
+    new Set(guildCommandCleanupIds);
+
+  try {
+
+    const guilds =
+      await rest.get(
+        Routes.userGuilds()
+      );
+
+    for (const guild of guilds) {
+
+      if (guild?.id) {
+        ids.add(guild.id);
+      }
+    }
+
+  } catch (err) {
+
+    console.warn(
+      'Could not fetch current bot guilds for guild-command cleanup:',
+      err.message
+    );
+  }
+
+  return [...ids];
+}
 
 function loadCommands() {
 
@@ -218,10 +249,16 @@ async function deploy() {
       version: '10'
     }).setToken(TOKEN);
 
-  for (
-    const guildId of
-    new Set(guildCommandCleanupIds)
-  ) {
+  const cleanupGuildIds =
+    await getGuildCommandCleanupIds(rest);
+
+  if (!cleanupGuildIds.length) {
+    console.log(
+      'No guild command cleanup targets found'
+    );
+  }
+
+  for (const guildId of cleanupGuildIds) {
 
     console.log(`Clearing guild commands for ${guildId}`);
 

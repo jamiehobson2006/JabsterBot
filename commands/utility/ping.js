@@ -300,7 +300,7 @@ module.exports = {
         content:
           '❌ Ping failed.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

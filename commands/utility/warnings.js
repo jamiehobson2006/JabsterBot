@@ -456,7 +456,7 @@ module.exports = {
         content:
           '❌ Failed to fetch warnings.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

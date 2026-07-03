@@ -347,7 +347,7 @@ module.exports = {
         content:
           '❌ Failed to set mod logs channel.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

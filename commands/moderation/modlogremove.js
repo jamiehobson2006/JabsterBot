@@ -91,7 +91,7 @@ module.exports = {
 
         await interaction.deferReply({
 
-          ephemeral: true
+          flags: 64
         });
       }
 
@@ -712,7 +712,7 @@ module.exports = {
         content:
           '❌ Failed to remove case.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

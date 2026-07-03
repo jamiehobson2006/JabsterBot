@@ -668,7 +668,7 @@ module.exports = {
         content:
           '❌ Error executing ban command.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

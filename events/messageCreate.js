@@ -13,8 +13,12 @@ const {
 } = require('../utils/logger');
 
 const {
-  calculateLevel
-} = require('../utils/leveling');
+  addMessage
+} = require('../utils/tickets/stats');
+
+const {
+  hasTicketAccess
+} = require('../utils/tickets/permissions');
 
 const LevelingService =
   require('../utils/LevelingService');
@@ -158,6 +162,38 @@ async function handleLinkBlock(
   );
 
   return true;
+}
+
+function trackTicketStaffMessage(
+  message
+) {
+  const ticket =
+    get(
+      `SELECT *
+       FROM tickets
+       WHERE channelId = ?
+       AND status = 'OPEN'`,
+      [message.channel.id]
+    );
+
+  if (!ticket) {
+    return;
+  }
+
+  if (
+    !hasTicketAccess({
+      member: message.member,
+      guildId: message.guild.id,
+      type: ticket.type
+    })
+  ) {
+    return;
+  }
+
+  addMessage(
+    message.guild.id,
+    message.author.id
+  );
 }
 
 // ==================================================
@@ -321,6 +357,10 @@ module.exports = {
         return;
       }
 
+      trackTicketStaffMessage(
+        message
+      );
+
       // ==========================================
       // ⏱ ANTI-SPAM COOLDOWN
       // ==========================================
@@ -388,6 +428,10 @@ module.exports = {
             now
           ]
         );
+
+        await LevelingService.handleMessage(
+  message
+);
 
         return;
       }

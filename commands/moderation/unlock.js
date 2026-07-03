@@ -1,332 +1,145 @@
 const {
-
-  PermissionsBitField,
-
+  ChannelType,
   EmbedBuilder,
-
-  SlashCommandBuilder,
-
-  ChannelType
-
+  PermissionsBitField,
+  SlashCommandBuilder
 } = require('discord.js');
 
 const {
-
   run
-
 } = require('../../database');
 
 const {
-
-  sendLog,
-
-  createLogEmbed
-
+  createLogEmbed,
+  sendLog
 } = require('../../utils/logger');
 
 module.exports = {
-
   cooldown: 3000,
 
   data:
     new SlashCommandBuilder()
-
       .setName('unlock')
-
-      .setDescription(
-        'Unlock the current channel'
-      )
-
+      .setDescription('Unlock the current channel')
       .addStringOption(option =>
-
         option
-
           .setName('reason')
-
-          .setDescription(
-            'Reason for unlocking the channel'
-          )
-
+          .setDescription('Reason for unlocking the channel')
           .setMaxLength(200)
       ),
 
   async execute(interaction) {
-
     try {
-
-      // ========================
-      // 🔐 USER PERMISSION
-      // ========================
       if (
-
         !interaction.memberPermissions.has(
-
           PermissionsBitField.Flags.ManageChannels
         )
       ) {
-
         return interaction.editReply({
-
           content:
-
-            '❌ You need **Manage Channels** permission.'
+            'You need Manage Channels permission.'
         });
       }
 
-      // ========================
-      // 📺 CHANNEL
-      // ========================
-      const channel =
-        interaction.channel;
-
-      // ========================
-      // 🤖 BOT MEMBER
-      // ========================
       const botMember =
         interaction.guild.members.me;
 
-      // ========================
-      // 🤖 BOT PERMISSION
-      // ========================
       if (
-
         !botMember.permissions.has(
-
           PermissionsBitField.Flags.ManageChannels
         )
       ) {
-
         return interaction.editReply({
-
           content:
-
-            '❌ I do not have permission to manage channels.'
+            'I do not have Manage Channels permission.'
         });
       }
 
-      // ========================
-      // 🚫 CHANNEL CHECK
-      // ========================
+      const channel =
+        interaction.channel;
+
       if (
-
+        !channel ||
         ![
-
           ChannelType.GuildText,
-
           ChannelType.GuildAnnouncement
-
         ].includes(channel.type)
       ) {
-
         return interaction.editReply({
-
           content:
-
-            '❌ This command can only be used in text channels.'
+            'You can only unlock text channels.'
         });
       }
 
-      // ========================
-      // 📄 REASON
-      // ========================
       const reason =
-        interaction.options.getString(
-          'reason'
-        ) ||
-
+        interaction.options.getString('reason') ||
         'No reason provided';
 
-      // ========================
-      // 👥 EVERYONE ROLE
-      // ========================
-      const everyone =
+      const everyoneRole =
         interaction.guild.roles.everyone;
 
       const overwrite =
         channel.permissionOverwrites.cache.get(
-
-          everyone.id
+          everyoneRole.id
         );
 
-      // ========================
-      // 🧠 ALREADY UNLOCKED
-      // ========================
       const isLocked =
         overwrite?.deny?.has(
-
           PermissionsBitField.Flags.SendMessages
         );
 
       if (!isLocked) {
-
         return interaction.editReply({
-
           content:
-
-            '⚠️ This channel is already unlocked.'
+            'This channel is already unlocked.'
         });
       }
 
-      // ========================
-      // 🔓 UNLOCK CHANNEL
-      // ========================
       await channel.permissionOverwrites.edit(
-
-        everyone,
-
+        everyoneRole,
         {
-
           SendMessages: null
         },
-
         {
-
           reason:
-
             `Unlocked by ${interaction.user.tag} | ${reason}`
         }
       );
 
-      // ========================
-      // 💾 SAVE CASE
-      // ========================
-      const result =
-        run(
-
-          `INSERT INTO cases
-
-           (
-             guildId,
-             userId,
-             moderatorId,
-             action,
-             reason,
-             channelId,
-             createdAt
-           )
-
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-
-          [
-
-            interaction.guild.id,
-
-            interaction.guild.id,
-
-            interaction.user.id,
-
-            'UNLOCK',
-
-            reason,
-
-            channel.id,
-
-            Date.now()
-          ]
-        );
-
-      const caseId =
-        result?.lastInsertRowid || 'N/A';
-
-      // ========================
-      // 🎨 EMBED
-      // ========================
-      const embed =
-        new EmbedBuilder()
-
-          .setTitle(
-            '🔓 Channel Unlocked'
-          )
-
-          .setColor(
-            0x57F287
-          )
-
-          .setDescription(
-
-            'Members can now send messages again.'
-          )
-
-          .addFields(
-
-            {
-
-              name: '📺 Channel',
-
-              value:
-                `${channel}`,
-
-              inline: true
-            },
-
-            {
-
-              name: '🛡 Moderator',
-
-              value:
-                `${interaction.user}`,
-
-              inline: true
-            },
-
-            {
-
-              name: '📁 Case',
-
-              value:
-                `#${caseId}`,
-
-              inline: true
-            },
-
-            {
-
-              name: '📄 Reason',
-
-              value:
-                reason
-            }
-          )
-
-          .setFooter({
-
-            text:
-              `${interaction.guild.name} Moderation`
-          })
-
-          .setTimestamp();
-
-      // ========================
-      // ✅ RESPONSE
-      // ========================
       await interaction.editReply({
-
-        embeds: [embed]
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x57F287)
+            .setTitle('Channel Unlocked')
+            .setDescription(
+              'Members can now send messages again.'
+            )
+            .addFields(
+              {
+                name: 'Channel',
+                value: `${channel}`,
+                inline: true
+              },
+              {
+                name: 'Moderator',
+                value: `${interaction.user}`,
+                inline: true
+              },
+              {
+                name: 'Reason',
+                value: reason
+              }
+            )
+            .setFooter({
+              text:
+                `${interaction.guild.name} Moderation`
+            })
+            .setTimestamp()
+        ]
       });
 
-      // ========================
-      // 🗑 AUTO DELETE
-      // ========================
-      setTimeout(() => {
-
-        if (!interaction.ephemeral) {
-
-          interaction
-
-            .deleteReply()
-
-            .catch(() => {});
-        }
-
-      }, 3000);
-
-      // ========================
-      // 📜 AUDIT LOG
-      // ========================
       run(
-
         `INSERT INTO audit_logs
-
          (
            guildId,
            action,
@@ -335,96 +148,47 @@ module.exports = {
            metadata,
            timestamp
          )
-
          VALUES (?, ?, ?, ?, ?, ?)`,
-
         [
-
           interaction.guild.id,
-
           'UNLOCK',
-
           channel.id,
-
           interaction.user.id,
-
           JSON.stringify({
-
-            channelId:
-              channel.id,
-
             reason,
-
-            caseId
+            channelId: channel.id
           }),
-
           Date.now()
         ]
       );
 
-      // ========================
-      // 📜 MOD LOG
-      // ========================
-      const log =
+      const logEmbed =
         createLogEmbed({
-
-          action:
-            'UNLOCK',
-
+          action: 'UNLOCK',
           user: {
-
-            id:
-              channel.id,
-
-            tag:
-              `#${channel.name}`
+            id: channel.id,
+            tag: `#${channel.name}`
           },
-
           moderator:
             interaction.user,
-
-          reason,
-
-          caseId
+          reason
         });
 
       await sendLog(
-
         interaction.client,
-
         interaction.guild.id,
-
-        log
+        logEmbed
       );
 
     } catch (err) {
-
       console.error(
-        'Unlock Error:',
+        'Unlock Command Error:',
         err
       );
 
-      if (
-
-        interaction.deferred ||
-
-        interaction.replied
-      ) {
-
-        return interaction.editReply({
-
-          content:
-
-            '❌ Failed to unlock channel. Check my permissions.'
-        });
-      }
-
-      return interaction.reply({
-
+      return interaction.editReply({
         content:
-          '❌ Failed to unlock channel.',
-
-        ephemeral: true
+          'Failed to unlock channel.'
       });
     }
   }

@@ -122,7 +122,7 @@ class DailyFactService {
               },
               {
                 name: 'Source',
-                value: picked.source === 'submission'
+                value: picked.source === 'community'
                   ? 'Community approved'
                   : 'JabsterBot facts',
                 inline: true

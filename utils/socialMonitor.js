@@ -24,6 +24,12 @@ const {
 const CHECK_INTERVAL =
   5 * 60 * 1000;
 
+let monitorInterval =
+  null;
+
+let monitorStartTimeout =
+  null;
+
 // ====================================
 // MESSAGES
 // ====================================
@@ -116,7 +122,7 @@ if (details.live) {
       const channel =
         await client.channels.fetch(
           social.targetChannelId
-        );
+        ).catch(() => null);
 
       if (!channel) {
         continue;
@@ -282,6 +288,7 @@ async function checkEndedTwitchStreams(client) {
     `SELECT *
      FROM social_channels
      WHERE platform = 'twitch'
+     AND contentType IN ('all', 'streams')
      AND lastTwitchStreamId IS NOT NULL`
   );
 
@@ -334,7 +341,7 @@ async function checkEndedTwitchStreams(client) {
       const channel =
         await client.channels.fetch(
           social.targetChannelId
-        );
+        ).catch(() => null);
 
       if (!channel) {
         continue;
@@ -484,7 +491,8 @@ async function checkTwitch(client) {
 
     `SELECT *
      FROM social_channels
-     WHERE platform = 'twitch'`
+     WHERE platform = 'twitch'
+     AND contentType IN ('all', 'streams')`
   );
 
   for (const social of socials) {
@@ -538,7 +546,7 @@ if (
       const channel =
         await client.channels.fetch(
           social.targetChannelId
-        );
+        ).catch(() => null);
 
       if (!channel) {
         continue;
@@ -837,7 +845,7 @@ async function checkYouTube(client) {
       const channel =
         await client.channels.fetch(
           social.targetChannelId
-        );
+        ).catch(() => null);
 
       if (!channel) {
         continue;
@@ -1083,18 +1091,35 @@ run(
 
 function start(client) {
 
+  if (
+    monitorInterval ||
+    monitorStartTimeout
+  ) {
+
+    console.log(
+      'Social Monitor already running'
+    );
+
+    return monitorInterval ||
+      monitorStartTimeout;
+  }
+
   console.log(
     '📱 Social Monitor Started'
   );
 
-  setTimeout(() => {
+  monitorStartTimeout =
+    setTimeout(() => {
 
 checkEndedStreams(client);
 checkEndedTwitchStreams(client);
 checkYouTube(client);
 checkTwitch(client);
 
-setInterval(() => {
+monitorStartTimeout = null;
+
+monitorInterval =
+  setInterval(() => {
 
 checkEndedStreams(client);
 checkEndedTwitchStreams(client);
@@ -1103,7 +1128,13 @@ checkTwitch(client);
 
 }, CHECK_INTERVAL);
 
+monitorInterval.unref?.();
+
   }, 15000);
+
+  monitorStartTimeout.unref?.();
+
+  return monitorStartTimeout;
 }
 
 module.exports = {

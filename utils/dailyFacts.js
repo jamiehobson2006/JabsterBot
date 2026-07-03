@@ -1,5 +1,7 @@
 const {
-  all
+  all,
+  get,
+  run
 } = require('../database');
 
 const codedFacts =
@@ -127,6 +129,20 @@ function submittedFactRows() {
   }));
 }
 
+function approvedFactRows() {
+
+  return all(
+
+    `SELECT id, fact, category, sourceSubmissionId, submittedBy, approvedBy, approvedAt
+     FROM dailyfact_facts`
+  ).map(row => ({
+    ...row,
+    fact: cleanFact(row.fact),
+    category: row.category || 'random',
+    source: 'community'
+  }));
+}
+
 function findDuplicateFact(
   fact,
   {
@@ -152,10 +168,89 @@ function findDuplicateFact(
     return codedDuplicate;
   }
 
+  const approvedDuplicate =
+    approvedFactRows().find(row =>
+      row.sourceSubmissionId !== excludeSubmissionId &&
+      normalizeFact(row.fact) === normalized
+    );
+
+  if (approvedDuplicate) {
+
+    return approvedDuplicate;
+  }
+
   return submittedFactRows().find(row =>
     row.id !== excludeSubmissionId &&
     normalizeFact(row.fact) === normalized
   ) || null;
+}
+
+function saveApprovedFact({
+  submissionId = null,
+  userId = null,
+  reviewerId = null,
+  fact,
+  category = 'random',
+  approvedAt = Date.now()
+}) {
+
+  const cleaned =
+    cleanFact(fact);
+
+  const normalized =
+    normalizeFact(cleaned);
+
+  if (!normalized) {
+
+    throw new Error(
+      'Cannot approve an empty Daily Fact.'
+    );
+  }
+
+  run(
+
+    `INSERT INTO dailyfact_facts (
+       fact,
+       normalizedFact,
+       category,
+       sourceSubmissionId,
+       submittedBy,
+       approvedBy,
+       approvedAt
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(normalizedFact)
+     DO UPDATE SET
+       fact = excluded.fact,
+       category = excluded.category,
+       sourceSubmissionId = COALESCE(
+         excluded.sourceSubmissionId,
+         dailyfact_facts.sourceSubmissionId
+       ),
+       submittedBy = COALESCE(
+         excluded.submittedBy,
+         dailyfact_facts.submittedBy
+       ),
+       approvedBy = excluded.approvedBy,
+       approvedAt = excluded.approvedAt`,
+    [
+      cleaned,
+      normalized,
+      category || 'random',
+      submissionId,
+      userId,
+      reviewerId,
+      approvedAt
+    ]
+  );
+
+  return get(
+
+    `SELECT *
+     FROM dailyfact_facts
+     WHERE normalizedFact = ?`,
+    [normalized]
+  );
 }
 
 function buildDailyFactPools() {
@@ -214,9 +309,7 @@ function buildDailyFactPools() {
 
   for (
     const row of
-    submittedFactRows().filter(item =>
-      item.status === 'APPROVED'
-    )
+    approvedFactRows()
   ) {
     addToPool(row);
   }
@@ -250,6 +343,8 @@ module.exports = {
   categoryName,
   isRealCategory,
   findDuplicateFact,
+  saveApprovedFact,
+  approvedFactRows,
   buildDailyFactPools,
   getFactsForCategory
 };

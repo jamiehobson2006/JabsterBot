@@ -418,7 +418,7 @@ module.exports = {
         content:
           '❌ Failed to edit case.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

@@ -271,9 +271,17 @@ module.exports = {
 
            enabled = excluded.enabled,
 
-           categoryId = excluded.categoryId,
+           categoryId =
+             COALESCE(
+               excluded.categoryId,
+               ticket_settings.categoryId
+             ),
 
-           roleId = excluded.roleId`,
+           roleId =
+             COALESCE(
+               excluded.roleId,
+               ticket_settings.roleId
+             )`,
 
         [
 

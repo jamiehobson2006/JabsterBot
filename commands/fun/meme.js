@@ -249,7 +249,7 @@ module.exports = {
                 content:
                     '❌ Error fetching meme.',
 
-                ephemeral: true
+                flags: 64
             });
         }
     }

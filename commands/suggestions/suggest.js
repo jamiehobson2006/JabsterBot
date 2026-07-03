@@ -1,492 +1,271 @@
-﻿const {
-
-  EmbedBuilder,
-
+const {
   ActionRowBuilder,
-
   ButtonBuilder,
-
   ButtonStyle,
-
+  ChannelType,
+  EmbedBuilder,
   PermissionsBitField,
-
-  SlashCommandBuilder,
-
-  ChannelType
-
+  SlashCommandBuilder
 } = require('discord.js');
 
 const {
-
   get,
-
   run
-
 } = require('../../database');
 
 module.exports = {
-
   cooldown: 5000,
-
   ephemeral: true,
 
   data:
     new SlashCommandBuilder()
-
       .setName('suggest')
-
-      .setDescription(
-        'Submit a suggestion'
-      )
-
+      .setDescription('Submit a suggestion')
       .addStringOption(option =>
-
         option
-
           .setName('text')
-
-          .setDescription(
-            'Your suggestion'
-          )
-
+          .setDescription('Your suggestion')
           .setRequired(true)
-
           .setMaxLength(500)
       ),
 
   async execute(interaction) {
-
     try {
-
-      // ========================
-      // 📥 INPUT
-      // ========================
       const text =
         interaction.options
-
           .getString(
             'text',
             true
           )
-
           .trim();
 
-      // ========================
-      // 🚫 EMPTY CHECK
-      // ========================
       if (!text.length) {
-
         return interaction.editReply({
-
           content:
-            '❌ Suggestion cannot be empty.'
+            'Suggestion cannot be empty.'
         });
       }
 
-      // ========================
-      // 🚫 MASS MENTION FILTER
-      // ========================
       if (
-
         text.includes('@everyone') ||
-
         text.includes('@here')
       ) {
-
         return interaction.editReply({
-
           content:
-
-            '❌ Suggestions cannot contain mass mentions.'
+            'Suggestions cannot contain mass mentions.'
         });
       }
 
-      // ========================
-      // 🔄 GET SETTINGS
-      // ========================
       const settings =
         get(
-
           `SELECT suggestionChannelId
-
            FROM guild_settings
-
            WHERE guildId = ?`,
-
-          [
-
-            interaction.guild.id
-          ]
+          [interaction.guild.id]
         );
 
-      if (
-
-        !settings?.suggestionChannelId
-      ) {
-
+      if (!settings?.suggestionChannelId) {
         return interaction.editReply({
-
           content:
-            '❌ Suggestion channel not set.'
+            'Suggestion channel is not set.'
         });
       }
 
-      // ========================
-      // 📺 FETCH CHANNEL
-      // ========================
       const channel =
         interaction.guild.channels.cache.get(
-
           settings.suggestionChannelId
         );
 
       if (
-
         !channel ||
-
-        !channel.isTextBased() ||
-
-        channel.type ===
-        ChannelType.GuildVoice
+        ![
+          ChannelType.GuildText,
+          ChannelType.GuildAnnouncement
+        ].includes(channel.type)
       ) {
-
         return interaction.editReply({
-
           content:
-            '❌ Suggestion channel is invalid.'
+            'Suggestion channel is invalid.'
         });
       }
 
-      // ========================
-      // 🤖 BOT PERMISSIONS
-      // ========================
-      const perms =
+      const permissions =
         channel.permissionsFor(
-
           interaction.guild.members.me
         );
 
       if (
-
-        !perms?.has([
-
+        !permissions?.has([
           PermissionsBitField.Flags.ViewChannel,
-
           PermissionsBitField.Flags.SendMessages,
-
           PermissionsBitField.Flags.EmbedLinks,
-
           PermissionsBitField.Flags.AddReactions,
-
           PermissionsBitField.Flags.ReadMessageHistory
         ])
       ) {
-
         return interaction.editReply({
-
           content:
-
-            '❌ I am missing permissions in the suggestion channel.'
+            'I am missing permissions in the suggestion channel.'
         });
       }
 
-      // ========================
-      // 🚫 DUPLICATE CHECK
-      // ========================
       const recent =
         get(
-
-          `SELECT *
-
+          `SELECT 1
            FROM suggestions
-
            WHERE guildId = ?
            AND userId = ?
            AND content = ?
            AND timestamp > ?`,
-
           [
-
             interaction.guild.id,
-
             interaction.user.id,
-
             text,
-
-            Date.now() -
-            (5 * 60 * 1000)
+            Date.now() - (5 * 60 * 1000)
           ]
         );
 
       if (recent) {
-
         return interaction.editReply({
-
           content:
-
-            '⚠️ You already submitted this suggestion recently.'
+            'You already submitted this suggestion recently.'
         });
       }
 
-      // ========================
-      // 📊 USER STATS
-      // ========================
-      const stats =
-        get(
-
-          `SELECT COUNT(*) as total
-
-           FROM suggestions
-
-           WHERE guildId = ?
-           AND userId = ?`,
-
+      const result =
+        run(
+          `INSERT INTO suggestions
+           (
+             guildId,
+             userId,
+             content,
+             status,
+             timestamp
+           )
+           VALUES (?, ?, ?, ?, ?)`,
           [
-
             interaction.guild.id,
-
-            interaction.user.id
+            interaction.user.id,
+            text,
+            'PENDING',
+            Date.now()
           ]
         );
 
+      const suggestionId =
+        result.lastInsertRowid;
+
       const embed =
         new EmbedBuilder()
-
-          .setColor(
-            0x5865F2
-          )
-
-          .setTitle(
-            '💡 New Suggestion'
-          )
-
+          .setColor(0x5865F2)
+          .setTitle('New Suggestion')
           .setDescription(text)
-
           .addFields(
-
             {
-
-              name: '👤 Author',
-
-              value:
-                `${interaction.user}`,
-
+              name: 'Author',
+              value: `${interaction.user}`,
               inline: true
             },
-
             {
-
-              name: '📊 Status',
-
-              value:
-                '⏳ Pending',
-
+              name: 'Status',
+              value: 'Pending',
               inline: true
             },
-
             {
-
-              name: '👍 Votes',
-
-              value:
-                '✅ 0 • ❌ 0',
-
+              name: 'Votes',
+              value: 'Yes: 0 | No: 0',
               inline: true
             },
-
-{
-  name: '🆔 Suggestion ID',
-
-  value:
-    'Generating...',
-
-  inline: true
-}
+            {
+              name: 'Suggestion ID',
+              value: `#${suggestionId}`,
+              inline: true
+            }
           )
-
           .setThumbnail(
-
             interaction.user.displayAvatarURL({
-
-              dynamic: true
+              size: 256
             })
           )
-
           .setFooter({
-
             text:
               `User ID: ${interaction.user.id}`
           })
-
           .setTimestamp();
 
-      // ========================
-      // 🔘 BUTTONS
-      // ========================
       const row =
         new ActionRowBuilder()
-
           .addComponents(
-
             new ButtonBuilder()
-
               .setCustomId('suggest_accept')
-
               .setLabel('Accept')
-
               .setEmoji('✅')
-
-              .setStyle(
-                ButtonStyle.Success
-              ),
+              .setStyle(ButtonStyle.Success),
 
             new ButtonBuilder()
-
               .setCustomId('suggest_deny')
-
               .setLabel('Deny')
-
               .setEmoji('❌')
-
-              .setStyle(
-                ButtonStyle.Danger
-              )
+              .setStyle(ButtonStyle.Danger)
           );
 
-      // ========================
-      // 📤 SEND MESSAGE
-      // ========================
-const msg =
-  await channel.send({
+      const message =
+        await channel.send({
+          embeds: [embed],
+          components: [row]
+        });
 
-    embeds: [embed],
+      await message.react('✅');
+      await message.react('❌');
 
-    components: [row]
-  });
-
-const suggestionNumber =
-  msg.id;
-
-      // ========================
-      // 👍 COMMUNITY VOTING
-      // ========================
-      await msg.react('✅');
-      await msg.react('❌');
-
-      // ========================
-      // 💾 SAVE DATABASE
-      // ========================
       run(
-
-        `INSERT INTO suggestions
-
-         (
-           guildId,
-           messageId,
-           userId,
-           content,
-           status,
-           timestamp
-         )
-
-         VALUES (?, ?, ?, ?, ?, ?)`,
-
+        `UPDATE suggestions
+         SET messageId = ?
+         WHERE id = ?`,
         [
-
-          interaction.guild.id,
-
-          msg.id,
-
-          interaction.user.id,
-
-          text,
-
-          'PENDING',
-
-          Date.now()
+          message.id,
+          suggestionId
         ]
       );
 
-await interaction.editReply({
-
-  embeds: [
-
-    new EmbedBuilder()
-
-      .setColor(
-        0x57F287
-      )
-
-      .setTitle(
-        '✅ Suggestion Submitted'
-      )
-
-      .setDescription(
-
-        `Your suggestion has been posted in ${channel}`
-      )
-
-      .addFields(
-
-        {
-
-          name: '🆔 Suggestion ID',
-
-          value:
-            `#${suggestionNumber}`,
-
-          inline: true
-        },
-
-        {
-
-          name: '🔗 Message',
-
-          value:
-            `[Jump to Suggestion](${msg.url})`,
-
-          inline: true
-        }
-      )
-
-      .setFooter({
-
-        text:
-          `${interaction.guild.name} Suggestions`
-      })
-
-      .setTimestamp()
-  ],
-
-});
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x57F287)
+            .setTitle('Suggestion Submitted')
+            .setDescription(
+              `Your suggestion has been posted in ${channel}.`
+            )
+            .addFields(
+              {
+                name: 'Suggestion ID',
+                value: `#${suggestionId}`,
+                inline: true
+              },
+              {
+                name: 'Message',
+                value:
+                  `[Jump to Suggestion](${message.url})`,
+                inline: true
+              }
+            )
+            .setFooter({
+              text:
+                `${interaction.guild.name} Suggestions`
+            })
+            .setTimestamp()
+        ]
+      });
 
     } catch (err) {
-
       console.error(
         'Suggest Error:',
         err
       );
 
-      if (
-
-        interaction.deferred ||
-
-        interaction.replied
-      ) {
-
-        return interaction.editReply({
-
-          content:
-            '❌ Failed to submit suggestion.'
-        });
-      }
-
-      return interaction.reply({
-
+      return interaction.editReply({
         content:
-          '❌ Failed to submit suggestion.',
-
-        ephemeral: true
+          'Failed to submit suggestion.'
       });
     }
   }

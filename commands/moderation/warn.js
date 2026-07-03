@@ -841,7 +841,7 @@ module.exports = {
         content:
           '❌ Failed to warn user.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

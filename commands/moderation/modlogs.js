@@ -772,7 +772,7 @@ module.exports = {
 
                     '❌ Invalid page number.',
 
-                  ephemeral: true
+                  flags: 64
                 });
               }
 
@@ -980,7 +980,7 @@ module.exports = {
 
           '❌ Failed to load moderation logs.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

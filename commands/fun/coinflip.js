@@ -208,7 +208,7 @@ module.exports = {
                 content:
                     '❌ Coinflip failed.',
 
-                ephemeral: true
+                flags: 64
             });
         }
     }

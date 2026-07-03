@@ -24,7 +24,13 @@ const path =
 
 require('dotenv').config();
 
-require('./database');
+const {
+  initDatabase,
+  startDatabaseCleanup
+} = require('./database');
+
+initDatabase();
+startDatabaseCleanup();
 
 const {
 

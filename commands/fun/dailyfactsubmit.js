@@ -48,6 +48,10 @@ module.exports = {
           .setRequired(true)
 
           .addChoices(
+            {
+              name: 'Random',
+              value: 'random'
+            },
             ...FACT_CATEGORIES.map(category => ({
               name: category.name,
               value: category.value
@@ -96,6 +100,8 @@ module.exports = {
       const duplicateText =
         duplicate.source === 'coded'
           ? 'That fact is already built into JabsterBot.'
+          : duplicate.source === 'community'
+            ? 'That fact has already been approved and added to JabsterBot.'
           : `That fact has already been submitted and is currently ${duplicate.status}.`;
 
       await interaction.user.send({

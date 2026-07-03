@@ -289,7 +289,7 @@ async function endGiveaway(
         Math.max(
 
           Number(
-            entry.bonus || 0
+            validation.bonusEntries || 0
           ),
 
           0

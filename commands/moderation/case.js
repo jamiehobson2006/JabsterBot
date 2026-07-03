@@ -446,7 +446,7 @@ module.exports = {
         content:
           '❌ Failed to fetch case.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

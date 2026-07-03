@@ -288,7 +288,7 @@ module.exports = {
                 content:
                     '❌ Failed to rate.',
 
-                ephemeral: true
+                flags: 64
             });
         }
     }

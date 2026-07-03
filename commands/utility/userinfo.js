@@ -663,7 +663,7 @@ module.exports = {
         content:
           '❌ Failed to fetch user info.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

@@ -729,7 +729,7 @@ module.exports = {
         content:
           '❌ Error executing kick command.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

@@ -391,7 +391,7 @@ module.exports = {
                 content:
                     '❌ Shipping failed.',
 
-                ephemeral: true
+                flags: 64
             });
         }
     }

@@ -1,5 +1,6 @@
 const {
-  EmbedBuilder
+  EmbedBuilder,
+  MessageFlags
 } = require('discord.js');
 
 const {
@@ -7,454 +8,294 @@ const {
   run
 } = require('../database');
 
-const {
-  checkRequirements
-} = require('../utils/giveaways/checkRequirements');
+const handledButtons =
+  new Set([
+    'giveaway_join',
+    'giveaway_leave'
+  ]);
 
-// ==========================
-// ⏱ JOIN COOLDOWN CACHE
-// ==========================
-const joinCooldowns =
+const buttonCooldowns =
   new Map();
 
-module.exports = {
+function replyHidden(
+  interaction,
+  content
+) {
+  return interaction.reply({
+    content,
+    flags: MessageFlags.Ephemeral
+  });
+}
 
+function getEntryCount(
+  messageId
+) {
+  return get(
+    `SELECT COUNT(*) AS total
+     FROM giveaway_entries
+     WHERE messageId = ?`,
+    [messageId]
+  )?.total || 0;
+}
+
+function syncEntryCount(
+  messageId
+) {
+  const totalEntries =
+    getEntryCount(messageId);
+
+  run(
+    `UPDATE giveaways
+     SET totalEntries = ?
+     WHERE messageId = ?`,
+    [
+      totalEntries,
+      messageId
+    ]
+  );
+
+  return totalEntries;
+}
+
+async function updateGiveawayEmbed(
+  interaction,
+  totalEntries
+) {
+  if (!interaction.message.embeds.length) {
+    return;
+  }
+
+  try {
+    const embed =
+      EmbedBuilder.from(
+        interaction.message.embeds[0]
+      );
+
+    const description =
+      embed.data.description || '';
+
+    const cleaned =
+      description
+        .replace(/\n\n👥 Entries: \*\*.*?\*\*/gu, '')
+        .trim();
+
+    embed.setDescription(
+      `${cleaned}\n\n👥 Entries: **${totalEntries}**`
+    );
+
+    await interaction.message.edit({
+      embeds: [embed]
+    });
+
+  } catch (err) {
+    console.error(
+      'Giveaway embed update failed:',
+      err
+    );
+  }
+}
+
+module.exports = {
   name: 'interactionCreate',
 
   async execute(interaction) {
-
     try {
-
-      // ==========================================
-      // 🎟 BUTTON ONLY
-      // ==========================================
       if (
-        !interaction.isButton()
+        !interaction.isButton() ||
+        !handledButtons.has(interaction.customId)
       ) {
-
         return;
       }
 
-      // ==========================================
-      // 🎉 GIVEAWAY BUTTON
-      // ==========================================
-      if (
-        interaction.customId !==
-        'giveaway_join'
-      ) {
-
-        return;
-      }
-
-      // ==========================================
-      // ⏱ SPAM COOLDOWN
-      // ==========================================
       const cooldownKey =
-        `${interaction.message.id}:${interaction.user.id}`;
+        `${interaction.message.id}:${interaction.user.id}:${interaction.customId}`;
 
       const lastClick =
-        joinCooldowns.get(
-          cooldownKey
-        );
+        buttonCooldowns.get(cooldownKey);
 
       if (
         lastClick &&
         Date.now() - lastClick < 2000
       ) {
-
-        return interaction.reply({
-
-          content:
-            '⏳ Please wait before clicking again.',
-
-          ephemeral: true
-        });
+        return replyHidden(
+          interaction,
+          'Please wait before clicking again.'
+        );
       }
 
-      joinCooldowns.set(
+      buttonCooldowns.set(
         cooldownKey,
         Date.now()
       );
 
       setTimeout(() => {
-
-        joinCooldowns.delete(
-          cooldownKey
-        );
-
+        buttonCooldowns.delete(cooldownKey);
       }, 5000);
 
-      // ==========================================
-      // 📊 FETCH GIVEAWAY
-      // ==========================================
       const giveaway =
         get(
-
           `SELECT *
            FROM giveaways
            WHERE messageId = ?`,
-
-          [
-
-            interaction.message.id
-          ]
+          [interaction.message.id]
         );
 
       if (!giveaway) {
-
-        return interaction.reply({
-
-          content:
-            '❌ Giveaway not found.',
-
-          ephemeral: true
-        });
+        return replyHidden(
+          interaction,
+          'Giveaway not found.'
+        );
       }
 
-      // ==========================================
-      // ⛔ ENDED
-      // ==========================================
       if (giveaway.ended) {
-
-        return interaction.reply({
-
-          content:
-            '❌ This giveaway has ended.',
-
-          ephemeral: true
-        });
+        return replyHidden(
+          interaction,
+          'This giveaway has ended.'
+        );
       }
 
-      // ==========================================
-      // ⏸ PAUSED
-      // ==========================================
+      if (interaction.customId === 'giveaway_leave') {
+        const result =
+          run(
+            `DELETE FROM giveaway_entries
+             WHERE messageId = ?
+             AND userId = ?`,
+            [
+              giveaway.messageId,
+              interaction.user.id
+            ]
+          );
+
+        if (!result?.changes) {
+          return replyHidden(
+            interaction,
+            'You are not entered in this giveaway.'
+          );
+        }
+
+        const totalEntries =
+          syncEntryCount(giveaway.messageId);
+
+        await updateGiveawayEmbed(
+          interaction,
+          totalEntries
+        );
+
+        return replyHidden(
+          interaction,
+          'You left the giveaway.'
+        );
+      }
+
       if (giveaway.paused) {
-
-        return interaction.reply({
-
-          content:
-            '❌ This giveaway is paused.',
-
-          ephemeral: true
-        });
+        return replyHidden(
+          interaction,
+          'This giveaway is paused.'
+        );
       }
 
-      // ==========================================
-      // 🚫 BLACKLIST CHECK
-      // ==========================================
       const blacklisted =
         get(
-
-          `SELECT *
+          `SELECT 1
            FROM giveaway_blacklist
            WHERE guildId = ?
            AND userId = ?`,
-
           [
-
             interaction.guild.id,
-
             interaction.user.id
           ]
         );
 
       if (blacklisted) {
-
-        return interaction.reply({
-
-          content:
-            '❌ You are blacklisted from giveaways.',
-
-          ephemeral: true
-        });
-      }
-
-      // ==========================================
-      // 👤 MEMBER
-      // ==========================================
-      const member =
-        await interaction.guild.members
-          .fetch({
-            user: interaction.user.id,
-            force: true
-          })
-          .catch(() => null);
-
-      if (!member) {
-
-        return interaction.reply({
-
-          content:
-            '❌ Failed to fetch member.',
-
-          ephemeral: true
-        });
-      }
-
-      // ==========================================
-      // 📜 REQUIREMENTS
-      // ==========================================
-      let requirements = {};
-
-      try {
-
-        requirements =
-          JSON.parse(
-            giveaway.requirements || '{}'
-          );
-
-      } catch {
-
-        requirements = {};
-      }
-
-      // ==========================================
-      // 🎯 VALIDATE
-      // ==========================================
-      const validation =
-        await checkRequirements(
-
-          member,
-          requirements
+        return replyHidden(
+          interaction,
+          'You are blacklisted from giveaways.'
         );
-
-      if (!validation.success) {
-
-        return interaction.reply({
-
-          content:
-            `❌ ${validation.reason}`,
-
-          ephemeral: true
-        });
       }
 
-      // ==========================================
-      // 🚫 ALREADY ENTERED
-      // ==========================================
       const existing =
         get(
-
           `SELECT 1
            FROM giveaway_entries
            WHERE messageId = ?
            AND userId = ?`,
-
           [
-
             giveaway.messageId,
-
             interaction.user.id
           ]
         );
 
       if (existing) {
-
-        return interaction.reply({
-
-          content:
-            '❌ You are already entered.',
-
-          ephemeral: true
-        });
+        return replyHidden(
+          interaction,
+          'You are already entered.'
+        );
       }
 
-      // ==========================================
-      // 🎁 BONUS ENTRIES
-      // ==========================================
-      const bonus =
-        validation.bonusEntries || 0;
-
-      // ==========================================
-      // 💾 SAVE ENTRY
-      // ==========================================
       try {
-
         run(
-
           `INSERT INTO giveaway_entries (
-
             messageId,
             guildId,
             userId,
-
             bonus,
-
             joinedAt
-
           )
-
           VALUES (?, ?, ?, ?, ?)`,
-          
           [
-
             giveaway.messageId,
-
             interaction.guild.id,
-
             interaction.user.id,
-
-            bonus,
-
+            0,
             Date.now()
           ]
         );
 
-      } catch (dbErr) {
-
-        // ======================================
-        // 🚫 DUPLICATE RACE CONDITION
-        // ======================================
+      } catch (err) {
         if (
-          String(dbErr.message)
+          String(err.message)
             .toLowerCase()
             .includes('unique')
         ) {
-
-          return interaction.reply({
-
-            content:
-              '❌ You are already entered.',
-
-            ephemeral: true
-          });
+          return replyHidden(
+            interaction,
+            'You are already entered.'
+          );
         }
 
-        throw dbErr;
+        throw err;
       }
-
-      // ==========================================
-      // 📊 REAL ENTRY COUNT
-      // ==========================================
-      const totalData =
-        get(
-
-          `SELECT COUNT(*) as total
-           FROM giveaway_entries
-           WHERE messageId = ?`,
-
-          [
-
-            giveaway.messageId
-          ]
-        );
 
       const totalEntries =
-        totalData?.total || 0;
+        syncEntryCount(giveaway.messageId);
 
-      // ==========================================
-      // 💾 SYNC GIVEAWAY TABLE
-      // ==========================================
-      run(
-
-        `UPDATE giveaways
-
-         SET totalEntries = ?
-
-         WHERE messageId = ?`,
-
-        [
-
-          totalEntries,
-
-          giveaway.messageId
-        ]
+      await updateGiveawayEmbed(
+        interaction,
+        totalEntries
       );
 
-      // ==========================================
-      // ✏ SAFE EMBED UPDATE
-      // ==========================================
-      if (
-        interaction.message.embeds.length
-      ) {
-
-        try {
-
-          const oldEmbed =
-            interaction.message.embeds[0];
-
-          const embed =
-            EmbedBuilder.from(
-              oldEmbed
-            );
-
-          // ======================================
-          // 📄 CLEAN DESCRIPTION
-          // ======================================
-          const description =
-            embed.data.description || '';
-
-          const cleaned =
-            description
-
-              .replace(
-                /\n\n👥 Entries: \*\*.*?\*\*/g,
-                ''
-              )
-
-              .trim();
-
-          embed.setDescription(
-
-            cleaned +
-
-            `\n\n👥 Entries: **${totalEntries}**`
-          );
-
-          await interaction.message.edit({
-
-            embeds: [embed]
-          });
-
-        } catch (editErr) {
-
-          console.error(
-            'Giveaway embed update failed:',
-            editErr
-          );
-        }
-      }
-
-      // ==========================================
-      // ✅ SUCCESS
-      // ==========================================
-      return interaction.reply({
-
-        content:
-
-          bonus > 0
-
-            ? `✅ You entered the giveaway with **${bonus}** bonus entries.`
-
-            : '✅ You entered the giveaway.',
-
-        ephemeral: true
-      });
+      return replyHidden(
+        interaction,
+        'You entered the giveaway. Requirements and bonus entries will be checked when winners are picked.'
+      );
 
     } catch (err) {
-
       console.error(
-        'Giveaway Join Error:',
+        'Giveaway Button Error:',
         err
       );
 
       if (
-
         interaction.deferred ||
-
         interaction.replied
       ) {
-
         return;
       }
 
-      return interaction.reply({
-
-        content:
-          '❌ Failed to join giveaway.',
-
-        ephemeral: true
-      });
+      return replyHidden(
+        interaction,
+        'Failed to update giveaway entry.'
+      );
     }
   }
 };

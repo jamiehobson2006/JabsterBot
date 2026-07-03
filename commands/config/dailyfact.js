@@ -206,6 +206,16 @@ module.exports = {
 
         [guildId]
       );
+
+      config =
+        get(
+
+          `SELECT *
+           FROM dailyfact_config
+           WHERE guildId = ?`,
+
+          [guildId]
+        );
     }
 
     if (
@@ -246,6 +256,19 @@ module.exports = {
     if (
       subcommand === 'enable'
     ) {
+
+      if (!config?.channelId) {
+
+        return interaction.editReply({
+
+          content:
+            'Set a Daily Fact channel first with `/dailyfact channel`.',
+
+          allowedMentions: {
+            parse: []
+          }
+        });
+      }
 
       run(
 

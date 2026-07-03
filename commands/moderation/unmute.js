@@ -593,7 +593,7 @@ module.exports = {
         content:
           '❌ Failed to unmute user.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

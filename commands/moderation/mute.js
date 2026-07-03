@@ -768,7 +768,7 @@ module.exports = {
         content:
           '❌ Failed to execute mute.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

@@ -373,7 +373,7 @@ module.exports = {
         content:
           '❌ Failed to fetch history.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

@@ -430,7 +430,7 @@ module.exports = {
         content:
           '❌ Failed to set slowmode.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

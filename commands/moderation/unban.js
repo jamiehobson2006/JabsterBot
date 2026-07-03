@@ -615,7 +615,7 @@ module.exports = {
         content:
           '❌ Failed to unban user.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

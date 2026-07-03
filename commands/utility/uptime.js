@@ -408,7 +408,7 @@ module.exports = {
         content:
           '❌ Failed to fetch uptime.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

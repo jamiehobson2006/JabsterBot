@@ -17,8 +17,24 @@ const {
   categoryName,
   cleanFact,
   findDuplicateFact,
-  normalizeFact
+  normalizeFact,
+  saveApprovedFact
 } = require('../utils/dailyFacts');
+
+function duplicateLabel(
+  duplicate
+) {
+
+  if (duplicate.source === 'coded') {
+    return 'coded fact';
+  }
+
+  if (duplicate.source === 'community') {
+    return 'approved community fact';
+  }
+
+  return `submission #${duplicate.id}`;
+}
 
 function submissionIdFromCustomId(customId) {
 
@@ -172,7 +188,9 @@ async function markDuplicate({
       Date.now(),
       duplicate.source === 'submission'
         ? `submission:${duplicate.id}`
-        : `coded:${duplicate.category}`,
+        : duplicate.source === 'community'
+          ? `approved:${duplicate.id}`
+          : `coded:${duplicate.category}`,
       submission.id
     ]
   );
@@ -199,7 +217,7 @@ async function markDuplicate({
           footer: `Duplicate marked by ${interaction.user.tag}`,
           fact,
           statusField:
-            `Matched: ${duplicate.source === 'coded' ? 'coded fact' : `submission #${duplicate.id}`}`
+            `Matched: ${duplicateLabel(duplicate)}`
         }
       )
     ],
@@ -253,6 +271,15 @@ async function approveSubmission({
       submission.id
     ]
   );
+
+  saveApprovedFact({
+    submissionId: submission.id,
+    userId: submission.userId,
+    reviewerId: interaction.user.id,
+    fact,
+    category: submission.category || 'random',
+    approvedAt: Date.now()
+  });
 
   await sendSubmissionDm(
     interaction.client,

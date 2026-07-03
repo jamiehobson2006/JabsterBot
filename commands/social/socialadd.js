@@ -1,7 +1,8 @@
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
-  EmbedBuilder
+  EmbedBuilder,
+  ChannelType
 } = require('discord.js');
 
 const {
@@ -70,6 +71,10 @@ module.exports = {
         .setDescription(
           'Notification channel'
         )
+        .addChannelTypes(
+          ChannelType.GuildText,
+          ChannelType.GuildAnnouncement
+        )
         .setRequired(true)
     )
 
@@ -113,6 +118,17 @@ module.exports = {
         interaction.options.getString(
           'content_type'
         );
+
+      if (
+        platform === 'twitch'
+        && !['all', 'streams'].includes(contentType)
+      ) {
+        return interaction.editReply({
+
+          content:
+            'Twitch feeds can only use All or Streams.'
+        });
+      }
 
       const channel =
         interaction.options.getChannel(

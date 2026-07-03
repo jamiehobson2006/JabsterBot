@@ -674,7 +674,7 @@ module.exports = {
         content:
           '❌ Failed to purge messages.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }

@@ -404,7 +404,7 @@ module.exports = {
         content:
           '❌ Failed to set AFK.',
 
-        ephemeral: true
+        flags: 64
       });
     }
   }
