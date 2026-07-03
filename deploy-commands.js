@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 
 const fs =
   require('fs');
@@ -12,9 +12,6 @@ const {
   Routes
 } = require('discord.js');
 
-// ==================================================
-// 🔐 ENV
-// ==================================================
 const TOKEN =
   process.env.TOKEN;
 
@@ -30,543 +27,221 @@ const guildCommandCleanupIds =
       .map(id => id.trim())
   ].filter(Boolean);
 
-// ==================================================
-// 🛡 ENV VALIDATION
-// ==================================================
 if (!TOKEN) {
-
-  throw new Error(
-    '❌ TOKEN missing in .env'
-  );
+  throw new Error('TOKEN missing in .env');
 }
 
 if (!CLIENT_ID) {
-
-  throw new Error(
-    '❌ CLIENT_ID missing in .env'
-  );
+  throw new Error('CLIENT_ID missing in .env');
 }
 
-// ==================================================
-// 📡 DEBUG
-// ==================================================
-console.log('━━━━━━━━━━━━━━━━━━━━━━');
-
-console.log(
-  '🚀 Deploying Commands'
-);
-
-console.log('━━━━━━━━━━━━━━━━━━━━━━');
-
-console.log(
-  'Client ID:',
-  CLIENT_ID
-);
-
-console.log(
-  'Mode:',
-  'Global'
-);
-
-if (guildCommandCleanupIds.length) {
-
-  console.log(
-    'Guild command cleanup:',
-    guildCommandCleanupIds.join(', ')
-  );
-}
-
-console.log('━━━━━━━━━━━━━━━━━━━━━━');
-
-// ==================================================
-// 🔐 DEFAULT PERMISSIONS
-// ==================================================
 const permissionDefaults = {
-
-  // ==============================================
-  // 🔨 MODERATION
-  // ==============================================
-  ban:
-    PermissionFlagsBits.BanMembers,
-
-  unban:
-    PermissionFlagsBits.BanMembers,
-
-  kick:
-    PermissionFlagsBits.KickMembers,
-
-  mute:
-    PermissionFlagsBits.ModerateMembers,
-
-  unmute:
-    PermissionFlagsBits.ModerateMembers,
-
-  warn:
-    PermissionFlagsBits.ModerateMembers,
-
-  warnings:
-    PermissionFlagsBits.ModerateMembers,
-
-  clearwarns:
-    PermissionFlagsBits.ModerateMembers,
-
-  case:
-    PermissionFlagsBits.ManageGuild,
-
-  cases:
-    PermissionFlagsBits.ManageGuild,
-
-  history:
-    PermissionFlagsBits.ManageGuild,
-
-  editcase:
-    PermissionFlagsBits.ManageGuild,
-
-  modlogs:
-    PermissionFlagsBits.ManageGuild,
-
-  modlogremove:
-    PermissionFlagsBits.ManageGuild,
-
-  purge:
-    PermissionFlagsBits.ManageMessages,
-
-  role:
-    PermissionFlagsBits.ManageRoles,
-
-  slowmode:
-    PermissionFlagsBits.ManageChannels,
-
-  lock:
-    PermissionFlagsBits.ManageChannels,
-
-  unlock:
-    PermissionFlagsBits.ManageChannels,
-
-  poll:
-    PermissionFlagsBits.ManageMessages,
-
-  // ==============================================
-  // 🎟 TICKETS
-  // ==============================================
-  setmodlogs:
-    PermissionFlagsBits.ManageGuild,
-
-  suggestchannel:
-    PermissionFlagsBits.ManageGuild,
-
-  setadminrole:
-    PermissionFlagsBits.Administrator,
-
-  setstaffrole:
-    PermissionFlagsBits.Administrator,
-
-  setgiveawayrole:
-    PermissionFlagsBits.Administrator,
-
-  setticketchannel:
-    PermissionFlagsBits.Administrator,
-
-  settranscriptchannel:
-    PermissionFlagsBits.Administrator,
-
-  linkblock:
-    PermissionFlagsBits.ManageGuild,
-
-  ticketpanel:
-    PermissionFlagsBits.Administrator,
-
-  ticketsetup:
-    PermissionFlagsBits.Administrator,
-
-  ticketpanelv3:
-    PermissionFlagsBits.Administrator,
-
-  ticketdebug:
-    PermissionFlagsBits.Administrator,
-
-  ticketstats:
-    PermissionFlagsBits.Administrator,
-
-  // ==============================================
-  // 🎉 GIVEAWAYS
-  // ==============================================
-  giveaway:
-    PermissionFlagsBits.ManageGuild,
-
-  greroll:
-    PermissionFlagsBits.ManageGuild,
-
-  gend:
-    PermissionFlagsBits.ManageGuild,
-
-  gdelete:
-    PermissionFlagsBits.ManageGuild,
-
-  glist:
-    PermissionFlagsBits.ManageGuild,
-
-  gstats:
-    PermissionFlagsBits.ManageGuild,
-
-  ginfo:
-    PermissionFlagsBits.ManageGuild,
-
-  gblacklist:
-    PermissionFlagsBits.ManageGuild,
-
-  gunblacklist:
-    PermissionFlagsBits.ManageGuild,
-
-  // ==============================================
-  // 📨 INVITES
-  // ==============================================
-  invites:
-    PermissionFlagsBits.ManageGuild,
-
-  invitetop:
-    PermissionFlagsBits.ManageGuild,
-
-  setinvitechannel:
-    PermissionFlagsBits.ManageGuild,
-
-  dailyfact:
-    PermissionFlagsBits.ManageGuild,
-
-  leveling:
-    PermissionFlagsBits.ManageGuild,
-
-  levelreward:
-    PermissionFlagsBits.ManageGuild,
-
-  socialadd:
-    PermissionFlagsBits.ManageGuild,
-
-  socialremove:
-    PermissionFlagsBits.ManageGuild
+  ban: PermissionFlagsBits.BanMembers,
+  unban: PermissionFlagsBits.BanMembers,
+  kick: PermissionFlagsBits.KickMembers,
+  mute: PermissionFlagsBits.ModerateMembers,
+  unmute: PermissionFlagsBits.ModerateMembers,
+  warn: PermissionFlagsBits.ModerateMembers,
+  warnings: PermissionFlagsBits.ModerateMembers,
+  clearwarns: PermissionFlagsBits.ModerateMembers,
+  case: PermissionFlagsBits.ManageGuild,
+  cases: PermissionFlagsBits.ManageGuild,
+  history: PermissionFlagsBits.ManageGuild,
+  editcase: PermissionFlagsBits.ManageGuild,
+  modlogs: PermissionFlagsBits.ManageGuild,
+  modlogremove: PermissionFlagsBits.ManageGuild,
+  purge: PermissionFlagsBits.ManageMessages,
+  role: PermissionFlagsBits.ManageRoles,
+  slowmode: PermissionFlagsBits.ManageChannels,
+  lock: PermissionFlagsBits.ManageChannels,
+  unlock: PermissionFlagsBits.ManageChannels,
+  poll: PermissionFlagsBits.ManageMessages,
+  setmodlogs: PermissionFlagsBits.ManageGuild,
+  suggestchannel: PermissionFlagsBits.ManageGuild,
+  setadminrole: PermissionFlagsBits.Administrator,
+  setstaffrole: PermissionFlagsBits.Administrator,
+  setgiveawayrole: PermissionFlagsBits.Administrator,
+  setticketchannel: PermissionFlagsBits.Administrator,
+  settranscriptchannel: PermissionFlagsBits.Administrator,
+  linkblock: PermissionFlagsBits.ManageGuild,
+  ticketpanel: PermissionFlagsBits.Administrator,
+  ticketsetup: PermissionFlagsBits.Administrator,
+  ticketpanelv3: PermissionFlagsBits.Administrator,
+  ticketdebug: PermissionFlagsBits.Administrator,
+  ticketstats: PermissionFlagsBits.Administrator,
+  giveaway: PermissionFlagsBits.ManageGuild,
+  greroll: PermissionFlagsBits.ManageGuild,
+  gend: PermissionFlagsBits.ManageGuild,
+  gdelete: PermissionFlagsBits.ManageGuild,
+  glist: PermissionFlagsBits.ManageGuild,
+  gstats: PermissionFlagsBits.ManageGuild,
+  ginfo: PermissionFlagsBits.ManageGuild,
+  gblacklist: PermissionFlagsBits.ManageGuild,
+  gunblacklist: PermissionFlagsBits.ManageGuild,
+  invites: PermissionFlagsBits.ManageGuild,
+  invitetop: PermissionFlagsBits.ManageGuild,
+  setinvitechannel: PermissionFlagsBits.ManageGuild,
+  dailyfact: PermissionFlagsBits.ManageGuild,
+  leveling: PermissionFlagsBits.ManageGuild,
+  levelreward: PermissionFlagsBits.ManageGuild,
+  socialadd: PermissionFlagsBits.ManageGuild,
+  socialremove: PermissionFlagsBits.ManageGuild
 };
 
-// ==================================================
-// 📦 COMMAND STORAGE
-// ==================================================
-const commands = [];
+function loadCommands() {
 
-const DEPLOY_ONE_COMMAND = false;
+  const commands = [];
+  const loadedNames = new Set();
+  const failedCommands = [];
+  const foldersPath =
+    path.join(__dirname, 'commands');
 
-const loadedNames =
-  new Set();
-
-const failedCommands =
-  [];
-
-// ==================================================
-// 📂 COMMANDS PATH
-// ==================================================
-const foldersPath =
-  path.join(
-    __dirname,
-    'commands'
-  );
-
-// ==================================================
-// 🚫 MISSING FOLDER
-// ==================================================
-if (
-  !fs.existsSync(
-    foldersPath
-  )
-) {
-
-  throw new Error(
-    '❌ Commands folder missing'
-  );
-}
-
-// ==================================================
-// 📂 LOAD COMMAND FOLDERS
-// ==================================================
-const commandFolders =
-  fs.readdirSync(
-    foldersPath
-  );
-
-for (
-  const folder of commandFolders
-) {
-
-  const commandsPath =
-    path.join(
-      foldersPath,
-      folder
-    );
-
-  // ==============================================
-  // 🚫 SKIP NON-FOLDERS
-  // ==============================================
-  if (
-
-    !fs.statSync(
-      commandsPath
-    ).isDirectory()
-  ) {
-
-    continue;
+  if (!fs.existsSync(foldersPath)) {
+    throw new Error('Commands folder missing');
   }
 
-  // ==============================================
-  // 📂 COMMAND FILES
-  // ==============================================
-  const commandFiles =
-    fs.readdirSync(
-      commandsPath
-    )
+  const commandFolders =
+    fs.readdirSync(foldersPath);
 
-      .filter(file =>
-        file.endsWith('.js')
-      );
+  for (const folder of commandFolders) {
 
-  for (
-    const file of commandFiles
-  ) {
+    const commandsPath =
+      path.join(foldersPath, folder);
 
-    try {
+    if (!fs.statSync(commandsPath).isDirectory()) {
+      continue;
+    }
+
+    const commandFiles =
+      fs.readdirSync(commandsPath)
+        .filter(file => file.endsWith('.js'));
+
+    for (const file of commandFiles) {
 
       const filePath =
-        path.join(
-          commandsPath,
-          file
-        );
+        path.join(commandsPath, file);
 
-      // ==========================================
-      // 🧹 CLEAR CACHE
-      // ==========================================
-      delete require.cache[
-        require.resolve(
-          filePath
-        )
-      ];
+      try {
 
-      const command =
-        require(filePath);
-
-      // ==========================================
-      // 🛡 VALIDATION
-      // ==========================================
-      if (
-
-        !command ||
-
-        !command.data ||
-
-        !command.execute
-      ) {
-
-        console.warn(
-
-          `⚠️ Invalid command skipped: ${file}`
-        );
-
-        failedCommands.push(file);
-
-        continue;
-      }
-
-      // ==========================================
-      // 🧠 JSON
-      // ==========================================
-      const commandJson =
-        command.data.toJSON();
-
-      // ==========================================
-      // 🚫 INVALID NAME
-      // ==========================================
-      if (
-        !commandJson.name
-      ) {
-
-        console.warn(
-
-          `⚠️ Missing command name: ${file}`
-        );
-
-        failedCommands.push(file);
-
-        continue;
-      }
-
-      // ==========================================
-      // 🚫 DUPLICATES
-      // ==========================================
-      if (
-
-        loadedNames.has(
-          commandJson.name
-        )
-      ) {
-
-        console.warn(
-
-          `⚠️ Duplicate command skipped: ${commandJson.name}`
-        );
-
-        failedCommands.push(
-          commandJson.name
-        );
-
-        continue;
-      }
-
-      loadedNames.add(
-        commandJson.name
-      );
-
-      // ==========================================
-      // 🔐 DEFAULT PERMISSIONS
-      // ==========================================
-      const defaultPermission =
-        permissionDefaults[
-          commandJson.name
+        delete require.cache[
+          require.resolve(filePath)
         ];
 
-      if (
-        defaultPermission !== undefined
-      ) {
+        const command =
+          require(filePath);
 
-        commandJson.default_member_permissions =
-          defaultPermission.toString();
+        if (
+          !command ||
+          !command.data ||
+          !command.execute
+        ) {
+
+          console.warn(`Skipped invalid command file: ${file}`);
+          failedCommands.push(file);
+          continue;
+        }
+
+        const commandJson =
+          command.data.toJSON();
+
+        if (!commandJson.name) {
+
+          console.warn(`Skipped command with missing name: ${file}`);
+          failedCommands.push(file);
+          continue;
+        }
+
+        if (loadedNames.has(commandJson.name)) {
+
+          console.warn(`Skipped duplicate command: ${commandJson.name}`);
+          failedCommands.push(commandJson.name);
+          continue;
+        }
+
+        loadedNames.add(commandJson.name);
+
+        const defaultPermission =
+          permissionDefaults[commandJson.name];
+
+        if (defaultPermission !== undefined) {
+
+          commandJson.default_member_permissions =
+            defaultPermission.toString();
+        }
+
+        if (command.dmPermission === false) {
+          commandJson.dm_permission = false;
+        }
+
+        commands.push(commandJson);
+
+      } catch (err) {
+
+        console.error(
+          `Failed loading command ${file}:`,
+          err
+        );
+
+        failedCommands.push(file);
       }
-
-      // ==========================================
-      // 🚫 DM DISABLED DEFAULT
-      // ==========================================
-      if (
-        command.dmPermission === false
-      ) {
-
-        commandJson.dm_permission =
-          false;
-      }
-commands.push(
-  commandJson
-);
-
-console.log(
-  `${commands.length}: ${commandJson.name}`
-);
-
-      console.log(
-
-        `✅ Loaded /${commandJson.name}`
-      );
-
-    } catch (err) {
-
-      console.error(
-
-        `❌ Failed loading command ${file}:`,
-
-        err
-      );
-
-      failedCommands.push(
-        file
-      );
     }
   }
+
+  if (!commands.length) {
+    throw new Error('No commands loaded.');
+  }
+
+  return {
+    commands,
+    failedCommands
+  };
 }
 
-// ==================================================
-// 🚫 NO COMMANDS
-// ==================================================
-if (
-  !commands.length
-) {
+async function deploy() {
 
-  throw new Error(
-    '❌ No commands loaded.'
-  );
-}
+  const {
+    commands,
+    failedCommands
+  } = loadCommands();
 
-// ==================================================
-// 📊 SUMMARY
-// ==================================================
-console.log('━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('Deploying Discord slash commands');
+  console.log(`Mode: Global`);
+  console.log(`Loaded commands: ${commands.length}`);
+  console.log(`Failed commands: ${failedCommands.length}`);
 
-console.log(
-  `📦 Loaded Commands: ${commands.length}`
-);
+  if (failedCommands.length) {
+    console.log(`Failed: ${failedCommands.join(', ')}`);
+  }
 
-console.log(
-  `❌ Failed Commands: ${failedCommands.length}`
-);
+  const rest =
+    new REST({
+      version: '10'
+    }).setToken(TOKEN);
 
-if (
-  failedCommands.length
-) {
+  for (
+    const guildId of
+    new Set(guildCommandCleanupIds)
+  ) {
 
-  console.log(
-    'Failed:',
-    failedCommands.join(', ')
-  );
-}
+    console.log(`Clearing guild commands for ${guildId}`);
 
-console.log('━━━━━━━━━━━━━━━━━━━━━━');
+    await rest.put(
 
-// ==================================================
-// 🚀 REST CLIENT
-// ==================================================
-const rest =
-  new REST({
+      Routes.applicationGuildCommands(
+        CLIENT_ID,
+        guildId
+      ),
 
-    version: '10'
-
-  }).setToken(TOKEN);
-
-// ==================================================
-// 🚀 DEPLOY
-// ==================================================
-(async () => {
-
-  try {
-
-    console.log('━━━━━━━━━━━━━━━━━━━━━━');
-
-    console.log(
-
-      `📦 Deploying ${commands.length} commands...`
+      {
+        body: []
+      }
     );
+  }
 
-    for (
-      const guildId of
-      new Set(guildCommandCleanupIds)
-    ) {
+  console.log(`Deploying ${commands.length} global commands`);
 
-      console.log(
-        `🧹 Clearing guild commands for ${guildId}...`
-      );
-
-      await rest.put(
-
-        Routes.applicationGuildCommands(
-          CLIENT_ID,
-          guildId
-        ),
-
-        {
-          body: []
-        }
-      );
-
-      console.log(
-        `✅ Guild commands cleared for ${guildId}`
-      );
-    }
-
-    console.log(
-      '🌍 Deploying global commands...'
-    );
-
-    const result = await Promise.race([
+  const result =
+    await Promise.race([
 
       rest.put(
 
@@ -581,58 +256,39 @@ const rest =
 
       new Promise((_, reject) =>
         setTimeout(
-          () =>
-            reject(
-              new Error(
-                'Deploy timed out after 30 seconds'
-              )
-            ),
+          () => reject(
+            new Error('Deploy timed out after 30 seconds')
+          ),
           30000
         )
       )
     ]);
 
-    console.log(
-      'Discord returned:',
-      result.length,
-      'global commands'
-    );
+  console.log(
+    `Discord returned ${result.length} global commands`
+  );
 
-    console.log('━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('Deploy complete');
+}
 
-    console.log(
-      '✅ Deploy complete'
-    );
+deploy().catch(error => {
 
-    console.log('━━━━━━━━━━━━━━━━━━━━━━');
-
-} catch (error) {
-
-  console.error('❌ Deploy Error:');
-
+  console.error('Deploy error:');
   console.error(error);
 
   if (error.rawError) {
     console.error(
-      'Raw Error:',
-      JSON.stringify(
-        error.rawError,
-        null,
-        2
-      )
+      'Raw error:',
+      JSON.stringify(error.rawError, null, 2)
     );
   }
 
   if (error.errors) {
     console.error(
-      'Validation Errors:',
-      JSON.stringify(
-        error.errors,
-        null,
-        2
-      )
+      'Validation errors:',
+      JSON.stringify(error.errors, null, 2)
     );
   }
-}
 
-})();
+  process.exit(1);
+});
