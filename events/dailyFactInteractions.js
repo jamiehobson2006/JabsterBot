@@ -288,7 +288,7 @@ async function approveSubmission({
       color: 0x57F287,
       title: 'Daily Fact Approved',
       description:
-        'Your Daily Fact submission has been approved and added to JabsterBot daily facts.',
+        'Your Daily Fact submission has been approved and added to Jabster Studios daily facts.',
       fact
     }
   );

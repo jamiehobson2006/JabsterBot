@@ -99,9 +99,9 @@ module.exports = {
 
       const duplicateText =
         duplicate.source === 'coded'
-          ? 'That fact is already built into JabsterBot.'
+          ? 'That fact is already built into Jabster Studios.'
           : duplicate.source === 'community'
-            ? 'That fact has already been approved and added to JabsterBot.'
+            ? 'That fact has already been approved and added to Jabster Studios.'
           : `That fact has already been submitted and is currently ${duplicate.status}.`;
 
       await interaction.user.send({

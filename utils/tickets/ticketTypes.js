@@ -120,6 +120,45 @@ module.exports = {
     ]
   },
 
+  partnership: {
+
+    id:
+      'partnership',
+
+    name:
+      'Partnership',
+
+    emoji:
+      '\u{1F91D}',
+
+    description:
+      'Discuss a partnership or collaboration',
+
+    color:
+      0xF1C40F,
+
+    channelPrefix:
+      'partnership',
+
+    closeMessage:
+      'Your partnership ticket has been closed.',
+
+    welcomeMessage:
+
+      'Thanks for your interest in a partnership.\n' +
+
+      'Please include your relevant links and details.',
+
+    tags: [
+
+      'partnership',
+
+      'collaboration',
+
+      'creator'
+    ]
+  },
+
   // ==================================================
   // 📝 APPLICATION
   // ==================================================

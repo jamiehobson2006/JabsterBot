@@ -161,7 +161,7 @@ module.exports = {
             .setFooter({
 
               text:
-                'JabsterStudios Leveling'
+                'Jabster Studios Leveling'
             })
         ]
       });
@@ -211,7 +211,7 @@ module.exports = {
             .setFooter({
 
               text:
-                'JabsterStudios Leveling'
+                'Jabster Studios Leveling'
             })
         ]
       });
@@ -271,7 +271,7 @@ module.exports = {
           .setFooter({
 
             text:
-              'JabsterStudios Leveling'
+              'Jabster Studios Leveling'
           })
       ]
     });

@@ -1,417 +1,184 @@
 const {
-
-  AttachmentBuilder,
-
   EmbedBuilder
-
 } = require('discord.js');
 
 const {
-
   createTranscript
-
 } = require('discord-html-transcripts');
 
 const {
   get
 } = require('../../database');
 
-// ==================================================
-// 🧠 SAFE STRING
-// ==================================================
-function safeString(
-  value,
-  fallback = 'Unknown'
-) {
-
-  if (
-    typeof value !== 'string'
-  ) {
-
+function safeString(value, fallback = 'Unknown') {
+  if (typeof value !== 'string') {
     return fallback;
   }
 
-  return value.trim() ||
-    fallback;
+  return value.trim() || fallback;
 }
 
-// ==================================================
-// ⏱ FORMAT TIME
-// ==================================================
-function formatDuration(
-  milliseconds
-) {
-
-  if (
-    !milliseconds ||
-    milliseconds <= 0
-  ) {
-
-    return '0m';
-  }
-
+function formatDuration(milliseconds) {
   const totalSeconds =
-    Math.floor(
-      milliseconds / 1000
-    );
+    Math.max(Math.floor(Number(milliseconds || 0) / 1000), 0);
 
   const days =
-    Math.floor(
-      totalSeconds / 86400
-    );
+    Math.floor(totalSeconds / 86400);
 
   const hours =
-    Math.floor(
-      (totalSeconds % 86400) / 3600
-    );
+    Math.floor((totalSeconds % 86400) / 3600);
 
   const minutes =
-    Math.floor(
-      (totalSeconds % 3600) / 60
-    );
+    Math.floor((totalSeconds % 3600) / 60);
 
   const parts = [];
 
-  if (days) {
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
 
-    parts.push(
-      `${days}d`
-    );
-  }
-
-  if (hours) {
-
-    parts.push(
-      `${hours}h`
-    );
-  }
-
-  if (minutes) {
-
-    parts.push(
-      `${minutes}m`
-    );
-  }
-
-  return parts.join(' ') ||
-    '0m';
+  return parts.join(' ') || 'Under 1 minute';
 }
 
-// ==================================================
-// 📜 CREATE TRANSCRIPT
-// ==================================================
 async function generateTranscript({
-
   client,
-
   channel,
-
   ticket,
-
   closedBy
 }) {
-
   try {
-
-    // ==========================================
-    // 🚫 VALIDATION
-    // ==========================================
-    if (
-
-      !client ||
-
-      !channel ||
-
-      !ticket ||
-
-      !closedBy
-    ) {
-
+    if (!client || !channel || !ticket || !closedBy) {
       return null;
     }
 
-    // ==========================================
-    // 📂 FETCH SETTINGS
-    // ==========================================
     const settings =
       get(
-
         `SELECT transcriptChannelId
          FROM guild_settings
          WHERE guildId = ?`,
-
-        [
-
-          channel.guild.id
-        ]
+        [channel.guild.id]
       );
 
-    // ==========================================
-    // 🚫 NO TRANSCRIPT CHANNEL
-    // ==========================================
-    if (
-      !settings?.transcriptChannelId
-    ) {
-
-      return null;
-    }
-
-    // ==========================================
-    // 📥 FETCH TRANSCRIPT CHANNEL
-    // ==========================================
     const transcriptChannel =
-      await client.channels.fetch(
-        settings.transcriptChannelId
-      )
+      settings?.transcriptChannelId
+        ? await client.channels.fetch(settings.transcriptChannelId)
+            .catch(() => null)
+        : null;
 
-      .catch(() => null);
-
-    if (
-      !transcriptChannel ||
-      !transcriptChannel.isTextBased()
-    ) {
-
-      return null;
-    }
-
-    // ==========================================
-    // 📜 GENERATE HTML
-    // ==========================================
     const attachment =
       await createTranscript(channel, {
-
         limit: -1,
-
-        returnType:
-          'attachment',
-
-        filename:
-
-          `ticket-${channel.name}.html`,
-
+        returnType: 'attachment',
+        filename: `ticket-${channel.name}.html`,
         saveImages: true,
-
         poweredBy: false,
-
-        footerText:
-
-          `Ticket Transcript • ${channel.guild.name}`,
-
+        footerText: `Ticket Transcript - ${channel.guild.name}`,
         hydrated: true
       });
 
-    // ==========================================
-    // 🚫 FAILED GENERATION
-    // ==========================================
     if (!attachment) {
-
       return null;
     }
 
-    // ==========================================
-    // 👤 FETCH USERS
-    // ==========================================
     const creator =
-      await client.users.fetch(
-        ticket.userId
-      )
-
-      .catch(() => null);
+      await client.users.fetch(ticket.userId)
+        .catch(() => null);
 
     const claimer =
       ticket.claimedBy
-
-        ? await client.users.fetch(
-            ticket.claimedBy
-          ).catch(() => null)
-
+        ? await client.users.fetch(ticket.claimedBy)
+            .catch(() => null)
         : null;
 
-    // ==========================================
-    // ⏱ HANDLE TIME
-    // ==========================================
     const createdAt =
-      Number(
-        ticket.createdAt || 0
-      );
+      Number(ticket.createdAt || 0);
 
     const closedAt =
-      Number(
-        ticket.closedAt || Date.now()
-      );
+      Number(ticket.closedAt || Date.now());
 
-    const handleTime =
-      Math.max(
-
-        closedAt - createdAt,
-
-        0
-      );
-
-    // ==========================================
-    // 🎨 EMBED
-    // ==========================================
-    const embed =
+    const archiveEmbed =
       new EmbedBuilder()
-
         .setColor(0x5865F2)
-
-        .setTitle(
-          '📜 Ticket Transcript'
-        )
-
-        .setDescription(
-
-          'A ticket transcript has been generated and archived.'
-        )
-
+        .setTitle('Ticket Transcript')
+        .setDescription('A ticket transcript has been generated and archived.')
         .addFields(
-
           {
-
-            name:
-              '🎫 Ticket',
-
-            value:
-              safeString(
-                channel.name
-              ),
-
+            name: 'Ticket',
+            value: safeString(channel.name),
             inline: true
           },
-
           {
-
-            name:
-              '📂 Type',
-
-            value:
-
-              `\`${safeString(ticket.type)}\``,
-
+            name: 'Type',
+            value: safeString(ticket.type),
             inline: true
           },
-
           {
-
-            name:
-              '👤 Creator',
-
-            value:
-
-              creator
-
-                ? `${creator.tag}`
-
-                : `Unknown (${ticket.userId})`,
-
+            name: 'Creator',
+            value: creator?.tag || `Unknown (${ticket.userId})`,
             inline: true
           },
-
           {
-
-            name:
-              '👮 Closed By',
-
-            value:
-              `${closedBy.tag}`,
-
+            name: 'Closed By',
+            value: closedBy.tag,
             inline: true
           },
-
           {
-
-            name:
-              '🛡 Claimed By',
-
-            value:
-
-              claimer
-
-                ? claimer.tag
-
-                : 'Not claimed',
-
+            name: 'Claimed By',
+            value: claimer?.tag || 'Not claimed',
             inline: true
           },
-
           {
-
-            name:
-              '⏱ Handle Time',
-
-            value:
-              formatDuration(
-                handleTime
-              ),
-
+            name: 'Handle Time',
+            value: formatDuration(closedAt - createdAt),
             inline: true
           },
-
           {
-
-            name:
-              '📅 Created',
-
-            value:
-
-              createdAt
-
-                ? `<t:${Math.floor(createdAt / 1000)}:F>`
-
-                : 'Unknown',
-
-            inline: false
+            name: 'Created',
+            value: createdAt
+              ? `<t:${Math.floor(createdAt / 1000)}:F>`
+              : 'Unknown'
           },
-
           {
-
-            name:
-              '🔒 Closed',
-
-            value:
-
-              closedAt
-
-                ? `<t:${Math.floor(closedAt / 1000)}:F>`
-
-                : 'Unknown',
-
-            inline: false
+            name: 'Closed',
+            value: closedAt
+              ? `<t:${Math.floor(closedAt / 1000)}:F>`
+              : 'Unknown'
+          },
+          {
+            name: 'Close Reason',
+            value: safeString(ticket.closeReason, 'No reason recorded').slice(0, 1024)
           }
         )
-
         .setFooter({
-
-          text:
-
-            `Ticket ID: ${ticket.channelId || channel.id}`
+          text: `Ticket ID: ${ticket.channelId || channel.id}`
         })
-
         .setTimestamp();
 
-    // ==========================================
-    // 📤 SEND TRANSCRIPT
-    // ==========================================
-    await transcriptChannel.send({
+    let archived =
+      false;
 
-      embeds: [embed],
+    if (transcriptChannel?.isTextBased()) {
+      try {
+        await transcriptChannel.send({
+          embeds: [archiveEmbed],
+          files: [attachment]
+        });
 
-      files: [attachment]
-    });
+        archived =
+          true;
 
-    // ==========================================
-    // ✅ RETURN
-    // ==========================================
-    return attachment;
+      } catch (archiveError) {
+        console.error('Transcript archive error:', archiveError.message);
+      }
+    }
+
+    return {
+      attachment,
+      archived
+    };
 
   } catch (err) {
-
-    console.error(
-      'Transcript Error:',
-      err
-    );
-
+    console.error('Transcript error:', err);
     return null;
   }
 }

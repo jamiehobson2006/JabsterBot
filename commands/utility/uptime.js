@@ -198,7 +198,7 @@ module.exports = {
 
         '🚀 Running faster than Discord can complain.',
 
-        '🌴 JabsterBot is fully operational.',
+        '🌴 Jabster Studios is fully operational.',
 
         '🛰️ Monitoring all systems.',
 
@@ -349,7 +349,7 @@ module.exports = {
           .setFooter({
 
             text:
-              'JabsterBot • Live Performance Monitor'
+              'Jabster Studios • Live Performance Monitor'
           })
 
           .setTimestamp();

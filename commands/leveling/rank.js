@@ -156,7 +156,7 @@ createProgressBar(
         .setFooter({
 
           text:
-            'JabsterStudios'
+            'Jabster Studios'
         })
 
         .setTimestamp();

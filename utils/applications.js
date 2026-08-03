@@ -4,8 +4,17 @@ const {
   run
 } = require('../database');
 
+const crypto =
+  require('node:crypto');
+
 const MAX_APPLICATION_QUESTIONS =
+  25;
+
+const QUESTIONS_PER_MODAL =
   5;
+
+const DRAFT_LIFETIME_MS =
+  30 * 60 * 1000;
 
 function cleanName(name) {
   return String(name || '')
@@ -101,6 +110,7 @@ function createForm({
   guildId,
   name,
   description = null,
+  reviewerRoleId = null,
   createdBy
 }) {
   const cleanedName =
@@ -122,17 +132,19 @@ function createForm({
        name,
        normalizedName,
        description,
+       reviewerRoleId,
        enabled,
        createdBy,
        createdAt,
        updatedAt
      )
-     VALUES (?, ?, ?, ?, 1, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)`,
     [
       guildId,
       cleanedName,
       normalizedName,
       description || null,
+      reviewerRoleId || null,
       createdBy,
       now,
       now
@@ -167,6 +179,11 @@ function updateForm(
   if (fields.description !== undefined) {
     updates.push('description = ?');
     params.push(fields.description || null);
+  }
+
+  if (fields.reviewerRoleId !== undefined) {
+    updates.push('reviewerRoleId = ?');
+    params.push(fields.reviewerRoleId || null);
   }
 
   if (fields.enabled !== undefined) {
@@ -249,6 +266,131 @@ function addQuestion({
   );
 }
 
+function parseDraftAnswers(
+  answersJson
+) {
+  try {
+    const parsed =
+      JSON.parse(answersJson || '[]');
+
+    return Array.isArray(parsed)
+      ? parsed
+      : [];
+
+  } catch {
+    return [];
+  }
+}
+
+function createDraft({
+  guildId,
+  formId,
+  userId
+}) {
+  const now =
+    Date.now();
+
+  run(
+    `DELETE FROM application_drafts
+     WHERE guildId = ?
+     AND formId = ?
+     AND userId = ?`,
+    [
+      guildId,
+      formId,
+      userId
+    ]
+  );
+
+  const id =
+    crypto.randomUUID();
+
+  run(
+    `INSERT INTO application_drafts (
+       id,
+       guildId,
+       formId,
+       userId,
+       answersJson,
+       nextQuestionIndex,
+       createdAt,
+       expiresAt
+     )
+     VALUES (?, ?, ?, ?, '[]', 0, ?, ?)`,
+    [
+      id,
+      guildId,
+      formId,
+      userId,
+      now,
+      now + DRAFT_LIFETIME_MS
+    ]
+  );
+
+  return getDraft(id);
+}
+
+function getDraft(
+  id
+) {
+  const draft =
+    get(
+      `SELECT *
+       FROM application_drafts
+       WHERE id = ?`,
+      [id]
+    );
+
+  if (!draft) {
+    return null;
+  }
+
+  if (Number(draft.expiresAt) <= Date.now()) {
+    deleteDraft(id);
+    return null;
+  }
+
+  return {
+    ...draft,
+    answers: parseDraftAnswers(draft.answersJson)
+  };
+}
+
+function saveDraft({
+  id,
+  answers,
+  nextQuestionIndex
+}) {
+  const expiresAt =
+    Date.now() + DRAFT_LIFETIME_MS;
+
+  run(
+    `UPDATE application_drafts
+     SET answersJson = ?,
+         nextQuestionIndex = ?,
+         expiresAt = ?
+     WHERE id = ?`,
+    [
+      JSON.stringify(answers || []),
+      nextQuestionIndex,
+      expiresAt,
+      id
+    ]
+  );
+
+  return getDraft(id);
+}
+
+function deleteDraft(
+  id
+) {
+  return run(
+    `DELETE FROM application_drafts
+     WHERE id = ?`,
+    [id]
+  );
+}
+
 function removeQuestion(
   formId,
   position
@@ -295,6 +437,7 @@ function removeQuestion(
 
 module.exports = {
   MAX_APPLICATION_QUESTIONS,
+  QUESTIONS_PER_MODAL,
   cleanName,
   normalizeName,
   cleanQuestion,
@@ -306,5 +449,9 @@ module.exports = {
   updateForm,
   deleteForm,
   addQuestion,
-  removeQuestion
+  removeQuestion,
+  createDraft,
+  getDraft,
+  saveDraft,
+  deleteDraft
 };

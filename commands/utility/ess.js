@@ -119,7 +119,7 @@ module.exports = {
           .setFooter({
 
             text:
-              'JabsterStudios • Endless Summer Simulator'
+              'Jabster Studios • Endless Summer Simulator'
           })
 
           .setTimestamp();

@@ -717,6 +717,16 @@ function createGuildSettingsTable() {
 
       transcriptChannelId TEXT,
 
+      ticketFeedbackChannelId TEXT,
+
+      staffListChannelId TEXT,
+
+      staffListRoleId TEXT,
+
+      staffListMessageId TEXT,
+
+      applicationCreatorRoleId TEXT,
+
       inviteChannelId TEXT,
 
       giveawayChannelId TEXT,
@@ -760,6 +770,11 @@ function createGuildSettingsTable() {
     ['acceptedSuggestionChannelId', 'TEXT'],
     ['deniedSuggestionChannelId', 'TEXT'],
     ['transcriptChannelId', 'TEXT'],
+    ['ticketFeedbackChannelId', 'TEXT'],
+    ['staffListChannelId', 'TEXT'],
+    ['staffListRoleId', 'TEXT'],
+    ['staffListMessageId', 'TEXT'],
+    ['applicationCreatorRoleId', 'TEXT'],
     ['inviteChannelId', 'TEXT'],
     ['giveawayChannelId', 'TEXT'],
 
@@ -886,6 +901,130 @@ function createTicketsTable() {
     'tickets',
     'messageId',
     'TEXT'
+  );
+
+  ensureColumn(
+    'tickets',
+    'restricted',
+    'INTEGER DEFAULT 0'
+  );
+
+  ensureColumn(
+    'tickets',
+    'restrictedBy',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'tickets',
+    'restrictedAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'tickets',
+    'applicationFormId',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'tickets',
+    'closeReason',
+    'TEXT'
+  );
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS ticket_staff (
+
+      guildId TEXT NOT NULL,
+
+      channelId TEXT NOT NULL,
+
+      userId TEXT NOT NULL,
+
+      addedBy TEXT,
+
+      addedAt INTEGER NOT NULL,
+
+      PRIMARY KEY (channelId, userId)
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS ticket_guests (
+
+      guildId TEXT NOT NULL,
+
+      channelId TEXT NOT NULL,
+
+      userId TEXT NOT NULL,
+
+      addedBy TEXT,
+
+      addedAt INTEGER NOT NULL,
+
+      PRIMARY KEY (channelId, userId)
+    )
+  `);
+
+  createIndex(
+
+    'idx_ticket_staff_lookup',
+
+    `CREATE INDEX IF NOT EXISTS idx_ticket_staff_lookup
+     ON ticket_staff(guildId, channelId, userId)`
+  );
+
+  createIndex(
+
+    'idx_ticket_guests_lookup',
+
+    `CREATE INDEX IF NOT EXISTS idx_ticket_guests_lookup
+     ON ticket_guests(guildId, channelId, userId)`
+  );
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS ticket_feedback (
+
+      id TEXT PRIMARY KEY,
+
+      guildId TEXT NOT NULL,
+
+      ticketId INTEGER,
+
+      channelId TEXT NOT NULL,
+
+      ticketType TEXT NOT NULL,
+
+      userId TEXT NOT NULL,
+
+      closedBy TEXT NOT NULL,
+
+      closeReason TEXT NOT NULL,
+
+      rating INTEGER,
+
+      feedback TEXT,
+
+      status TEXT NOT NULL DEFAULT 'PENDING',
+
+      dmSent INTEGER NOT NULL DEFAULT 0,
+
+      createdAt INTEGER NOT NULL,
+
+      completedAt INTEGER
+    )
+  `);
+
+  createIndex(
+
+    'idx_ticket_feedback_guild',
+
+    `CREATE INDEX IF NOT EXISTS idx_ticket_feedback_guild
+     ON ticket_feedback(guildId, createdAt DESC)`
   );
 
   createIndex(
@@ -1306,6 +1445,8 @@ function createPollTables() {
 
       creatorId TEXT NOT NULL,
 
+      creatorTag TEXT,
+
       question TEXT NOT NULL,
 
       options TEXT NOT NULL,
@@ -1317,6 +1458,18 @@ function createPollTables() {
       createdAt INTEGER NOT NULL
     )
   `);
+
+  ensureColumn(
+    'polls',
+    'endedAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'polls',
+    'creatorTag',
+    'TEXT'
+  );
 
   rawRun(`
 
@@ -1336,6 +1489,14 @@ function createPollTables() {
     'idx_poll_votes',
     `CREATE INDEX IF NOT EXISTS idx_poll_votes
      ON poll_votes(messageId)`
+  );
+
+  createIndex(
+
+    'idx_polls_expiry',
+
+    `CREATE INDEX IF NOT EXISTS idx_polls_expiry
+     ON polls(active, endsAt)`
   );
 }
 
@@ -1842,6 +2003,8 @@ function createApplicationTables() {
 
       description TEXT,
 
+      reviewerRoleId TEXT,
+
       enabled INTEGER DEFAULT 1,
 
       createdBy TEXT,
@@ -1853,6 +2016,12 @@ function createApplicationTables() {
       UNIQUE(guildId, normalizedName)
     )
   `);
+
+  ensureColumn(
+    'application_forms',
+    'reviewerRoleId',
+    'TEXT'
+  );
 
   rawRun(`
 
@@ -1871,6 +2040,28 @@ function createApplicationTables() {
       required INTEGER DEFAULT 1,
 
       createdAt INTEGER NOT NULL
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS application_drafts (
+
+      id TEXT PRIMARY KEY,
+
+      guildId TEXT NOT NULL,
+
+      formId INTEGER NOT NULL,
+
+      userId TEXT NOT NULL,
+
+      answersJson TEXT NOT NULL DEFAULT '[]',
+
+      nextQuestionIndex INTEGER NOT NULL DEFAULT 0,
+
+      createdAt INTEGER NOT NULL,
+
+      expiresAt INTEGER NOT NULL
     )
   `);
 
@@ -1918,6 +2109,14 @@ function createApplicationTables() {
 
     `CREATE INDEX IF NOT EXISTS idx_application_responses_form
      ON application_responses(guildId, formId, submittedAt)`
+  );
+
+  createIndex(
+
+    'idx_application_drafts_expiry',
+
+    `CREATE INDEX IF NOT EXISTS idx_application_drafts_expiry
+     ON application_drafts(expiresAt)`
   );
 }
 
@@ -2022,6 +2221,14 @@ function startDatabaseCleanup() {
          WHERE lastUsed < ?`,
 
         [sevenDaysAgo]
+      );
+
+      run(
+
+        `DELETE FROM application_drafts
+         WHERE expiresAt < ?`,
+
+        [Date.now()]
       );
 
       console.log(

@@ -481,7 +481,7 @@ module.exports = {
         .setFooter({
 
           text:
-            'JabsterStudios Leveling'
+            'Jabster Studios Leveling'
         })
 
         .setTimestamp();

@@ -126,7 +126,7 @@ module.exports = {
         )
 
         .setTitle(
-          '🏆 JabsterStudios Leaderboard'
+          '🏆 Jabster Studios Leaderboard'
         )
 
         .setDescription(
@@ -149,7 +149,7 @@ module.exports = {
         .setFooter({
 
           text:
-            'JabsterStudios Leveling'
+            'Jabster Studios Leveling'
         })
 
         .setTimestamp();

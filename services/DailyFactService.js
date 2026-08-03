@@ -124,12 +124,12 @@ class DailyFactService {
                 name: 'Source',
                 value: picked.source === 'community'
                   ? 'Community approved'
-                  : 'JabsterBot facts',
+                  : 'Jabster Studios facts',
                 inline: true
               }
             ],
             footer: {
-              text: 'JabsterBot Daily Facts'
+              text: 'Jabster Studios Daily Facts'
             },
             timestamp: new Date()
           }

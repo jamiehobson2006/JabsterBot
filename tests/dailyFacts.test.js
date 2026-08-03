@@ -17,7 +17,7 @@ const tempDir =
   fs.mkdtempSync(
     path.join(
       os.tmpdir(),
-      'jabsterbot-dailyfacts-'
+      'jabster-studios-dailyfacts-'
     )
   );
 

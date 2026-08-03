@@ -45,12 +45,16 @@ const {
 const socialMonitor =
   require('./utils/socialMonitor');
 
+const {
+  startPollService
+} = require('./utils/polls');
+
+const StaffListService =
+  require('./services/StaffListService');
+
   const DailyFactService =
   require('./services/DailyFactService');
 
-// ==================================================
-// 🔐 TOKEN CHECK
-// ==================================================
 if (!process.env.TOKEN) {
 
   throw new Error(
@@ -58,15 +62,9 @@ if (!process.env.TOKEN) {
   );
 }
 
-// ==================================================
-// 🏗 BUILD INFO
-// ==================================================
 const BOT_BUILD =
   'Ticket System v3';
 
-// ==================================================
-// 🤖 CLIENT
-// ==================================================
 const client =
   new Client({
 
@@ -131,15 +129,9 @@ const client =
     }
   });
 
-// ==================================================
-// 📦 COMMAND COLLECTION
-// ==================================================
 client.commands =
   new Collection();
 
-// ==================================================
-// 📂 SAFE FILES
-// ==================================================
 function getJsFiles(
   folderPath
 ) {
@@ -174,9 +166,6 @@ function getJsFiles(
   }
 }
 
-// ==================================================
-// 📦 LOAD COMMANDS
-// ==================================================
 function loadCommands() {
 
   const commandsPath =
@@ -217,9 +206,6 @@ function loadCommands() {
         folder
       );
 
-    // ==========================================
-    // 🚫 SKIP NON-FOLDERS
-    // ==========================================
     if (
 
       !fs.statSync(
@@ -256,9 +242,6 @@ function loadCommands() {
         const command =
           require(filePath);
 
-        // ======================================
-        // 🛡 VALIDATION
-        // ======================================
         if (
 
           !command ||
@@ -278,9 +261,6 @@ function loadCommands() {
           continue;
         }
 
-        // ======================================
-        // 🚫 DUPLICATE
-        // ======================================
         if (
 
           client.commands.has(
@@ -297,6 +277,10 @@ function loadCommands() {
 
           continue;
         }
+
+        command.category =
+          command.category ||
+          folder;
 
         client.commands.set(
 
@@ -340,9 +324,6 @@ function loadCommands() {
   }
 }
 
-// ==================================================
-// 📂 LOAD EVENTS
-// ==================================================
 function loadEvents() {
 
   const eventsPath =
@@ -394,9 +375,6 @@ function loadEvents() {
       const event =
         require(filePath);
 
-      // ========================================
-      // 🛡 VALIDATION
-      // ========================================
       if (
 
         !event ||
@@ -416,9 +394,6 @@ function loadEvents() {
         continue;
       }
 
-      // ========================================
-      // 📡 REGISTER
-      // ========================================
       if (event.once) {
 
         client.once(
@@ -481,9 +456,6 @@ function loadEvents() {
   }
 }
 
-// ==================================================
-// 🚀 READY
-// ==================================================
 client.once(
 
   'clientReady',
@@ -522,9 +494,6 @@ client.once(
         '━━━━━━━━━━━━━━━━━━━━━━'
       );
 
-      // ======================================
-      // ⏳ STARTUP DELAY
-      // ======================================
       await new Promise(
         resolve =>
 
@@ -534,9 +503,6 @@ client.once(
           )
       );
 
-      // ======================================
-      // 📨 LOAD INVITES
-      // ======================================
       console.log(
         '📨 Loading invite cache...'
       );
@@ -615,15 +581,28 @@ console.log(
   '✅ Daily Fact Service Started'
 );
 
-      // ======================================
-      // 🎮 BOT ACTIVITY
-      // ======================================
+startPollService(
+  client
+);
+
+console.log(
+  '✅ Poll service started'
+);
+
+StaffListService.start(
+  client
+);
+
+console.log(
+  '✅ Staff list service started'
+);
+
       client.user.setPresence({
 
         activities: [
 
           {
-            name: 'games made by JabsterStudios on roblox',
+            name: 'games made by Jabster Studios on Roblox',
             type: ActivityType.Playing
           }
         ],
@@ -645,9 +624,6 @@ console.log(
   }
 );
 
-// ==================================================
-// ❌ GLOBAL ERROR HANDLING
-// ==================================================
 process.on(
 
   'unhandledRejection',
@@ -674,9 +650,6 @@ process.on(
   }
 );
 
-// ==================================================
-// 🛑 GRACEFUL SHUTDOWN
-// ==================================================
 async function shutdown(
   signal
 ) {
@@ -704,16 +677,10 @@ process.on(
   () => shutdown('SIGTERM')
 );
 
-// ==================================================
-// 🔧 INIT
-// ==================================================
 loadCommands();
 
 loadEvents();
 
-// ==================================================
-// 🔑 LOGIN
-// ==================================================
 client.login(
   process.env.TOKEN
 );

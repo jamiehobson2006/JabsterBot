@@ -35,6 +35,7 @@ const ephemeralCommands =
     'linkblock',
     'ticketsetup',
     'ticketpanel',
+    'ticket',
     'ticketstats',
     'dailyfact'
   ]);

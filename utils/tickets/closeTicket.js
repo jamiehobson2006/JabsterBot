@@ -20,40 +20,22 @@ const {
   generateTranscript
 } = require('./transcript');
 
-// ==================================================
-// 🧠 SAFE STRING
-// ==================================================
-function safeString(
-  value,
-  fallback = 'Unknown'
-) {
+const {
+  createFeedbackRecord,
+  sendFeedbackPrompt
+} = require('../ticketFeedback');
 
-  if (
-    typeof value !== 'string'
-  ) {
-
-    return fallback;
-  }
-
-  return value.trim() ||
-    fallback;
+function cleanReason(reason) {
+  return String(reason || '')
+    .replace(/@everyone|@here/g, '[mention removed]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 1000);
 }
 
-// ==================================================
-// ⏱ FORMAT TIME
-// ==================================================
-function formatDuration(ms) {
-
-  if (
-    !ms ||
-    ms < 1000
-  ) {
-
-    return 'Under 1 second';
-  }
-
+function formatDuration(milliseconds) {
   const seconds =
-    Math.floor(ms / 1000);
+    Math.max(Math.floor(Number(milliseconds || 0) / 1000), 0);
 
   const minutes =
     Math.floor(seconds / 60);
@@ -64,392 +46,215 @@ function formatDuration(ms) {
   const days =
     Math.floor(hours / 24);
 
-  if (days >= 1) {
-
-    return `${days}d ${hours % 24}h`;
-  }
-
-  if (hours >= 1) {
-
-    return `${hours}h ${minutes % 60}m`;
-  }
-
-  if (minutes >= 1) {
-
-    return `${minutes}m ${seconds % 60}s`;
-  }
-
+  if (days) return `${days}d ${hours % 24}h`;
+  if (hours) return `${hours}h ${minutes % 60}m`;
+  if (minutes) return `${minutes}m ${seconds % 60}s`;
   return `${seconds}s`;
 }
 
-// ==================================================
-// 🔒 CLOSE TICKET
-// ==================================================
-async function closeTicket({
+async function disableTicketButtons(channel, client) {
+  const messages =
+    await channel.messages.fetch({ limit: 15 });
 
-  interaction
-}) {
-
-  // ==============================================
-  // 🚫 INVALID INTERACTION
-  // ==============================================
-  if (
-    !interaction ||
-    !interaction.guild ||
-    !interaction.channel
-  ) {
-
-    throw new Error(
-      'Invalid interaction.'
+  const ticketMessage =
+    messages.find(message =>
+      message.author.id === client.user.id &&
+      message.components?.length
     );
+
+  if (!ticketMessage) {
+    return;
   }
 
-  // ==============================================
-  // 🔍 FETCH TICKET
-  // ==============================================
+  const components =
+    ticketMessage.components.map(row => {
+      row.components.forEach(component => {
+        component.data.disabled = true;
+
+        if (component.customId === 'ticket_close') {
+          component.data.label = 'Closed';
+        }
+      });
+
+      return row;
+    });
+
+  await ticketMessage.edit({ components });
+}
+
+async function closeTicket({
+  interaction,
+  reason
+}) {
+  if (!interaction?.guild || !interaction.channel) {
+    throw new Error('Invalid ticket interaction.');
+  }
+
+  const closeReason =
+    cleanReason(reason);
+
+  if (closeReason.length < 3) {
+    throw new Error('A close reason of at least 3 characters is required.');
+  }
+
   const ticket =
     get(
-
       `SELECT *
        FROM tickets
        WHERE channelId = ?
        AND status = 'OPEN'`,
-
-      [
-
-        interaction.channel.id
-      ]
+      [interaction.channel.id]
     );
 
   if (!ticket) {
-
-    throw new Error(
-      'Invalid ticket.'
-    );
+    throw new Error('Invalid ticket.');
   }
 
-  // ==============================================
-  // 🔐 PERMISSION CHECK
-  // ==============================================
   const allowed =
-    await canCloseTicket({
-
-      member:
-        interaction.member,
-
-      guildId:
-        interaction.guild.id,
-
-      type:
-        ticket.type
+    canCloseTicket({
+      member: interaction.member,
+      guildId: interaction.guild.id,
+      type: ticket.type,
+      channelId: interaction.channel.id
     });
 
   if (!allowed) {
-
-    throw new Error(
-      'You cannot close tickets.'
-    );
+    throw new Error('You cannot close tickets.');
   }
 
-  // ==============================================
-  // 🔒 CLOSE LOCK
-  // ==============================================
-  const closeResult =
+  const closedAt =
+    Date.now();
+
+  const result =
     run(
-
       `UPDATE tickets
-
-       SET
-         status = 'CLOSED',
-         closedBy = ?,
-         closedAt = ?
-
+       SET status = 'CLOSED',
+           closedBy = ?,
+           closedAt = ?,
+           closeReason = ?
        WHERE channelId = ?
        AND status = 'OPEN'`,
-
       [
-
         interaction.user.id,
-
-        Date.now(),
-
+        closedAt,
+        closeReason,
         interaction.channel.id
       ]
     );
 
-  // ==============================================
-  // 🚫 ALREADY CLOSED
-  // ==============================================
-  if (
-    !closeResult ||
-    closeResult.changes === 0
-  ) {
-
-    throw new Error(
-      'This ticket is already closed.'
-    );
+  if (!result.changes) {
+    throw new Error('This ticket is already closed.');
   }
 
-  // ==============================================
-  // ⏱ HANDLE TIME
-  // ==============================================
-  const createdAt =
-    Number(
-      ticket.createdAt || 0
-    );
+  run(
+    `DELETE FROM ticket_staff
+     WHERE channelId = ?`,
+    [interaction.channel.id]
+  );
+
+  run(
+    `DELETE FROM ticket_guests
+     WHERE channelId = ?`,
+    [interaction.channel.id]
+  );
 
   const handleTime =
-    Math.max(
+    Math.max(closedAt - Number(ticket.createdAt || 0), 0);
 
-      Date.now() - createdAt,
-
-      0
-    );
-
-  // ==============================================
-  // 📊 STAFF STATS
-  // ==============================================
   try {
-
-    addClose(
-
-      interaction.guild.id,
-
-      interaction.user.id
-    );
-
-    addHandleTime(
-
-      interaction.guild.id,
-
-      interaction.user.id,
-
-      handleTime
-    );
-
+    addClose(interaction.guild.id, interaction.user.id);
+    addHandleTime(interaction.guild.id, interaction.user.id, handleTime);
   } catch (err) {
-
-    console.error(
-      'Ticket stats error:',
-      err
-    );
+    console.error('Ticket stats error:', err);
   }
 
-  // ==============================================
-  // 🎨 CLOSE EMBED
-  // ==============================================
-  const embed =
+  const closedTicket = {
+    ...ticket,
+    status: 'CLOSED',
+    closedBy: interaction.user.id,
+    closedAt,
+    closeReason
+  };
+
+  const closeEmbed =
     new EmbedBuilder()
-
       .setColor(0xED4245)
-
-      .setTitle(
-        '🔒 Ticket Closed'
-      )
-
-      .setDescription(
-
-        `This ticket was closed by ${interaction.user}`
-      )
-
+      .setTitle('Ticket Closed')
+      .setDescription(`This ticket was closed by ${interaction.user}.`)
       .addFields(
-
         {
-
-          name:
-            'Closed By',
-
-          value:
-            `${interaction.user}`,
-
+          name: 'Ticket Type',
+          value: ticket.type,
           inline: true
         },
-
         {
-
-          name:
-            'Ticket Type',
-
-          value:
-
-            `\`${safeString(ticket.type)}\``,
-
+          name: 'Handle Time',
+          value: formatDuration(handleTime),
           inline: true
         },
-
         {
-
-          name:
-            'Handle Time',
-
-          value:
-            formatDuration(handleTime),
-
-          inline: true
+          name: 'Close Reason',
+          value: closeReason
         }
       )
-
       .setFooter({
-
-        text:
-          'Channel will be deleted shortly'
+        text: 'Channel will be deleted shortly'
       })
+      .setTimestamp(closedAt);
 
-      .setTimestamp();
+  await disableTicketButtons(interaction.channel, interaction.client)
+    .catch(err => console.error('Ticket button disable error:', err));
 
-  // ==============================================
-  // 🔘 DISABLE BUTTONS
-  // ==============================================
-  try {
-
-    const messages =
-      await interaction.channel.messages
-        .fetch({ limit: 15 });
-
-    const ticketMessage =
-      messages.find(
-
-        msg =>
-
-          msg.author.id ===
-          interaction.client.user.id &&
-
-          msg.components?.length
-      );
-
-    if (ticketMessage) {
-
-      const updatedComponents =
-        ticketMessage.components.map(
-          row => {
-
-            row.components.forEach(
-              component => {
-
-                component.data.disabled =
-                  true;
-
-                // ==============================
-                // 🔒 UPDATE LABEL
-                // ==============================
-                if (
-
-                  component.customId ===
-                  'ticket_close'
-                ) {
-
-                  component.data.label =
-                    'Closed';
-                }
-              }
-            );
-
-            return row;
-          }
-        );
-
-      await ticketMessage.edit({
-
-        components:
-          updatedComponents
-      }).catch(() => {});
-    }
-
-  } catch (err) {
-
-    console.error(
-      'Ticket button disable error:',
-      err
-    );
-  }
-
-  // ==============================================
-  // 📤 SEND CLOSE MESSAGE
-  // ==============================================
   await interaction.channel.send({
-
-    embeds: [embed]
+    embeds: [closeEmbed]
   });
 
-  // ==============================================
-  // 📜 GENERATE TRANSCRIPT
-  // ==============================================
-  try {
-
-    await generateTranscript({
-
-      client:
-        interaction.client,
-
-      channel:
-        interaction.channel,
-
-      ticket,
-
-      closedBy:
-        interaction.user
+  const feedback =
+    createFeedbackRecord({
+      ticket: closedTicket,
+      closedBy: interaction.user,
+      closeReason
     });
 
-  } catch (err) {
+  const transcript =
+    await generateTranscript({
+      client: interaction.client,
+      channel: interaction.channel,
+      ticket: closedTicket,
+      closedBy: interaction.user
+    });
 
-    console.error(
-      'Transcript generation error:',
-      err
-    );
+  const feedbackSent =
+    await sendFeedbackPrompt({
+      client: interaction.client,
+      feedback,
+      transcriptAttachment: transcript?.attachment || null
+    });
 
+  if (!transcript?.attachment) {
     await interaction.channel.send({
       content:
-        'Transcript generation failed, so this ticket channel was not deleted automatically.'
-    }).catch(() => {});
+        'The ticket was closed, but its transcript could not be generated. The channel was kept for safety.'
+    }).catch(() => null);
 
     return {
-
       success: true,
-
-      transcriptSaved: false,
-
       channelDeleted: false,
-
-      closedBy:
-        interaction.user.id,
-
+      feedbackSent,
       handleTime
     };
   }
 
-  // ==============================================
-  // 🗑 DELETE CHANNEL
-  // ==============================================
   setTimeout(async () => {
-
-    try {
-
-      await interaction.channel.delete(
-
-        `Ticket closed by ${interaction.user.tag}`
-      );
-
-    } catch (err) {
-
-      console.error(
-        'Channel delete error:',
-        err
-      );
-    }
-
+    await interaction.channel.delete(
+      `Ticket closed by ${interaction.user.tag}`
+    ).catch(err => console.error('Ticket channel delete error:', err));
   }, 5000);
 
   return {
-
     success: true,
-
-    transcriptSaved: true,
-
     channelDeleted: true,
-
-    closedBy:
-      interaction.user.id,
-
+    feedbackSent,
     handleTime
   };
 }

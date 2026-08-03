@@ -36,7 +36,6 @@ if (!CLIENT_ID) {
 }
 
 const permissionDefaults = {
-  application: PermissionFlagsBits.Administrator,
   ban: PermissionFlagsBits.BanMembers,
   unban: PermissionFlagsBits.BanMembers,
   kick: PermissionFlagsBits.KickMembers,
@@ -70,6 +69,8 @@ const permissionDefaults = {
   ticketpanelv3: PermissionFlagsBits.Administrator,
   ticketdebug: PermissionFlagsBits.Administrator,
   ticketstats: PermissionFlagsBits.Administrator,
+  ticketfeedback: PermissionFlagsBits.Administrator,
+  stafflist: PermissionFlagsBits.Administrator,
   giveaway: PermissionFlagsBits.ManageGuild,
   greroll: PermissionFlagsBits.ManageGuild,
   gend: PermissionFlagsBits.ManageGuild,

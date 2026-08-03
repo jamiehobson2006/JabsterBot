@@ -6,18 +6,8 @@ const {
   get
 } = require('../../database');
 
-// ==================================================
-// 🧠 SAFE STRING
-// ==================================================
-function safeString(
-  value,
-  fallback = null
-) {
-
-  if (
-    typeof value !== 'string'
-  ) {
-
+function safeString(value, fallback = null) {
+  if (typeof value !== 'string') {
     return fallback;
   }
 
@@ -29,13 +19,46 @@ function safeString(
     : fallback;
 }
 
-// ==================================================
-// 👮 GET STAFF ROLE
-// ==================================================
-function getStaffRole(
-  guildId,
-  type
-) {
+function getTicket(channelId) {
+  if (!channelId) {
+    return null;
+  }
+
+  return get(
+    `SELECT *
+     FROM tickets
+     WHERE channelId = ?`,
+    [channelId]
+  );
+}
+
+function getStaffRole(guildId, type, channelId = null) {
+  const ticket =
+    getTicket(channelId);
+
+  if (
+    ticket?.applicationFormId &&
+    ticket.guildId === guildId
+  ) {
+    const form =
+      get(
+        `SELECT reviewerRoleId
+         FROM application_forms
+         WHERE id = ?
+         AND guildId = ?`,
+        [
+          ticket.applicationFormId,
+          guildId
+        ]
+      );
+
+    const reviewerRoleId =
+      safeString(form?.reviewerRoleId);
+
+    if (reviewerRoleId) {
+      return reviewerRoleId;
+    }
+  }
 
   const safeGuildId =
     safeString(guildId);
@@ -43,216 +66,122 @@ function getStaffRole(
   const safeType =
     safeString(type);
 
-  if (
-    !safeGuildId ||
-    !safeType
-  ) {
-
+  if (!safeGuildId || !safeType) {
     return null;
   }
 
   const settings =
     get(
-
       `SELECT roleId
        FROM ticket_settings
        WHERE guildId = ?
        AND type = ?`,
-
       [
-
         safeGuildId,
-
         safeType
       ]
     );
 
-  return safeString(
-    settings?.roleId
+  return safeString(settings?.roleId);
+}
+
+function hasExplicitTicketStaff(guildId, channelId, userId) {
+  if (!guildId || !channelId || !userId) {
+    return false;
+  }
+
+  return Boolean(
+    get(
+      `SELECT 1
+       FROM ticket_staff
+       WHERE guildId = ?
+       AND channelId = ?
+       AND userId = ?`,
+      [
+        guildId,
+        channelId,
+        userId
+      ]
+    )
   );
 }
 
-// ==================================================
-// 🔐 STAFF ACCESS CHECK
-// ==================================================
 function hasTicketAccess({
-
   member,
-
   guildId,
-
-  type
+  type,
+  channelId = null
 }) {
-
   try {
-
-    // ==========================================
-    // 🚫 INVALID MEMBER
-    // ==========================================
-    if (
-      !member
-    ) {
-
+    if (!member) {
       return false;
     }
 
-    // ==========================================
-    // 👑 ADMIN BYPASS
-    // ==========================================
     if (
-
       member.permissions?.has(
-
         PermissionsBitField.Flags.Administrator
       )
     ) {
-
       return true;
     }
 
-    // ==========================================
-    // 👮 STAFF ROLE
-    // ==========================================
+    const ticket =
+      getTicket(channelId);
+
+    if (ticket?.restricted) {
+      return false;
+    }
+
+    if (
+      hasExplicitTicketStaff(
+        guildId,
+        channelId,
+        member.id
+      )
+    ) {
+      return true;
+    }
+
     const roleId =
       getStaffRole(
         guildId,
-        type
+        type,
+        channelId
       );
 
-    if (
-      !roleId
-    ) {
-
-      return false;
-    }
-
-    // ==========================================
-    // 🚫 NO ROLE CACHE
-    // ==========================================
-    if (
-      !member.roles?.cache
-    ) {
-
-      return false;
-    }
-
-    return member.roles.cache.has(
-      roleId
+    return Boolean(
+      roleId &&
+      member.roles?.cache?.has(roleId)
     );
 
   } catch (err) {
-
-    console.error(
-      'Ticket permission error:',
-      err
-    );
-
+    console.error('Ticket permission error:', err);
     return false;
   }
 }
 
-// ==================================================
-// 🔒 CLOSE PERMISSION
-// ==================================================
-function canCloseTicket({
-
-  member,
-
-  guildId,
-
-  type
-}) {
-
-  return hasTicketAccess({
-
-    member,
-
-    guildId,
-
-    type
-  });
+function canCloseTicket(options) {
+  return hasTicketAccess(options);
 }
 
-// ==================================================
-// 👮 CLAIM PERMISSION
-// ==================================================
-function canClaimTicket({
-
-  member,
-
-  guildId,
-
-  type
-}) {
-
-  return hasTicketAccess({
-
-    member,
-
-    guildId,
-
-    type
-  });
+function canClaimTicket(options) {
+  return hasTicketAccess(options);
 }
 
-// ==================================================
-// 🔓 REOPEN PERMISSION
-// ==================================================
-function canReopenTicket({
-
-  member,
-
-  guildId,
-
-  type
-}) {
-
-  return hasTicketAccess({
-
-    member,
-
-    guildId,
-
-    type
-  });
+function canReopenTicket(options) {
+  return hasTicketAccess(options);
 }
 
-// ==================================================
-// 🗑 DELETE PERMISSION
-// ==================================================
-function canDeleteTicket({
-
-  member,
-
-  guildId,
-
-  type
-}) {
-
-  return hasTicketAccess({
-
-    member,
-
-    guildId,
-
-    type
-  });
+function canDeleteTicket(options) {
+  return hasTicketAccess(options);
 }
 
-// ==================================================
-// 📦 EXPORTS
-// ==================================================
 module.exports = {
-
   getStaffRole,
-
+  hasExplicitTicketStaff,
   hasTicketAccess,
-
   canCloseTicket,
-
   canClaimTicket,
-
   canReopenTicket,
-
   canDeleteTicket
 };

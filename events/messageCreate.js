@@ -84,6 +84,19 @@ async function handleLinkBlock(
     return false;
   }
 
+  const ticket =
+    get(
+      `SELECT type
+       FROM tickets
+       WHERE channelId = ?
+       AND status = 'OPEN'`,
+      [message.channel.id]
+    );
+
+  if (ticket?.type === 'partnership') {
+    return false;
+  }
+
   const settings =
     get(
 
@@ -184,7 +197,8 @@ function trackTicketStaffMessage(
     !hasTicketAccess({
       member: message.member,
       guildId: message.guild.id,
-      type: ticket.type
+      type: ticket.type,
+      channelId: message.channel.id
     })
   ) {
     return;

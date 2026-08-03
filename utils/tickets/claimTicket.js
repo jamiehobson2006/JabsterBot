@@ -93,7 +93,10 @@ async function claimTicket({
         interaction.guild.id,
 
       type:
-        ticket.type
+        ticket.type,
+
+      channelId:
+        interaction.channel.id
     });
 
   if (!allowed) {

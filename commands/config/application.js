@@ -16,6 +16,11 @@ const {
   updateForm
 } = require('../../utils/applications');
 
+const {
+  get,
+  run
+} = require('../../database');
+
 function formatQuestions(
   questions
 ) {
@@ -64,6 +69,14 @@ function applicationEmbed(
         inline: true
       },
       {
+        name: 'Reviewer Role',
+        value:
+          form.reviewerRoleId
+            ? `<@&${form.reviewerRoleId}>`
+            : 'Ticket category staff role',
+        inline: true
+      },
+      {
         name: 'Question List',
         value: formatQuestions(questions)
       }
@@ -98,9 +111,6 @@ module.exports = {
     new SlashCommandBuilder()
       .setName('application')
       .setDescription('Create and edit ticket applications')
-      .setDefaultMemberPermissions(
-        PermissionFlagsBits.Administrator
-      )
       .addSubcommand(subcommand =>
         subcommand
           .setName('create')
@@ -113,6 +123,12 @@ module.exports = {
               .setMinLength(2)
               .setMaxLength(80)
           )
+          .addRoleOption(option =>
+            option
+              .setName('reviewer_role')
+              .setDescription('Role allowed to review this application')
+              .setRequired(true)
+          )
           .addStringOption(option =>
             option
               .setName('description')
@@ -120,6 +136,22 @@ module.exports = {
               .setRequired(false)
               .setMaxLength(500)
           )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('setcreatorrole')
+          .setDescription('Set a role allowed to create applications')
+          .addRoleOption(option =>
+            option
+              .setName('role')
+              .setDescription('Role allowed to create applications')
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('clearcreatorrole')
+          .setDescription('Require Administrator to create applications')
       )
       .addSubcommand(subcommand =>
         subcommand
@@ -224,6 +256,23 @@ module.exports = {
           )
           .addSubcommand(subcommand =>
             subcommand
+              .setName('reviewerrole')
+              .setDescription('Change the role that can review this application')
+              .addStringOption(option =>
+                option
+                  .setName('name')
+                  .setDescription('Application name')
+                  .setRequired(true)
+              )
+              .addRoleOption(option =>
+                option
+                  .setName('role')
+                  .setDescription('Role allowed to review this application')
+                  .setRequired(true)
+              )
+          )
+          .addSubcommand(subcommand =>
+            subcommand
               .setName('enable')
               .setDescription('Enable an application')
               .addStringOption(option =>
@@ -247,23 +296,101 @@ module.exports = {
       ),
 
   async execute(interaction) {
-    if (
-      !interaction.memberPermissions.has(
-        PermissionFlagsBits.Administrator
-      )
-    ) {
-      return interaction.editReply({
-        content:
-          'You need Administrator permission.'
-      });
-    }
-
     try {
       const group =
         interaction.options.getSubcommandGroup(false);
 
       const subcommand =
         interaction.options.getSubcommand();
+
+      const isAdministrator =
+        interaction.memberPermissions.has(
+          PermissionFlagsBits.Administrator
+        );
+
+      const access =
+        get(
+          `SELECT applicationCreatorRoleId
+           FROM guild_settings
+           WHERE guildId = ?`,
+          [interaction.guild.id]
+        );
+
+      const canCreate =
+        Boolean(
+          access?.applicationCreatorRoleId &&
+          interaction.member.roles.cache.has(
+            access.applicationCreatorRoleId
+          )
+        );
+
+      if (
+        !isAdministrator &&
+        !(subcommand === 'create' && !group && canCreate)
+      ) {
+        return interaction.editReply({
+          content:
+            'You need Administrator permission or the configured application creator role.'
+        });
+      }
+
+      if (!group && subcommand === 'setcreatorrole') {
+        if (!isAdministrator) {
+          return interaction.editReply({
+            content: 'You need Administrator permission.'
+          });
+        }
+
+        const role =
+          interaction.options.getRole('role', true);
+
+        if (role.managed || role.id === interaction.guild.roles.everyone.id) {
+          return interaction.editReply({
+            content: 'Choose a normal server role.'
+          });
+        }
+
+        run(
+          `INSERT INTO guild_settings (
+             guildId,
+             applicationCreatorRoleId
+           )
+           VALUES (?, ?)
+           ON CONFLICT(guildId)
+           DO UPDATE SET applicationCreatorRoleId = excluded.applicationCreatorRoleId`,
+          [
+            interaction.guild.id,
+            role.id
+          ]
+        );
+
+        return interaction.editReply({
+          content: `${role} can now create applications.`
+        });
+      }
+
+      if (!group && subcommand === 'clearcreatorrole') {
+        if (!isAdministrator) {
+          return interaction.editReply({
+            content: 'You need Administrator permission.'
+          });
+        }
+
+        run(
+          `INSERT INTO guild_settings (
+             guildId,
+             applicationCreatorRoleId
+           )
+           VALUES (?, NULL)
+           ON CONFLICT(guildId)
+           DO UPDATE SET applicationCreatorRoleId = NULL`,
+          [interaction.guild.id]
+        );
+
+        return interaction.editReply({
+          content: 'Only administrators can now create applications.'
+        });
+      }
 
       if (!group && subcommand === 'create') {
         const name =
@@ -273,11 +400,25 @@ module.exports = {
           interaction.options.getString('description') ||
           null;
 
+        const reviewerRole =
+          interaction.options.getRole('reviewer_role', true);
+
+        if (
+          reviewerRole.managed ||
+          reviewerRole.id === interaction.guild.roles.everyone.id
+        ) {
+          return interaction.editReply({
+            content:
+              'Choose a normal server role for application reviewers.'
+          });
+        }
+
         const result =
           createForm({
             guildId: interaction.guild.id,
             name,
             description,
+            reviewerRoleId: reviewerRole.id,
             createdBy: interaction.user.id
           });
 
@@ -314,7 +455,7 @@ module.exports = {
                         const questions =
                           getQuestions(form.id);
 
-                        return `${form.enabled ? 'Enabled' : 'Disabled'} - **${form.name}** (${questions.length}/${MAX_APPLICATION_QUESTIONS} questions)`;
+                        return `${form.enabled ? 'Enabled' : 'Disabled'} - **${form.name}** (${questions.length}/${MAX_APPLICATION_QUESTIONS} questions) - ${form.reviewerRoleId ? `<@&${form.reviewerRoleId}>` : 'ticket staff role'}`;
                       })
                       .join('\n')
                   : 'No applications created yet.'
@@ -387,6 +528,28 @@ module.exports = {
           {
             description:
               interaction.options.getString('description', true)
+          }
+        );
+      }
+
+      if (subcommand === 'reviewerrole') {
+        const reviewerRole =
+          interaction.options.getRole('role', true);
+
+        if (
+          reviewerRole.managed ||
+          reviewerRole.id === interaction.guild.roles.everyone.id
+        ) {
+          return interaction.editReply({
+            content:
+              'Choose a normal server role for application reviewers.'
+          });
+        }
+
+        updateForm(
+          form.id,
+          {
+            reviewerRoleId: reviewerRole.id
           }
         );
       }

@@ -179,14 +179,16 @@ async function createTicket({
   // ==========================================
   // 👮 STAFF ROLE
   // ==========================================
+  const applicationReviewerRoleId =
+    application?.form?.reviewerRoleId ||
+    null;
+
   const staffRole =
-    settings.roleId
-
-      ? interaction.guild.roles.cache.get(
-          settings.roleId
-        )
-
-      : null;
+    interaction.guild.roles.cache.get(
+      applicationReviewerRoleId ||
+      settings.roleId
+    ) ||
+    null;
 
   // ==========================================
   // 🏷 CHANNEL NAME
@@ -194,10 +196,11 @@ async function createTicket({
   const username =
     cleanChannelName(
       interaction.user.username
-    );
+    ) ||
+    'user';
 
   let channelName =
-    `${safeType}-${username}`;
+    `${config.emoji}-${config.channelPrefix || safeType}-${username}`;
 
   // ==========================================
   // 🧠 ENSURE UNIQUE NAME
@@ -462,6 +465,9 @@ async function createTicket({
   // ==========================================
   // 📨 SEND TICKET MESSAGE
   // ==========================================
+  const ticketEmbeds =
+    [embed];
+
   if (application) {
 
     embed.addFields({
@@ -475,7 +481,19 @@ async function createTicket({
         'Application'
     });
 
+    let answerEmbed =
+      embed;
+
     for (const [index, item] of applicationAnswers.entries()) {
+
+      if (index > 0 && index % 4 === 0) {
+        answerEmbed =
+          new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(`${config.emoji} ${config.name} (continued)`);
+
+        ticketEmbeds.push(answerEmbed);
+      }
 
       const question =
         String(item.question || `Question ${index + 1}`)
@@ -485,7 +503,7 @@ async function createTicket({
         String(item.answer || 'No answer provided')
           .slice(0, 1000);
 
-      embed.addFields({
+      answerEmbed.addFields({
 
         name:
           `${index + 1}. ${question}`,
@@ -507,7 +525,7 @@ async function createTicket({
 
           : `${interaction.user}`,
 
-      embeds: [embed],
+      embeds: ticketEmbeds,
 
       components: [buttons]
     });
@@ -526,11 +544,12 @@ async function createTicket({
        messageId,
        userId,
        type,
+       applicationFormId,
        createdAt,
        status
      )
 
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 
     [
 
@@ -543,6 +562,8 @@ async function createTicket({
       interaction.user.id,
 
       safeType,
+
+      application?.form?.id || null,
 
       Date.now(),
 
