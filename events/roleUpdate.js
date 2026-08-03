@@ -12,14 +12,33 @@ const {
   formatExecutor
 } = require('../utils/auditLookup');
 
-module.exports = {
+function formatPermission(permission) {
+  return permission.replace(/([a-z])([A-Z])/g, '$1 $2');
+}
 
+function permissionChanges(oldRole, newRole) {
+  const before = new Set(oldRole.permissions.toArray());
+  const after = new Set(newRole.permissions.toArray());
+  const added = [...after].filter(permission => !before.has(permission));
+  const removed = [...before].filter(permission => !after.has(permission));
+  const changes = [];
+
+  if (added.length) {
+    changes.push(`Permissions added: ${added.map(formatPermission).join(', ')}`);
+  }
+
+  if (removed.length) {
+    changes.push(`Permissions removed: ${removed.map(formatPermission).join(', ')}`);
+  }
+
+  return changes;
+}
+
+module.exports = {
   name: 'roleUpdate',
 
   async execute(oldRole, newRole, client) {
-
     try {
-
       const changes = [];
 
       if (oldRole.name !== newRole.name) {
@@ -31,30 +50,24 @@ module.exports = {
       }
 
       if (oldRole.hoist !== newRole.hoist) {
-        changes.push(`Displayed Separately: ${oldRole.hoist} -> ${newRole.hoist}`);
+        changes.push(`Displayed separately: ${oldRole.hoist} -> ${newRole.hoist}`);
       }
 
       if (oldRole.mentionable !== newRole.mentionable) {
         changes.push(`Mentionable: ${oldRole.mentionable} -> ${newRole.mentionable}`);
       }
 
-      if (
-        oldRole.permissions.bitfield !==
-        newRole.permissions.bitfield
-      ) {
-        changes.push('Permissions changed');
-      }
+      changes.push(...permissionChanges(oldRole, newRole));
 
       if (!changes.length) {
         return;
       }
 
-      const audit =
-        await findRecentAuditLog(
-          newRole.guild,
-          AuditLogEvent.RoleUpdate,
-          newRole.id
-        );
+      const audit = await findRecentAuditLog(
+        newRole.guild,
+        AuditLogEvent.RoleUpdate,
+        newRole.id
+      );
 
       await logAudit(
         client,
@@ -78,13 +91,8 @@ module.exports = {
           })
         }
       );
-
     } catch (err) {
-
-      console.error(
-        'RoleUpdate Error:',
-        err
-      );
+      console.error('RoleUpdate Error:', err);
     }
   }
 };

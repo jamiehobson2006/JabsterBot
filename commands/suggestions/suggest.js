@@ -15,7 +15,6 @@ const {
 
 module.exports = {
   cooldown: 5000,
-  ephemeral: true,
 
   data:
     new SlashCommandBuilder()

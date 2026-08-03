@@ -6,39 +6,9 @@ const {
   useCooldown
 } = require('../utils/cooldowns');
 
-const ephemeralCommands =
-  new Set([
-    'application',
-    'ban',
-    'kick',
-    'mute',
-    'unmute',
-    'warn',
-    'warnings',
-    'clearwarns',
-    'case',
-    'modlogs',
-    'history',
-    'editcase',
-    'modlogremove',
-    'purge',
-    'role',
-    'poll',
-    'slowmode',
-    'lock',
-    'unlock',
-    'setmodlogs',
-    'suggestchannel',
-    'setstaffrole',
-    'setadminrole',
-    'settranscriptchannel',
-    'linkblock',
-    'ticketsetup',
-    'ticketpanel',
-    'ticket',
-    'ticketstats',
-    'dailyfact'
-  ]);
+const {
+  logCommand
+} = require('../utils/logger');
 
 function isStaleInteractionError(error) {
   return (
@@ -155,10 +125,7 @@ module.exports = {
     }
 
     const shouldBeEphemeral =
-      command.ephemeral ||
-      ephemeralCommands.has(
-        interaction.commandName
-      );
+      Boolean(command.ephemeral);
 
     const acknowledged =
       await safelyDeferReply(
@@ -193,6 +160,13 @@ module.exports = {
       await command.execute(
         interaction,
         client
+      );
+
+      await logCommand(
+        client,
+        interaction
+      ).catch(error =>
+        console.error('Command audit log error:', error)
       );
 
     } catch (error) {

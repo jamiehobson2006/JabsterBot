@@ -1,58 +1,84 @@
 const {
-  createMessageDeleteEmbed,
+  AuditLogEvent
+} = require('discord.js');
+
+const {
+  createAuditEmbed,
   logAudit
 } = require('../utils/logger');
 
-module.exports = {
+const {
+  findRecentAuditLog,
+  formatExecutor
+} = require('../utils/auditLookup');
 
+const {
+  consumeSuppressedMessageDelete
+} = require('../utils/messageDeletionTracker');
+
+function messageContent(message) {
+  const attachmentNote = message.attachments?.size
+    ? `\nAttachments: ${message.attachments.size}`
+    : '';
+
+  return `${message.content || '*No text content*'}${attachmentNote}`;
+}
+
+module.exports = {
   name: 'messageDelete',
 
   async execute(message, client) {
-
     try {
-
-      if (message.partial) {
-
-        message =
-          await message.fetch()
-            .catch(() => message);
-      }
-
-      if (
-        !message.guild ||
-        message.author?.bot
-      ) {
-
+      if (consumeSuppressedMessageDelete(message.id)) {
         return;
       }
 
+      if (message.partial) {
+        message = await message.fetch().catch(() => message);
+      }
+
+      if (!message.guild || message.author?.bot) {
+        return;
+      }
+
+      const audit = await findRecentAuditLog(
+        message.guild,
+        AuditLogEvent.MessageDelete,
+        message.author?.id
+      );
+
       await logAudit(
-
         client,
-
         message.guild.id,
-
         {
           action: 'MESSAGE_DELETED',
           targetId: message.author?.id,
+          executorId: audit?.executor?.id,
           type: 'MESSAGES',
           metadata: {
             channelId: message.channel?.id,
             messageId: message.id,
-            content: message.content || null
+            content: message.content || null,
+            attachments: message.attachments?.map(item => item.url) || [],
+            deletedBy: audit?.executor?.id || null
           },
-          embed: createMessageDeleteEmbed(
-            message
-          )
+          embed: createAuditEmbed({
+            action: 'Message Deleted',
+            target: `${message.author?.tag || 'Unknown'}\n<@${message.author?.id || 'unknown'}>`,
+            executor: audit
+              ? formatExecutor(audit)
+              : 'Author or unknown',
+            channel: message.channel?.id
+              ? `<#${message.channel.id}>`
+              : 'Unknown',
+            reason: audit?.reason || undefined,
+            extra: messageContent(message),
+            color: 0xED4245
+          })
         }
       );
-
     } catch (err) {
-
-      console.error(
-        'MessageDelete Error:',
-        err
-      );
+      console.error('MessageDelete Error:', err);
     }
   }
 };

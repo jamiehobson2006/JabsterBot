@@ -13,18 +13,79 @@ const {
 } = require('../utils/auditLookup');
 
 function formatChannel(channel) {
-
   return `${channel.name || 'Unknown'}\n${channel.id}`;
 }
 
-module.exports = {
+function formatPermission(permission) {
+  return permission.replace(/([a-z])([A-Z])/g, '$1 $2');
+}
 
+function permissionSet(overwrite, property) {
+  return new Set(overwrite?.[property]?.toArray?.() || []);
+}
+
+function difference(next, previous) {
+  return [...next].filter(value => !previous.has(value));
+}
+
+function overwriteTarget(guild, overwrite) {
+  const role = guild.roles.cache.get(overwrite.id);
+  if (role) return `<@&${role.id}>`;
+
+  const member = guild.members.cache.get(overwrite.id);
+  if (member) return `<@${member.id}>`;
+
+  return `ID: ${overwrite.id}`;
+}
+
+function formatOverwriteChange(guild, before, after) {
+  const target = overwriteTarget(guild, after || before);
+
+  if (!before) {
+    const allowed = [...permissionSet(after, 'allow')].map(formatPermission);
+    const denied = [...permissionSet(after, 'deny')].map(formatPermission);
+    return `Permissions added for ${target}: Allow ${allowed.join(', ') || 'None'} | Deny ${denied.join(', ') || 'None'}`;
+  }
+
+  if (!after) {
+    return `Permissions removed for ${target}`;
+  }
+
+  const allowAdded = difference(permissionSet(after, 'allow'), permissionSet(before, 'allow'));
+  const allowRemoved = difference(permissionSet(before, 'allow'), permissionSet(after, 'allow'));
+  const denyAdded = difference(permissionSet(after, 'deny'), permissionSet(before, 'deny'));
+  const denyRemoved = difference(permissionSet(before, 'deny'), permissionSet(after, 'deny'));
+  const details = [];
+
+  if (allowAdded.length) details.push(`Allow +${allowAdded.map(formatPermission).join(', ')}`);
+  if (allowRemoved.length) details.push(`Allow -${allowRemoved.map(formatPermission).join(', ')}`);
+  if (denyAdded.length) details.push(`Deny +${denyAdded.map(formatPermission).join(', ')}`);
+  if (denyRemoved.length) details.push(`Deny -${denyRemoved.map(formatPermission).join(', ')}`);
+
+  return details.length
+    ? `${target}: ${details.join(' | ')}`
+    : null;
+}
+
+function permissionOverwriteChanges(oldChannel, newChannel) {
+  const before = oldChannel.permissionOverwrites?.cache || new Map();
+  const after = newChannel.permissionOverwrites?.cache || new Map();
+  const ids = new Set([...before.keys(), ...after.keys()]);
+
+  return [...ids]
+    .map(id => formatOverwriteChange(
+      newChannel.guild,
+      before.get(id),
+      after.get(id)
+    ))
+    .filter(Boolean);
+}
+
+module.exports = {
   name: 'channelUpdate',
 
   async execute(oldChannel, newChannel, client) {
-
     try {
-
       if (!newChannel.guild) {
         return;
       }
@@ -47,23 +108,21 @@ module.exports = {
         changes.push(`NSFW: ${oldChannel.nsfw} -> ${newChannel.nsfw}`);
       }
 
-      if (
-        oldChannel.rateLimitPerUser !==
-        newChannel.rateLimitPerUser
-      ) {
+      if (oldChannel.rateLimitPerUser !== newChannel.rateLimitPerUser) {
         changes.push(`Slowmode: ${oldChannel.rateLimitPerUser || 0}s -> ${newChannel.rateLimitPerUser || 0}s`);
       }
 
+      changes.push(...permissionOverwriteChanges(oldChannel, newChannel));
+
       if (!changes.length) {
-        changes.push('Permissions or channel settings changed');
+        return;
       }
 
-      const audit =
-        await findRecentAuditLog(
-          newChannel.guild,
-          AuditLogEvent.ChannelUpdate,
-          newChannel.id
-        );
+      const audit = await findRecentAuditLog(
+        newChannel.guild,
+        AuditLogEvent.ChannelUpdate,
+        newChannel.id
+      );
 
       await logAudit(
         client,
@@ -87,13 +146,8 @@ module.exports = {
           })
         }
       );
-
     } catch (err) {
-
-      console.error(
-        'ChannelUpdate Error:',
-        err
-      );
+      console.error('ChannelUpdate Error:', err);
     }
   }
 };

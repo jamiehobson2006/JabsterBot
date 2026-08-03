@@ -1,224 +1,87 @@
 const {
-
-  EmbedBuilder,
-
   ActionRowBuilder,
-
   ButtonBuilder,
-
   ButtonStyle,
-
+  EmbedBuilder,
   SlashCommandBuilder
-
 } = require('discord.js');
 
-module.exports = {
+const GAME_URL =
+  'https://www.roblox.com/games/130906696817438/Endless-Summer-Simulator';
 
+const COMMUNITY_URL =
+  'https://www.roblox.com/communities/11716549/JabsterStudios#!/about';
+
+const GAME_IMAGE =
+  'https://tr.rbxcdn.com/180DAY-c1db2679dce8dbec7a0f9b84d7dbb3f0/768/432/Image/Webp/noFilter';
+
+module.exports = {
   cooldown: 5000,
 
-  data:
-    new SlashCommandBuilder()
-
-      .setName('ess')
-
-      .setDescription(
-        'Show Endless Summer Simulator info'
-      ),
+  data: new SlashCommandBuilder()
+    .setName('ess')
+    .setDescription('Show Endless Summer Simulator info'),
 
   async execute(interaction) {
+    const embed = new EmbedBuilder()
+      .setColor(0x00A8A8)
+      .setTitle('\u{1F334} Endless Summer Simulator')
+      .setDescription(
+        '**Build huge combos, explore paradise, and keep progressing your way.**\n\n' +
+        'Collect orbs, improve your build, discover new areas, complete quests, and join live world events.'
+      )
+      .addFields(
+        {
+          name: '\u{2728} Now Available',
+          value:
+            '- Underwater World\n' +
+            '- Expanded Quest System\n' +
+            '- New Progression Features\n' +
+            '- More World Events',
+          inline: true
+        },
+        {
+          name: '\u{1F525} Core Gameplay',
+          value:
+            '- Combo streaks\n' +
+            '- Prestige bonuses\n' +
+            '- Upgrades and orb rarities\n' +
+            '- Global leaderboards',
+          inline: true
+        },
+        {
+          name: '\u{1F30A} Your Summer, Your Progress',
+          value:
+            'Start on the islands, push your earnings higher, and see how far your progression can go.'
+        }
+      )
+      .setImage(GAME_IMAGE)
+      .setThumbnail(GAME_IMAGE)
+      .setFooter({ text: 'Jabster Studios | Endless Summer Simulator' })
+      .setTimestamp();
 
-    try {
-
-      // ========================
-      // 🎨 MAIN EMBED
-      // ========================
-      const embed =
-        new EmbedBuilder()
-
-          .setColor(
-            0xE67E22
-          )
-
-          .setTitle(
-            '🌴 Endless Summer Simulator'
-          )
-
-          .setDescription(
-
-            '⚡ **Build massive combo streaks, prestige for permanent bonuses, unlock powerful upgrades, and become the richest player in paradise.**\n\n' +
-
-            '🌊 Collect glowing orbs across vibrant islands\n' +
-            '🔥 Trigger powerful world events\n' +
-            '💰 Upgrade your stats and multiply your earnings\n' +
-            '⭐ Prestige for permanent boosts\n' +
-            '🏝️ Compete on global leaderboards\n' +
-            '✨ Discover rare orb types and massive combo chains\n\n' +
-
-            '**Start small → build huge combos → prestige → dominate the leaderboards.**'
-          )
-
-          .addFields(
-
-            {
-
-              name:
-                '🚀 Why Players Love It',
-
-              value:
-
-                '• Addictive progression\n' +
-                '• Constant rewards\n' +
-                '• Satisfying combo system\n' +
-                '• Rare collectibles\n' +
-                '• Fast-paced gameplay',
-
-              inline: true
-            },
-
-            {
-
-              name:
-                '🔥 Live Features',
-
-              value:
-
-                '• Orb Rarities\n' +
-                '• World Events\n' +
-                '• Prestige System\n' +
-                '• Combo Multipliers\n' +
-                '• Global Leaderboards',
-
-              inline: true
-            },
-
-            {
-
-              name:
-                '🛠 Current Development',
-
-              value:
-
-                '• Underwater World\n' +
-                '• Quest Expansion\n' +
-                '• UI & Icon Overhaul\n' +
-                '• More Global Events\n' +
-                '• New Progression Features',
-
-              inline: false
-            }
-          )
-
-          .setImage(
-            'https://tr.rbxcdn.com/180DAY-c1db2679dce8dbec7a0f9b84d7dbb3f0/768/432/Image/Webp/noFilter'
-          )
-
-          .setThumbnail(
-            'https://tr.rbxcdn.com/180DAY-c1db2679dce8dbec7a0f9b84d7dbb3f0/150/150/Image/Webp/noFilter'
-          )
-
-          .setFooter({
-
-            text:
-              'Jabster Studios • Endless Summer Simulator'
-          })
-
-          .setTimestamp();
-
-      // ========================
-      // 🔘 BUTTONS
-      // ========================
-      const row =
-        new ActionRowBuilder()
-
-          .addComponents(
-
-            new ButtonBuilder()
-
-              .setLabel(
-                'Play Now'
-              )
-
-              .setEmoji('🌴')
-
-              .setStyle(
-                ButtonStyle.Link
-              )
-
-              .setURL(
-                'https://www.roblox.com/games/130906696817438/Endless-Summer-Simulator'
-              ),
-
-            new ButtonBuilder()
-
-              .setLabel(
-                'Join Community'
-              )
-
-              .setEmoji('👥')
-
-              .setStyle(
-                ButtonStyle.Link
-              )
-
-              .setURL(
-                'https://www.roblox.com/communities/11716549/JabsterStudios#!/about'
-              ),
-
-            new ButtonBuilder()
-
-              .setLabel(
-                'Favorite Game'
-              )
-
-              .setEmoji('⭐')
-
-              .setStyle(
-                ButtonStyle.Link
-              )
-
-              .setURL(
-                'https://www.roblox.com/games/130906696817438/Endless-Summer-Simulator'
-              )
-          );
-
-      // ========================
-      // 📤 RESPONSE
-      // ========================
-      await interaction.editReply({
-
-        embeds: [embed],
-
-        components: [row]
-      });
-
-    } catch (err) {
-
-      console.error(
-        'ESS Command Error:',
-        err
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setLabel('Play Now')
+          .setEmoji('\u{1F334}')
+          .setStyle(ButtonStyle.Link)
+          .setURL(GAME_URL),
+        new ButtonBuilder()
+          .setLabel('Join Community')
+          .setEmoji('\u{1F465}')
+          .setStyle(ButtonStyle.Link)
+          .setURL(COMMUNITY_URL),
+        new ButtonBuilder()
+          .setLabel('Favorite Game')
+          .setEmoji('\u{2B50}')
+          .setStyle(ButtonStyle.Link)
+          .setURL(GAME_URL)
       );
 
-      if (
-
-        interaction.deferred ||
-
-        interaction.replied
-      ) {
-
-        return interaction.editReply({
-
-          content:
-            '❌ Failed to load game info.'
-        });
-      }
-
-      return interaction.reply({
-
-        content:
-          '❌ Failed to load game info.',
-
-        flags: 64
-      });
-    }
+    return interaction.editReply({
+      embeds: [embed],
+      components: [row]
+    });
   }
 };

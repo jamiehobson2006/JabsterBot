@@ -95,7 +95,8 @@ async function endGiveaway(
 
         `UPDATE giveaways
          SET ended = 1,
-             ending = 0
+             ending = 0,
+             endingAt = NULL
          WHERE messageId = ?
          AND ended = 0`,
 
@@ -119,7 +120,8 @@ async function endGiveaway(
 
         `UPDATE giveaways
          SET ended = 1,
-             ending = 0
+             ending = 0,
+             endingAt = NULL
          WHERE messageId = ?
          AND ended = 0`,
 
@@ -483,7 +485,8 @@ async function finishGiveaway({
 
       `UPDATE giveaways
        SET ended = 1,
-           ending = 0
+           ending = 0,
+           endingAt = NULL
        WHERE messageId = ?
        AND ended = 0`,
 

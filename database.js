@@ -759,7 +759,11 @@ function createGuildSettingsTable() {
 
       linkBlockEnabled INTEGER DEFAULT 0,
 
-      linkBypassRoleId TEXT
+      linkBypassRoleId TEXT,
+
+      censorEnabled INTEGER DEFAULT 0,
+
+      censorRoleId TEXT
     )
   `);
 
@@ -795,7 +799,9 @@ function createGuildSettingsTable() {
     ['bugCategoryId', 'TEXT'],
 
     ['linkBlockEnabled', 'INTEGER DEFAULT 0'],
-    ['linkBypassRoleId', 'TEXT']
+    ['linkBypassRoleId', 'TEXT'],
+    ['censorEnabled', 'INTEGER DEFAULT 0'],
+    ['censorRoleId', 'TEXT']
   ];
 
   for (
@@ -830,6 +836,42 @@ function createLogSettingsTable() {
       PRIMARY KEY (guildId, type)
     )
   `);
+}
+
+function createCensorTables() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS censor_words (
+
+      guildId TEXT NOT NULL,
+
+      normalizedWord TEXT NOT NULL,
+
+      word TEXT NOT NULL,
+
+      addedBy TEXT NOT NULL,
+
+      addedAt INTEGER NOT NULL,
+
+      PRIMARY KEY (guildId, normalizedWord)
+    )
+  `);
+
+  createIndex(
+
+    'idx_censor_words_guild',
+
+    `CREATE INDEX IF NOT EXISTS idx_censor_words_guild
+     ON censor_words(guildId)`
+  );
+
+  run(
+    `UPDATE guild_settings
+     SET censorEnabled = 1
+     WHERE modlogChannelId IS NOT NULL
+     AND COALESCE(censorEnabled, 0) = 0`
+  );
 }
 
 // ==================================================
@@ -1625,6 +1667,8 @@ function createGiveawayTables() {
 
       ending INTEGER DEFAULT 0,
 
+      endingAt INTEGER,
+
       requirements TEXT,
 
       blacklistedRoles TEXT,
@@ -1643,12 +1687,26 @@ function createGiveawayTables() {
     'INTEGER DEFAULT 0'
   );
 
+  ensureColumn(
+    'giveaways',
+    'endingAt',
+    'INTEGER'
+  );
+
   createIndex(
 
     'idx_giveaways_guild',
 
     `CREATE INDEX IF NOT EXISTS idx_giveaways_guild
      ON giveaways(guildId, ended)`
+  );
+
+  createIndex(
+
+    'idx_giveaways_lock',
+
+    `CREATE INDEX IF NOT EXISTS idx_giveaways_lock
+     ON giveaways(ended, ending, endingAt)`
   );
 
   createIndex(
@@ -2144,6 +2202,8 @@ function initDatabase() {
   createGuildSettingsTable();
 
   createLogSettingsTable();
+
+  createCensorTables();
 
   createTicketSettingsTable();
 

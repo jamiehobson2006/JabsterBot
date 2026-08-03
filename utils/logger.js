@@ -221,8 +221,8 @@ async function getLogChannel(
       );
 
     const channelId =
-      settings?.[column] ||
-      settings?.modlogChannelId;
+      settings?.modlogChannelId ||
+      settings?.[column];
 
     if (!channelId) {
 
@@ -302,6 +302,17 @@ async function sendLog(
 
   try {
 
+    if (typeof type !== 'string') {
+
+      embed = type;
+      type = 'MODERATION';
+    }
+
+    if (!embed) {
+
+      return null;
+    }
+
     const channel =
       await getLogChannel(
 
@@ -315,10 +326,19 @@ async function sendLog(
       return null;
     }
 
-    return await channel.send({
+    const payload =
+      embed.embeds ||
+      embed.files ||
+      embed.content ||
+      embed.components
 
-      embeds: [embed]
-    });
+        ? embed
+
+        : {
+            embeds: [embed]
+          };
+
+    return await channel.send(payload);
 
   } catch (err) {
 
@@ -526,6 +546,102 @@ function createAuditEmbed({
   }
 
   return embed;
+}
+
+function formatCommandOption(option) {
+
+  if (option.options?.length) {
+
+    return [
+      option.name,
+      ...option.options.map(formatCommandOption)
+    ].join(' ');
+  }
+
+  if (option.user) {
+
+    return `${option.name}: <@${option.user.id}>`;
+  }
+
+  if (option.member) {
+
+    return `${option.name}: <@${option.member.id}>`;
+  }
+
+  if (option.role) {
+
+    return `${option.name}: <@&${option.role.id}>`;
+  }
+
+  if (option.channel) {
+
+    return `${option.name}: <#${option.channel.id}>`;
+  }
+
+  const value =
+    typeof option.value === 'string'
+      ? `\`${truncate(option.value.replace(/\s+/g, ' '), 180)}\``
+      : option.value;
+
+  return `${option.name}: ${value ?? 'selected'}`;
+}
+
+function formatCommandInvocation(interaction) {
+
+  const formatted =
+    (interaction.options?.data || [])
+      .map(formatCommandOption)
+      .filter(Boolean);
+
+  return {
+    command:
+      `/${interaction.commandName}` +
+      (formatted.length ? ` ${formatted.join(' ')}` : ''),
+    details:
+      formatted.length
+        ? formatted.join('\n')
+        : 'No options used.'
+  };
+}
+
+async function logCommand(
+  client,
+  interaction
+) {
+
+  if (!interaction?.guild || !interaction.user) {
+
+    return null;
+  }
+
+  const invocation =
+    formatCommandInvocation(interaction);
+
+  return logAudit(
+    client,
+    interaction.guild.id,
+    {
+      action: 'COMMAND_RUN',
+      targetId: interaction.user.id,
+      executorId: interaction.user.id,
+      type: 'MODERATION',
+      metadata: {
+        command: interaction.commandName,
+        channelId: interaction.channelId,
+        invocation: invocation.command
+      },
+      embed: createAuditEmbed({
+        action: 'Command Run',
+        target: invocation.command,
+        executor: `${interaction.user.tag}\n<@${interaction.user.id}>`,
+        channel: interaction.channelId
+          ? `<#${interaction.channelId}>`
+          : undefined,
+        extra: invocation.details,
+        color: 0x5865F2
+      })
+    }
+  );
 }
 
 // ==================================================
@@ -1021,6 +1137,7 @@ async function logAudit(
     executorId,
     metadata = {},
     embed,
+    files,
     type = 'MODERATION'
   }
 
@@ -1067,6 +1184,25 @@ async function logAudit(
     );
   }
 
+  const logEmbed =
+    embed ||
+    createAuditEmbed({
+      action,
+      target:
+        formatUser(targetId),
+      executor:
+        formatUser(executorId),
+      extra:
+
+        Object.keys(metadata).length
+
+          ? truncate(
+              JSON.stringify(metadata)
+            )
+
+          : undefined
+    });
+
   return sendLog(
 
     client,
@@ -1075,28 +1211,12 @@ async function logAudit(
 
     type,
 
-    embed ||
-
-      createAuditEmbed({
-
-        action,
-
-        target:
-          formatUser(targetId),
-
-        executor:
-          formatUser(executorId),
-
-        extra:
-
-          Object.keys(metadata).length
-
-            ? truncate(
-                JSON.stringify(metadata)
-              )
-
-            : undefined
-      })
+    files?.length
+      ? {
+          embeds: [logEmbed],
+          files
+        }
+      : logEmbed
   );
 }
 
@@ -1123,6 +1243,10 @@ module.exports = {
   createMessageDeleteEmbed,
 
   createMessageEditEmbed,
+
+  formatCommandInvocation,
+
+  logCommand,
 
   logAudit
 };

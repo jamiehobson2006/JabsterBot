@@ -165,17 +165,20 @@ module.exports = {
         `INSERT INTO guild_settings
         (
           guildId,
-          modlogChannelId
+          modlogChannelId,
+          censorEnabled
         )
 
-        VALUES (?, ?)
+        VALUES (?, ?, 1)
 
         ON CONFLICT(guildId)
 
         DO UPDATE SET
 
           modlogChannelId =
-          excluded.modlogChannelId`,
+          excluded.modlogChannelId,
+
+          censorEnabled = 1`,
 
         [
 

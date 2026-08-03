@@ -13,6 +13,17 @@ const {
 } = require('../utils/logger');
 
 const {
+  findCensoredTerm,
+  getCensorSettings,
+  listCensorTerms
+} = require('../utils/censor');
+
+const {
+  suppressMessageDelete,
+  unsuppressMessageDelete
+} = require('../utils/messageDeletionTracker');
+
+const {
   addMessage
 } = require('../utils/tickets/stats');
 
@@ -115,14 +126,23 @@ async function handleLinkBlock(
     return false;
   }
 
-  await message.delete()
-    .catch(err => {
+  suppressMessageDelete(message.id);
 
-      console.error(
-        'Link block delete failed:',
-        err.message
-      );
-    });
+  try {
+
+    await message.delete();
+
+  } catch (err) {
+
+    unsuppressMessageDelete(message.id);
+
+    console.error(
+      'Link block delete failed:',
+      err.message
+    );
+
+    return false;
+  }
 
   await message.channel.send({
 
@@ -169,6 +189,77 @@ async function handleLinkBlock(
           : 'Bot',
         channel: `<#${message.channel.id}>`,
         extra: `Blocked link: ${blockedLink}`,
+        color: 0xED4245
+      })
+    }
+  );
+
+  return true;
+}
+
+async function handleCensor(
+  message,
+  client
+) {
+
+  const settings =
+    getCensorSettings(message.guild.id);
+
+  if (Number(settings?.censorEnabled || 0) !== 1) {
+
+    return false;
+  }
+
+  const term =
+    findCensoredTerm(
+      message.content,
+      listCensorTerms(message.guild.id)
+    );
+
+  if (!term) {
+
+    return false;
+  }
+
+  suppressMessageDelete(message.id);
+
+  try {
+
+    await message.delete();
+
+  } catch (err) {
+
+    unsuppressMessageDelete(message.id);
+
+    console.error('Censor delete failed:', err.message);
+
+    return false;
+  }
+
+  await logAudit(
+    client,
+    message.guild.id,
+    {
+      action: 'MESSAGE_CENSORED',
+      targetId: message.author.id,
+      executorId: client.user?.id,
+      type: 'MESSAGES',
+      metadata: {
+        channelId: message.channel.id,
+        messageId: message.id,
+        term,
+        content: message.content || null
+      },
+      embed: createAuditEmbed({
+        action: 'Message Censored',
+        target: `${message.author.tag}\n<@${message.author.id}>`,
+        executor: client.user
+          ? `${client.user.tag}\n<@${client.user.id}>`
+          : 'Bot',
+        channel: `<#${message.channel.id}>`,
+        extra:
+          `Matched term: \`${term}\`\n` +
+          `Content: ${message.content || '*No text content*'}`,
         color: 0xED4245
       })
     }
@@ -360,6 +451,16 @@ module.exports = {
 
       const now =
         Date.now();
+
+      if (
+        await handleCensor(
+          message,
+          client
+        )
+      ) {
+
+        return;
+      }
 
       if (
         await handleLinkBlock(
