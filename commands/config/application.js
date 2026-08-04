@@ -21,6 +21,10 @@ const {
   run
 } = require('../../database');
 
+const {
+  canManageApplications
+} = require('../../utils/applicationAccess');
+
 function formatQuestions(
   questions
 ) {
@@ -140,18 +144,18 @@ module.exports = {
       .addSubcommand(subcommand =>
         subcommand
           .setName('setcreatorrole')
-          .setDescription('Set a role allowed to create applications')
+          .setDescription('Set a role allowed to manage applications')
           .addRoleOption(option =>
             option
               .setName('role')
-              .setDescription('Role allowed to create applications')
+              .setDescription('Role allowed to create and edit applications')
               .setRequired(true)
           )
       )
       .addSubcommand(subcommand =>
         subcommand
           .setName('clearcreatorrole')
-          .setDescription('Require Administrator to create applications')
+          .setDescription('Require Administrator to manage applications')
       )
       .addSubcommand(subcommand =>
         subcommand
@@ -316,21 +320,18 @@ module.exports = {
           [interaction.guild.id]
         );
 
-      const canCreate =
-        Boolean(
-          access?.applicationCreatorRoleId &&
-          interaction.member.roles.cache.has(
-            access.applicationCreatorRoleId
-          )
+      const canManage =
+        canManageApplications(
+          interaction.member,
+          access?.applicationCreatorRoleId
         );
 
       if (
-        !isAdministrator &&
-        !(subcommand === 'create' && !group && canCreate)
+        !canManage
       ) {
         return interaction.editReply({
           content:
-            'You need Administrator permission or the configured application creator role.'
+            'You need Administrator permission or the configured application management role.'
         });
       }
 
@@ -365,7 +366,7 @@ module.exports = {
         );
 
         return interaction.editReply({
-          content: `${role} can now create applications.`
+          content: `${role} can now create and manage applications.`
         });
       }
 
@@ -388,7 +389,7 @@ module.exports = {
         );
 
         return interaction.editReply({
-          content: 'Only administrators can now create applications.'
+          content: 'Only administrators can now manage applications.'
         });
       }
 
