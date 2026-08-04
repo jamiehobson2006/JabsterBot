@@ -10,6 +10,10 @@ const {
   logCommand
 } = require('../utils/logger');
 
+const {
+  shouldLogCommand
+} = require('../utils/commandAudit');
+
 function isStaleInteractionError(error) {
   return (
     error?.code === 10062 ||
@@ -162,12 +166,14 @@ module.exports = {
         client
       );
 
-      await logCommand(
-        client,
-        interaction
-      ).catch(error =>
-        console.error('Command audit log error:', error)
-      );
+      if (shouldLogCommand(command, interaction)) {
+        await logCommand(
+          client,
+          interaction
+        ).catch(error =>
+          console.error('Command audit log error:', error)
+        );
+      }
 
     } catch (error) {
       console.error(
