@@ -22,6 +22,8 @@ process.env.DATABASE_PATH =
   path.join(tempDir, 'database.db');
 
 const {
+  all,
+  run,
   initDatabase
 } = require('../database');
 
@@ -29,6 +31,8 @@ const {
   createFeedbackRecord,
   getFeedback,
   listFeedback,
+  publishFeedback,
+  sendFeedbackPrompt,
   submitFeedback
 } = require('../utils/ticketFeedback');
 
@@ -81,3 +85,63 @@ test(
     );
   }
 );
+
+test('every ticket category sends and publishes feedback through the shared feedback system', async () => {
+  initDatabase();
+
+  run(
+    `INSERT INTO guild_settings (guildId, ticketFeedbackChannelId)
+     VALUES ('feedback-guild', 'feedback-channel')
+     ON CONFLICT(guildId) DO UPDATE SET ticketFeedbackChannelId = excluded.ticketFeedbackChannelId`
+  );
+
+  const directMessages = [];
+  const published = [];
+  const client = {
+    users: {
+      fetch: async () => ({
+        send: async payload => directMessages.push(payload)
+      })
+    },
+    channels: {
+      fetch: async () => ({
+        isTextBased: () => true,
+        send: async payload => published.push(payload)
+      })
+    }
+  };
+
+  for (const type of ['support', 'bug', 'giveaway', 'partnership', 'application']) {
+    const record = createFeedbackRecord({
+      ticket: {
+        guildId: 'feedback-guild',
+        channelId: `ticket-${type}`,
+        type,
+        userId: `creator-${type}`
+      },
+      closedBy: { id: 'staff-1' },
+      closeReason: `Closed ${type} ticket.`
+    });
+
+    assert.equal(await sendFeedbackPrompt({ client, feedback: record }), true);
+
+    const submitted = submitFeedback({
+      id: record.id,
+      userId: `creator-${type}`,
+      rating: 4,
+      feedback: `Feedback for ${type}.`
+    });
+
+    assert.equal(await publishFeedback(client, submitted), true);
+  }
+
+  assert.equal(directMessages.length, 5);
+  assert.equal(published.length, 5);
+
+  const feedbackTypes = published.map(payload =>
+    payload.embeds[0].data.fields.find(field => field.name === 'Ticket Type').value
+  );
+
+  assert.deepEqual(feedbackTypes, ['support', 'bug', 'giveaway', 'partnership', 'application']);
+  assert.equal(all('SELECT * FROM ticket_feedback WHERE guildId = ?', ['feedback-guild']).length, 5);
+});

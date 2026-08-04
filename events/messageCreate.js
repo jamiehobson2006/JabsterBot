@@ -14,9 +14,17 @@ const {
 
 const {
   findCensoredTerm,
+  getCensorBypassCategories,
+  getCensorBypassChannels,
+  getCensorBypassRoles,
   getCensorSettings,
   listCensorTerms
 } = require('../utils/censor');
+
+const {
+  hasWhitelistedRole,
+  isWhitelistedChannel
+} = require('../utils/contentFilterWhitelist');
 
 const {
   suppressMessageDelete,
@@ -32,6 +40,8 @@ const {
 } = require('../utils/tickets/permissions');
 
 const {
+  getLinkCategoryWhitelist,
+  getLinkChannelWhitelist,
   getLinkWhitelist
 } = require('../utils/linkWhitelist');
 
@@ -76,8 +86,14 @@ function canBypassLinkBlock(
     return true;
   }
 
-  return getLinkWhitelist(settings)
-    .some(roleId => message.member?.roles.cache.has(roleId));
+  return hasWhitelistedRole(
+    message.member,
+    getLinkWhitelist(settings)
+  ) || isWhitelistedChannel(
+    message,
+    getLinkChannelWhitelist(settings),
+    getLinkCategoryWhitelist(settings)
+  );
 }
 
 async function handleLinkBlock(
@@ -104,14 +120,18 @@ async function handleLinkBlock(
       [message.channel.id]
     );
 
-  if (ticket?.type === 'partnership') {
+  if (['partnership', 'application'].includes(ticket?.type)) {
     return false;
   }
 
   const settings =
     get(
 
-      `SELECT linkBlockEnabled, linkBypassRoleId, linkBypassRoleIds
+      `SELECT linkBlockEnabled,
+              linkBypassRoleId,
+              linkBypassRoleIds,
+              linkBypassChannelIds,
+              linkBypassCategoryIds
        FROM guild_settings
        WHERE guildId = ?`,
 
@@ -207,6 +227,17 @@ async function handleCensor(
 
   if (Number(settings?.censorEnabled || 0) !== 1) {
 
+    return false;
+  }
+
+  if (
+    hasWhitelistedRole(message.member, getCensorBypassRoles(settings)) ||
+    isWhitelistedChannel(
+      message,
+      getCensorBypassChannels(settings),
+      getCensorBypassCategories(settings)
+    )
+  ) {
     return false;
   }
 

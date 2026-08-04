@@ -763,9 +763,19 @@ function createGuildSettingsTable() {
 
       linkBypassRoleIds TEXT,
 
+      linkBypassChannelIds TEXT,
+
+      linkBypassCategoryIds TEXT,
+
       censorEnabled INTEGER DEFAULT 0,
 
-      censorRoleId TEXT
+      censorRoleId TEXT,
+
+      censorBypassRoleIds TEXT,
+
+      censorBypassChannelIds TEXT,
+
+      censorBypassCategoryIds TEXT
     )
   `);
 
@@ -803,8 +813,13 @@ function createGuildSettingsTable() {
     ['linkBlockEnabled', 'INTEGER DEFAULT 0'],
     ['linkBypassRoleId', 'TEXT'],
     ['linkBypassRoleIds', 'TEXT'],
+    ['linkBypassChannelIds', 'TEXT'],
+    ['linkBypassCategoryIds', 'TEXT'],
     ['censorEnabled', 'INTEGER DEFAULT 0'],
-    ['censorRoleId', 'TEXT']
+    ['censorRoleId', 'TEXT'],
+    ['censorBypassRoleIds', 'TEXT'],
+    ['censorBypassChannelIds', 'TEXT'],
+    ['censorBypassCategoryIds', 'TEXT']
   ];
 
   for (

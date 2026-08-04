@@ -2,6 +2,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  EmbedBuilder,
   MessageFlags,
   ModalBuilder,
   TextInputBuilder,
@@ -23,11 +24,7 @@ const {
 } = require('../utils/tickets/createTicket');
 
 function isStaleInteractionError(error) {
-  return (
-    error?.code === 10062 ||
-    error?.code === 40060 ||
-    error?.code === 10015
-  );
+  return error?.code === 10062 || error?.code === 40060 || error?.code === 10015;
 }
 
 function cleanAnswer(answer) {
@@ -39,308 +36,227 @@ function cleanAnswer(answer) {
 }
 
 function getDraftId(customId, prefix) {
-  const id =
-    String(customId || '').slice(prefix.length);
-
-  return /^[a-f0-9-]{36}$/i.test(id)
-    ? id
-    : null;
+  const id = String(customId || '').slice(prefix.length);
+  return /^[a-f0-9-]{36}$/i.test(id) ? id : null;
 }
 
-async function replyHidden(interaction, content, components = []) {
+function isDirectMessage(interaction) {
+  return !interaction.guild;
+}
+
+async function replyPrivate(interaction, content, components = []) {
   if (interaction.deferred || interaction.replied) {
-    return interaction.editReply({
-      content,
-      components
-    });
+    return interaction.editReply({ content, components });
   }
 
-  return interaction.reply({
-    content,
-    components,
-    flags: MessageFlags.Ephemeral
-  });
+  const payload = { content, components };
+  if (!isDirectMessage(interaction)) {
+    payload.flags = MessageFlags.Ephemeral;
+  }
+
+  return interaction.reply(payload);
 }
 
 function getDraftContext(interaction, draftId) {
-  const draft =
-    getDraft(draftId);
+  const draft = getDraft(draftId);
 
-  if (
-    !draft ||
-    draft.guildId !== interaction.guild.id ||
-    draft.userId !== interaction.user.id
-  ) {
+  if (!draft || draft.userId !== interaction.user.id) {
     return null;
   }
 
-  const form =
-    getFormById(interaction.guild.id, draft.formId);
-
-  if (!form || !form.enabled) {
+  if (interaction.guild && draft.guildId !== interaction.guild.id) {
     return null;
   }
 
-  const questions =
-    getQuestions(form.id);
+  const form = getFormById(draft.guildId, draft.formId);
+  if (!form || !form.enabled) return null;
 
   return {
     draft,
     form,
-    questions
+    questions: getQuestions(form.id)
   };
 }
 
 async function showApplicationPage(interaction, draftId) {
-  const context =
-    getDraftContext(interaction, draftId);
-
+  const context = getDraftContext(interaction, draftId);
   if (!context) {
-    return replyHidden(
-      interaction,
-      'This application session has expired. Please start again.'
-    );
+    return replyPrivate(interaction, 'This application session has expired. Please start again from the ticket panel.');
   }
 
-  const {
-    draft,
-    form,
-    questions
-  } = context;
-
-  const start =
-    Number(draft.nextQuestionIndex || 0);
-
-  const pageQuestions =
-    questions.slice(
-      start,
-      start + QUESTIONS_PER_MODAL
-    );
+  const { draft, form, questions } = context;
+  const start = Number(draft.nextQuestionIndex || 0);
+  const pageQuestions = questions.slice(start, start + QUESTIONS_PER_MODAL);
 
   if (!pageQuestions.length) {
-    return replyHidden(
-      interaction,
-      'This application has no remaining questions.'
-    );
+    return replyPrivate(interaction, 'This application has no remaining questions.');
   }
 
-  const pageNumber =
-    Math.floor(start / QUESTIONS_PER_MODAL) + 1;
-
-  const pageCount =
-    Math.ceil(questions.length / QUESTIONS_PER_MODAL);
-
-  const modal =
-    new ModalBuilder()
-      .setCustomId(`application_page_${draft.id}`)
-      .setTitle(
-        `${form.name} (${pageNumber}/${pageCount})`.slice(0, 45)
-      );
+  const pageNumber = Math.floor(start / QUESTIONS_PER_MODAL) + 1;
+  const pageCount = Math.ceil(questions.length / QUESTIONS_PER_MODAL);
+  const modal = new ModalBuilder()
+    .setCustomId(`application_page_${draft.id}`)
+    .setTitle(`${form.name} (${pageNumber}/${pageCount})`.slice(0, 45));
 
   for (const question of pageQuestions) {
-    const label =
-      `${question.position}. ${question.question}`
-        .slice(0, 45);
+    const input = new TextInputBuilder()
+      .setCustomId(`q_${question.id}`)
+      .setLabel(`${question.position}. ${question.question}`.slice(0, 45) || `Question ${question.position}`)
+      .setPlaceholder(question.required ? 'Your answer is required' : 'Optional answer')
+      .setStyle(TextInputStyle.Paragraph)
+      .setMaxLength(1000)
+      .setRequired(Boolean(question.required));
 
-    const input =
-      new TextInputBuilder()
-        .setCustomId(`q_${question.id}`)
-        .setLabel(label || `Question ${question.position}`)
-        .setPlaceholder(
-          question.required
-            ? 'Your answer is required'
-            : 'Optional answer'
-        )
-        .setStyle(TextInputStyle.Paragraph)
-        .setMaxLength(1000)
-        .setRequired(Boolean(question.required));
-
-    modal.addComponents(
-      new ActionRowBuilder()
-        .addComponents(input)
-    );
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
   }
 
   return interaction.showModal(modal);
 }
 
 async function handleApplicationSelect(interaction) {
-  const formId =
-    Number(interaction.values?.[0]);
+  if (!interaction.guild) {
+    return replyPrivate(interaction, 'Applications must be started from the server ticket panel.');
+  }
 
-  const form =
-    getFormById(interaction.guild.id, formId);
+  const formId = Number(interaction.values?.[0]);
+  const form = getFormById(interaction.guild.id, formId);
 
   if (!form || !form.enabled) {
-    return replyHidden(
-      interaction,
-      'That application is not available.'
-    );
+    return replyPrivate(interaction, 'That application is not available.');
   }
 
-  const questions =
-    getQuestions(form.id);
-
+  const questions = getQuestions(form.id);
   if (!questions.length) {
-    return replyHidden(
-      interaction,
-      'That application does not have any questions yet.'
-    );
+    return replyPrivate(interaction, 'That application does not have any questions yet.');
   }
 
-  const draft =
-    createDraft({
-      guildId: interaction.guild.id,
-      formId: form.id,
-      userId: interaction.user.id
-    });
+  const draft = createDraft({
+    guildId: interaction.guild.id,
+    formId: form.id,
+    userId: interaction.user.id
+  });
 
-  return showApplicationPage(interaction, draft.id);
+  const startButton = new ButtonBuilder()
+    .setCustomId(`application_start_${draft.id}`)
+    .setLabel('Start application')
+    .setStyle(ButtonStyle.Primary);
+
+  try {
+    await interaction.user.send({
+      embeds: [new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle(`${form.name} Application`)
+        .setDescription(form.description || 'Answer the questions below to submit your application.')
+        .addFields(
+          { name: 'Server', value: interaction.guild.name, inline: true },
+          { name: 'Questions', value: String(questions.length), inline: true }
+        )
+        .setFooter({ text: 'This application expires after 30 minutes of inactivity.' })],
+      components: [new ActionRowBuilder().addComponents(startButton)]
+    });
+  } catch {
+    deleteDraft(draft.id);
+    return replyPrivate(interaction, 'I could not send you a DM. Please enable direct messages from this server and try again.');
+  }
+
+  return replyPrivate(interaction, 'I sent you a DM. Complete the application there; a ticket will be created only after you submit every answer.');
+}
+
+async function handleApplicationStart(interaction) {
+  if (!isDirectMessage(interaction)) {
+    return replyPrivate(interaction, 'Please complete this application in my DMs.');
+  }
+
+  const draftId = getDraftId(interaction.customId, 'application_start_');
+  if (!draftId) return replyPrivate(interaction, 'This application session is invalid.');
+
+  return showApplicationPage(interaction, draftId);
 }
 
 async function handleApplicationPage(interaction) {
-  const draftId =
-    getDraftId(
-      interaction.customId,
-      'application_page_'
-    );
-
-  if (!draftId) {
-    return replyHidden(
-      interaction,
-      'This application session is invalid.'
-    );
+  if (!isDirectMessage(interaction)) {
+    return replyPrivate(interaction, 'Please complete this application in my DMs.');
   }
 
-  const context =
-    getDraftContext(interaction, draftId);
+  const draftId = getDraftId(interaction.customId, 'application_page_');
+  if (!draftId) return replyPrivate(interaction, 'This application session is invalid.');
 
+  const context = getDraftContext(interaction, draftId);
   if (!context) {
-    return replyHidden(
-      interaction,
-      'This application session has expired. Please start again.'
-    );
+    return replyPrivate(interaction, 'This application session has expired. Please start again from the ticket panel.');
   }
 
-  const {
-    draft,
-    form,
-    questions
-  } = context;
+  const { draft, form, questions } = context;
+  const start = Number(draft.nextQuestionIndex || 0);
+  const pageQuestions = questions.slice(start, start + QUESTIONS_PER_MODAL);
+  const pageAnswers = pageQuestions.map(question => ({
+    questionId: question.id,
+    question: question.question,
+    required: Boolean(question.required),
+    answer: cleanAnswer(interaction.fields.getTextInputValue(`q_${question.id}`))
+  }));
 
-  const start =
-    Number(draft.nextQuestionIndex || 0);
+  const missing = pageAnswers.find(answer => answer.required && !answer.answer);
+  if (missing) return replyPrivate(interaction, 'Please answer every required question.');
 
-  const pageQuestions =
-    questions.slice(
-      start,
-      start + QUESTIONS_PER_MODAL
-    );
-
-  const pageAnswers =
-    pageQuestions.map(question => ({
-      questionId: question.id,
-      question: question.question,
-      required: Boolean(question.required),
-      answer: cleanAnswer(
-        interaction.fields.getTextInputValue(`q_${question.id}`)
-      )
-    }));
-
-  const missing =
-    pageAnswers.find(answer =>
-      answer.required && !answer.answer
-    );
-
-  if (missing) {
-    return replyHidden(
-      interaction,
-      'Please answer every required question.'
-    );
-  }
-
-  const answeredIds =
-    new Set(pageAnswers.map(answer => answer.questionId));
-
+  const answeredIds = new Set(pageAnswers.map(answer => answer.questionId));
   const answers = [
-    ...draft.answers.filter(answer =>
-      !answeredIds.has(answer.questionId)
-    ),
+    ...draft.answers.filter(answer => !answeredIds.has(answer.questionId)),
     ...pageAnswers
   ];
+  const nextQuestionIndex = start + pageQuestions.length;
 
-  const nextQuestionIndex =
-    start + pageQuestions.length;
-
-  saveDraft({
-    id: draft.id,
-    answers,
-    nextQuestionIndex
-  });
+  saveDraft({ id: draft.id, answers, nextQuestionIndex });
 
   if (nextQuestionIndex < questions.length) {
-    const button =
-      new ButtonBuilder()
-        .setCustomId(`application_continue_${draft.id}`)
-        .setLabel(
-          `Continue (${nextQuestionIndex}/${questions.length})`
-        )
-        .setStyle(ButtonStyle.Primary);
+    const button = new ButtonBuilder()
+      .setCustomId(`application_continue_${draft.id}`)
+      .setLabel(`Continue (${nextQuestionIndex}/${questions.length})`)
+      .setStyle(ButtonStyle.Primary);
 
-    return replyHidden(
+    return replyPrivate(
       interaction,
       'Your answers were saved. Continue when you are ready.',
-      [
-        new ActionRowBuilder()
-          .addComponents(button)
-      ]
+      [new ActionRowBuilder().addComponents(button)]
     );
   }
 
-  await interaction.deferReply({
-    flags: MessageFlags.Ephemeral
-  });
+  await interaction.deferReply();
 
   try {
-    const result =
-      await createTicket({
-        interaction,
-        type: 'application',
-        reason: form.name,
-        application: {
-          form,
-          answers
-        }
-      });
+    const guild = await interaction.client.guilds.fetch(draft.guildId).catch(() => null);
+    if (!guild) throw new Error('That server is no longer available.');
 
-    deleteDraft(draft.id);
+    const member = await guild.members.fetch(interaction.user.id).catch(() => null);
+    if (!member) throw new Error('You are no longer a member of that server.');
 
-    return interaction.editReply({
-      content: `Application ticket created: ${result.channel}`
+    const result = await createTicket({
+      interaction: {
+        client: interaction.client,
+        guild,
+        user: interaction.user
+      },
+      type: 'application',
+      reason: form.name,
+      application: { form, answers }
     });
 
+    deleteDraft(draft.id);
+    return interaction.editReply({ content: `Your application has been submitted: ${result.channel}` });
   } catch (err) {
     return interaction.editReply({
-      content:
-        err.message ||
-        'Failed to create application ticket.'
+      content: err.message || 'Failed to create your application ticket. Your answers are saved; please start the application again from the ticket panel.'
     });
   }
 }
 
 async function handleApplicationContinue(interaction) {
-  const draftId =
-    getDraftId(
-      interaction.customId,
-      'application_continue_'
-    );
-
-  if (!draftId) {
-    return replyHidden(
-      interaction,
-      'This application session is invalid.'
-    );
+  if (!isDirectMessage(interaction)) {
+    return replyPrivate(interaction, 'Please complete this application in my DMs.');
   }
+
+  const draftId = getDraftId(interaction.customId, 'application_continue_');
+  if (!draftId) return replyPrivate(interaction, 'This application session is invalid.');
 
   return showApplicationPage(interaction, draftId);
 }
@@ -350,38 +266,29 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      if (
-        interaction.isStringSelectMenu() &&
-        interaction.customId === 'application_select'
-      ) {
+      if (interaction.isStringSelectMenu() && interaction.customId === 'application_select') {
         return handleApplicationSelect(interaction);
       }
 
-      if (
-        interaction.isButton() &&
-        interaction.customId.startsWith('application_continue_')
-      ) {
+      if (interaction.isButton() && interaction.customId.startsWith('application_start_')) {
+        return handleApplicationStart(interaction);
+      }
+
+      if (interaction.isButton() && interaction.customId.startsWith('application_continue_')) {
         return handleApplicationContinue(interaction);
       }
 
-      if (
-        interaction.isModalSubmit() &&
-        interaction.customId.startsWith('application_page_')
-      ) {
+      if (interaction.isModalSubmit() && interaction.customId.startsWith('application_page_')) {
         return handleApplicationPage(interaction);
       }
 
       return null;
-
     } catch (err) {
       if (!isStaleInteractionError(err)) {
         console.error('Application Ticket Error:', err);
       }
 
-      return replyHidden(
-        interaction,
-        'Application ticket system error.'
-      ).catch(() => null);
+      return replyPrivate(interaction, 'Application ticket system error.').catch(() => null);
     }
   }
 };

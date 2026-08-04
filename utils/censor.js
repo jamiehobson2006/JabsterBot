@@ -4,6 +4,10 @@ const {
   run
 } = require('../database');
 
+const {
+  parseIdList
+} = require('./contentFilterWhitelist');
+
 function normalizeCensorTerm(value) {
   return String(value || '')
     .normalize('NFKC')
@@ -41,11 +45,27 @@ function findCensoredTerm(content, terms) {
 
 function getCensorSettings(guildId) {
   return get(
-    `SELECT censorEnabled, censorRoleId
+    `SELECT censorEnabled,
+            censorRoleId,
+            censorBypassRoleIds,
+            censorBypassChannelIds,
+            censorBypassCategoryIds
      FROM guild_settings
      WHERE guildId = ?`,
     [guildId]
   );
+}
+
+function getCensorBypassRoles(settings) {
+  return parseIdList(settings?.censorBypassRoleIds);
+}
+
+function getCensorBypassChannels(settings) {
+  return parseIdList(settings?.censorBypassChannelIds);
+}
+
+function getCensorBypassCategories(settings) {
+  return parseIdList(settings?.censorBypassCategoryIds);
 }
 
 function listCensorTerms(guildId) {
@@ -97,6 +117,9 @@ function removeCensorTerm(guildId, word) {
 module.exports = {
   addCensorTerm,
   findCensoredTerm,
+  getCensorBypassCategories,
+  getCensorBypassChannels,
+  getCensorBypassRoles,
   getCensorSettings,
   listCensorTerms,
   normalizeCensorTerm,

@@ -116,7 +116,7 @@ async function sendFeedbackPrompt({
 
   const payload = {
     content:
-      'Your ticket has been closed. Please rate the support you received and optionally leave feedback.',
+      'Your ticket has been closed. Please rate the help you received and optionally leave feedback.',
     components: [feedbackButtons(feedback.id)]
   };
 

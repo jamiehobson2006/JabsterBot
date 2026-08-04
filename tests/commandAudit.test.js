@@ -19,6 +19,7 @@ test('command audit logs server-changing commands and ignores normal utility com
   assert.equal(shouldLogCommand({}, interaction('rank')), false);
   assert.equal(shouldLogCommand({}, interaction('warn')), true);
   assert.equal(shouldLogCommand({}, interaction('linkblock', 'whitelist-add')), true);
+  assert.equal(shouldLogCommand({}, interaction('censor', 'bypass-channel-list')), false);
   assert.equal(shouldLogCommand({}, interaction('leveling', 'mutechannel')), true);
   assert.equal(shouldLogCommand({}, interaction('leveling', 'settings')), false);
   assert.equal(shouldLogCommand({}, interaction('ticketfeedback', 'list')), false);

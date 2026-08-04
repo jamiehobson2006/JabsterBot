@@ -40,6 +40,11 @@ const MUTATING_COMMANDS = new Set([
 ]);
 
 const READ_ONLY_SUBCOMMANDS = new Set([
+  'bypass-category-list',
+  'bypass-channel-list',
+  'bypass-role-list',
+  'category-list',
+  'channel-list',
   'debug',
   'info',
   'list',

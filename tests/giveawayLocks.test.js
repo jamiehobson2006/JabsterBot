@@ -30,14 +30,14 @@ const {
   claimDueGiveaways
 } = require('../utils/giveaways/giveawayLoop');
 
-function addGiveaway({ messageId, now, ending = 0, endingAt = null }) {
+function addGiveaway({ messageId, now, endsAt = now - 1, ending = 0, endingAt = null }) {
   run(
     `INSERT INTO giveaways (
        messageId, guildId, channelId, hostId, prize,
        endsAt, ended, paused, ending, endingAt, createdAt
      )
      VALUES (?, 'guild-1', 'channel-1', 'host-1', 'Prize', ?, 0, 0, ?, ?, ?)`,
-    [messageId, now - 1, ending, endingAt, now - 1000]
+    [messageId, endsAt, ending, endingAt, now - 1000]
   );
 }
 
@@ -110,6 +110,28 @@ test('a stale lock with saved winners is marked complete without another announc
   );
 
   assert.equal(giveaway.ended, 1);
+  assert.equal(giveaway.ending, 0);
+  assert.equal(giveaway.endingAt, null);
+});
+
+test('an active future giveaway is unchanged by a restart-time due scan', () => {
+  initDatabase();
+
+  const now = 1_020_000;
+  addGiveaway({
+    messageId: 'future-giveaway',
+    now,
+    endsAt: now + (60 * 60 * 1000)
+  });
+
+  assert.deepEqual(claimDueGiveaways(now), []);
+
+  const giveaway = get(
+    'SELECT ended, ending, endingAt FROM giveaways WHERE messageId = ?',
+    ['future-giveaway']
+  );
+
+  assert.equal(giveaway.ended, 0);
   assert.equal(giveaway.ending, 0);
   assert.equal(giveaway.endingAt, null);
 });

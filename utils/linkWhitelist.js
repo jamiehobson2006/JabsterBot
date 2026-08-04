@@ -1,28 +1,30 @@
-function parseStoredRoleIds(value) {
-  if (!value) return [];
-
-  try {
-    const parsed = JSON.parse(value);
-    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
-  } catch {
-    // Accept comma-separated values saved by an older configuration.
-  }
-
-  return String(value).split(',').map(id => id.trim()).filter(Boolean);
-}
+const {
+  parseIdList,
+  serializeIdList
+} = require('./contentFilterWhitelist');
 
 function getLinkWhitelist(settings) {
   return [...new Set([
     settings?.linkBypassRoleId,
-    ...parseStoredRoleIds(settings?.linkBypassRoleIds)
+    ...parseIdList(settings?.linkBypassRoleIds)
   ].filter(Boolean))];
 }
 
 function serializeLinkWhitelist(roleIds) {
-  return JSON.stringify([...new Set(roleIds.map(String).filter(Boolean))]);
+  return serializeIdList(roleIds);
+}
+
+function getLinkChannelWhitelist(settings) {
+  return parseIdList(settings?.linkBypassChannelIds);
+}
+
+function getLinkCategoryWhitelist(settings) {
+  return parseIdList(settings?.linkBypassCategoryIds);
 }
 
 module.exports = {
+  getLinkCategoryWhitelist,
+  getLinkChannelWhitelist,
   getLinkWhitelist,
   serializeLinkWhitelist
 };
