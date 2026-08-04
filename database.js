@@ -1,9 +1,12 @@
 ﻿const Database =
   require('better-sqlite3');
 
+const path =
+  require('node:path');
+
 const databasePath =
   process.env.DATABASE_PATH ||
-  './database.db';
+  path.join(__dirname, 'database.db');
 
 const db =
   new Database(databasePath);
@@ -159,6 +162,14 @@ function checkDatabaseIntegrity() {
       'SQLite integrity check failed:',
       err.message
     );
+  }
+}
+
+function checkpointDatabase() {
+  try {
+    db.pragma('wal_checkpoint(FULL)');
+  } catch (err) {
+    console.warn('SQLite checkpoint failed:', err.message);
   }
 }
 
@@ -2364,5 +2375,6 @@ module.exports = {
 
   startDatabaseCleanup,
 
-  checkDatabaseIntegrity
+  checkDatabaseIntegrity,
+  checkpointDatabase
 };

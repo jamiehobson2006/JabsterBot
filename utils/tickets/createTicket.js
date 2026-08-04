@@ -16,7 +16,8 @@ const {
 
 const {
   get,
-  run
+  run,
+  checkpointDatabase
 } = require('../../database');
 
 const ticketTypes =
@@ -311,6 +312,18 @@ async function createTicket({
       permissionOverwrites:
         overwrites,
 
+      topic:
+        [
+          'Jabster Studios ticket',
+          `type:${safeType}`,
+          `owner:${interaction.user.id}`,
+          application?.form?.id
+            ? `form:${application.form.id}`
+            : null
+        ]
+          .filter(Boolean)
+          .join(' | '),
+
       reason:
 
         `Ticket created by ${interaction.user.tag}`
@@ -600,6 +613,8 @@ async function createTicket({
       ]
     );
   }
+
+  checkpointDatabase();
 
   // ==========================================
   // ✅ RETURN

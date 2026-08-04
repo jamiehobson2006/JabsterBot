@@ -3,7 +3,6 @@ const {
 } = require('discord.js');
 
 const {
-  get,
   run
 } = require('../../database');
 
@@ -24,6 +23,10 @@ const {
   createFeedbackRecord,
   sendFeedbackPrompt
 } = require('../ticketFeedback');
+
+const {
+  findOrRecoverOpenTicket
+} = require('./recoverTicket');
 
 function cleanReason(reason) {
   return String(reason || '')
@@ -84,7 +87,8 @@ async function disableTicketButtons(channel, client) {
 
 async function closeTicket({
   interaction,
-  reason
+  reason,
+  starterMessageId = null
 }) {
   if (!interaction?.guild || !interaction.channel) {
     throw new Error('Invalid ticket interaction.');
@@ -97,14 +101,12 @@ async function closeTicket({
     throw new Error('A close reason of at least 3 characters is required.');
   }
 
-  const ticket =
-    get(
-      `SELECT *
-       FROM tickets
-       WHERE channelId = ?
-       AND status = 'OPEN'`,
-      [interaction.channel.id]
-    );
+  const ticket = await findOrRecoverOpenTicket({
+    guild: interaction.guild,
+    channel: interaction.channel,
+    client: interaction.client,
+    starterMessageId
+  });
 
   if (!ticket) {
     throw new Error('Invalid ticket.');
@@ -133,7 +135,7 @@ async function closeTicket({
            closedAt = ?,
            closeReason = ?
        WHERE channelId = ?
-       AND status = 'OPEN'`,
+       AND UPPER(status) = 'OPEN'`,
       [
         interaction.user.id,
         closedAt,

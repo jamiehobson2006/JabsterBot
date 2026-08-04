@@ -29,11 +29,17 @@ const {
   addQuestion,
   createDraft,
   createForm,
+  deleteForm,
   getDraft,
   getFormByName,
   getQuestions,
   saveDraft
 } = require('../utils/applications');
+
+const {
+  buildApplicationPreview,
+  modalQuestionLabel
+} = require('../events/applicationTickets');
 
 test(
   'applications support multiple modal pages and remember their reviewer role',
@@ -88,5 +94,54 @@ test(
 
     assert.equal(resumed.nextQuestionIndex, 5);
     assert.equal(resumed.answers.length, 5);
+  }
+);
+
+test(
+  'application previews retain complete question text before the answer modal opens',
+  () => {
+    const question =
+      'Tell us about the experience that best prepares you for this role, including what you learned and how it applies here.';
+
+    const preview = buildApplicationPreview(
+      {
+        name: 'Staff Application',
+        description: 'Take your time and answer honestly.'
+      },
+      [{
+        position: 1,
+        question,
+        required: true
+      }],
+      1,
+      1
+    ).toJSON();
+
+    assert.ok(preview.description.includes(question));
+    assert.equal(modalQuestionLabel({ position: 1 }), 'Question 1 (see prompt)');
+    assert.ok(modalQuestionLabel({ position: 1 }).length <= 45);
+  }
+);
+
+test(
+  'application form deletions remain deleted when database initialization runs again',
+  () => {
+    initDatabase();
+
+    createForm({
+      guildId: 'guild-persistence',
+      name: 'Temporary Application',
+      createdBy: 'admin-persistence'
+    });
+
+    const form = getFormByName('guild-persistence', 'Temporary Application');
+    deleteForm(form.id);
+
+    initDatabase();
+
+    assert.equal(
+      getFormByName('guild-persistence', 'Temporary Application'),
+      undefined
+    );
   }
 );

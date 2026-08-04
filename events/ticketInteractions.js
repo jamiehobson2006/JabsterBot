@@ -75,7 +75,8 @@ async function handleCloseModal(interaction) {
     const result =
       await closeTicket({
         interaction,
-        reason: interaction.fields.getTextInputValue('ticket_close_reason')
+        reason: interaction.fields.getTextInputValue('ticket_close_reason'),
+        starterMessageId: getStarterMessageId(interaction.customId)
       });
 
     return safelyReply(
@@ -94,10 +95,19 @@ async function handleCloseModal(interaction) {
   }
 }
 
-function buildCloseModal() {
+function getStarterMessageId(customId) {
+  return String(customId || '')
+    .match(/^ticket_close_modal_(\d{16,22})$/)?.[1] || null;
+}
+
+function buildCloseModal(starterMessageId) {
+  const modalId = /^\d{16,22}$/.test(String(starterMessageId || ''))
+    ? `ticket_close_modal_${starterMessageId}`
+    : 'ticket_close_modal';
+
   const modal =
     new ModalBuilder()
-      .setCustomId('ticket_close_modal')
+      .setCustomId(modalId)
       .setTitle('Close Ticket');
 
   const reason =
@@ -138,7 +148,7 @@ module.exports = {
 
       if (
         interaction.isModalSubmit() &&
-        interaction.customId === 'ticket_close_modal'
+        interaction.customId.startsWith('ticket_close_modal')
       ) {
         return handleCloseModal(interaction);
       }
@@ -169,7 +179,7 @@ module.exports = {
       }
 
       if (interaction.customId === 'ticket_close') {
-        return interaction.showModal(buildCloseModal());
+        return interaction.showModal(buildCloseModal(interaction.message?.id));
       }
 
     } catch (err) {

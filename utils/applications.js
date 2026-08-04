@@ -1,7 +1,8 @@
 const {
   all,
   get,
-  run
+  run,
+  checkpointDatabase
 } = require('../database');
 
 const crypto =
@@ -126,7 +127,7 @@ function createForm({
   const now =
     Date.now();
 
-  return run(
+  const result = run(
     `INSERT INTO application_forms (
        guildId,
        name,
@@ -150,6 +151,9 @@ function createForm({
       now
     ]
   );
+
+  checkpointDatabase();
+  return result;
 }
 
 function updateForm(
@@ -199,12 +203,15 @@ function updateForm(
   params.push(Date.now());
   params.push(formId);
 
-  return run(
+  const result = run(
     `UPDATE application_forms
      SET ${updates.join(', ')}
      WHERE id = ?`,
     params
   );
+
+  checkpointDatabase();
+  return result;
 }
 
 function deleteForm(
@@ -216,11 +223,14 @@ function deleteForm(
     [formId]
   );
 
-  return run(
+  const result = run(
     `DELETE FROM application_forms
      WHERE id = ?`,
     [formId]
   );
+
+  checkpointDatabase();
+  return result;
 }
 
 function addQuestion({
@@ -245,7 +255,7 @@ function addQuestion({
     throw new Error('Question is too short.');
   }
 
-  return run(
+  const result = run(
     `INSERT INTO application_questions (
        guildId,
        formId,
@@ -264,6 +274,9 @@ function addQuestion({
       Date.now()
     ]
   );
+
+  checkpointDatabase();
+  return result;
 }
 
 function parseDraftAnswers(
@@ -327,6 +340,8 @@ function createDraft({
     ]
   );
 
+  checkpointDatabase();
+
   return getDraft(id);
 }
 
@@ -378,17 +393,22 @@ function saveDraft({
     ]
   );
 
+  checkpointDatabase();
+
   return getDraft(id);
 }
 
 function deleteDraft(
   id
 ) {
-  return run(
+  const result = run(
     `DELETE FROM application_drafts
      WHERE id = ?`,
     [id]
   );
+
+  checkpointDatabase();
+  return result;
 }
 
 function removeQuestion(
@@ -431,6 +451,8 @@ function removeQuestion(
       ]
     );
   });
+
+  checkpointDatabase();
 
   return question;
 }

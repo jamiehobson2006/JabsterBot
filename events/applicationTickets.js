@@ -78,7 +78,34 @@ function getDraftContext(interaction, draftId) {
   };
 }
 
-async function showApplicationPage(interaction, draftId) {
+function buildApplicationPreview(form, questions, pageNumber, pageCount) {
+  const questionList = questions
+    .map(question => [
+      `**${question.position}. ${question.question}**`,
+      question.required ? 'Required' : 'Optional'
+    ].join('\n'))
+    .join('\n\n');
+
+  return new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle(`Jabster Studios | ${form.name}`)
+    .setDescription([
+      form.description || 'Please answer each question carefully.',
+      '**Application Questions**',
+      questionList
+    ].join('\n\n'))
+    .addFields(
+      { name: 'Page', value: `${pageNumber} of ${pageCount}`, inline: true },
+      { name: 'Questions', value: String(questions.length), inline: true }
+    )
+    .setFooter({ text: 'Review the full questions, then select Answer this page.' });
+}
+
+function modalQuestionLabel(question) {
+  return `Question ${question.position} (see prompt)`;
+}
+
+async function showApplicationPreview(interaction, draftId) {
   const context = getDraftContext(interaction, draftId);
   if (!context) {
     return replyPrivate(interaction, 'This application session has expired. Please start again from the ticket panel.');
@@ -94,14 +121,42 @@ async function showApplicationPage(interaction, draftId) {
 
   const pageNumber = Math.floor(start / QUESTIONS_PER_MODAL) + 1;
   const pageCount = Math.ceil(questions.length / QUESTIONS_PER_MODAL);
+  const answerButton = new ButtonBuilder()
+    .setCustomId(`application_open_${draft.id}`)
+    .setLabel(`Answer page ${pageNumber}`)
+    .setStyle(ButtonStyle.Primary);
+
+  return interaction.update({
+    content: null,
+    embeds: [buildApplicationPreview(form, pageQuestions, pageNumber, pageCount)],
+    components: [new ActionRowBuilder().addComponents(answerButton)]
+  });
+}
+
+async function showApplicationModal(interaction, draftId) {
+  const context = getDraftContext(interaction, draftId);
+  if (!context) {
+    return replyPrivate(interaction, 'This application session has expired. Please start again from the ticket panel.');
+  }
+
+  const { draft, questions } = context;
+  const start = Number(draft.nextQuestionIndex || 0);
+  const pageQuestions = questions.slice(start, start + QUESTIONS_PER_MODAL);
+
+  if (!pageQuestions.length) {
+    return replyPrivate(interaction, 'This application has no remaining questions.');
+  }
+
+  const pageNumber = Math.floor(start / QUESTIONS_PER_MODAL) + 1;
+  const pageCount = Math.ceil(questions.length / QUESTIONS_PER_MODAL);
   const modal = new ModalBuilder()
     .setCustomId(`application_page_${draft.id}`)
-    .setTitle(`${form.name} (${pageNumber}/${pageCount})`.slice(0, 45));
+    .setTitle(`Application (${pageNumber}/${pageCount})`);
 
   for (const question of pageQuestions) {
     const input = new TextInputBuilder()
       .setCustomId(`q_${question.id}`)
-      .setLabel(`${question.position}. ${question.question}`.slice(0, 45) || `Question ${question.position}`)
+      .setLabel(modalQuestionLabel(question))
       .setPlaceholder(question.required ? 'Your answer is required' : 'Optional answer')
       .setStyle(TextInputStyle.Paragraph)
       .setMaxLength(1000)
@@ -145,8 +200,8 @@ async function handleApplicationSelect(interaction) {
     await interaction.user.send({
       embeds: [new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle(`${form.name} Application`)
-        .setDescription(form.description || 'Answer the questions below to submit your application.')
+        .setTitle(`Jabster Studios | ${form.name}`)
+        .setDescription(form.description || 'Review each page carefully before submitting your answers.')
         .addFields(
           { name: 'Server', value: interaction.guild.name, inline: true },
           { name: 'Questions', value: String(questions.length), inline: true }
@@ -170,7 +225,18 @@ async function handleApplicationStart(interaction) {
   const draftId = getDraftId(interaction.customId, 'application_start_');
   if (!draftId) return replyPrivate(interaction, 'This application session is invalid.');
 
-  return showApplicationPage(interaction, draftId);
+  return showApplicationPreview(interaction, draftId);
+}
+
+async function handleApplicationOpen(interaction) {
+  if (!isDirectMessage(interaction)) {
+    return replyPrivate(interaction, 'Please complete this application in my DMs.');
+  }
+
+  const draftId = getDraftId(interaction.customId, 'application_open_');
+  if (!draftId) return replyPrivate(interaction, 'This application session is invalid.');
+
+  return showApplicationModal(interaction, draftId);
 }
 
 async function handleApplicationPage(interaction) {
@@ -258,11 +324,14 @@ async function handleApplicationContinue(interaction) {
   const draftId = getDraftId(interaction.customId, 'application_continue_');
   if (!draftId) return replyPrivate(interaction, 'This application session is invalid.');
 
-  return showApplicationPage(interaction, draftId);
+  return showApplicationPreview(interaction, draftId);
 }
 
 module.exports = {
   name: 'interactionCreate',
+
+  buildApplicationPreview,
+  modalQuestionLabel,
 
   async execute(interaction) {
     try {
@@ -272,6 +341,10 @@ module.exports = {
 
       if (interaction.isButton() && interaction.customId.startsWith('application_start_')) {
         return handleApplicationStart(interaction);
+      }
+
+      if (interaction.isButton() && interaction.customId.startsWith('application_open_')) {
+        return handleApplicationOpen(interaction);
       }
 
       if (interaction.isButton() && interaction.customId.startsWith('application_continue_')) {

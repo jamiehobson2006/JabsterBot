@@ -3,7 +3,6 @@ const {
 } = require('discord.js');
 
 const {
-  get,
   run
 } = require('../../database');
 
@@ -14,6 +13,10 @@ const {
 const {
   addClaim
 } = require('./stats');
+
+const {
+  findOrRecoverOpenTicket
+} = require('./recoverTicket');
 
 // ==================================================
 // 🧠 SAFE STRING
@@ -59,19 +62,11 @@ async function claimTicket({
   // ==============================================
   // 🔍 FETCH TICKET
   // ==============================================
-  const ticket =
-    get(
-
-      `SELECT *
-       FROM tickets
-       WHERE channelId = ?
-       AND status = 'OPEN'`,
-
-      [
-
-        interaction.channel.id
-      ]
-    );
+  const ticket = await findOrRecoverOpenTicket({
+    guild: interaction.guild,
+    channel: interaction.channel,
+    client: interaction.client
+  });
 
   if (!ticket) {
 
@@ -147,7 +142,7 @@ async function claimTicket({
 
        WHERE channelId = ?
        AND claimedBy IS NULL
-       AND status = 'OPEN'`,
+       AND UPPER(status) = 'OPEN'`,
 
       [
 
