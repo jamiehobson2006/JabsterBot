@@ -31,6 +31,10 @@ const {
   hasTicketAccess
 } = require('../utils/tickets/permissions');
 
+const {
+  getLinkWhitelist
+} = require('../utils/linkWhitelist');
+
 const LevelingService =
   require('../utils/LevelingService');
 
@@ -72,12 +76,8 @@ function canBypassLinkBlock(
     return true;
   }
 
-  return Boolean(
-    settings?.linkBypassRoleId &&
-    message.member?.roles.cache.has(
-      settings.linkBypassRoleId
-    )
-  );
+  return getLinkWhitelist(settings)
+    .some(roleId => message.member?.roles.cache.has(roleId));
 }
 
 async function handleLinkBlock(
@@ -111,7 +111,7 @@ async function handleLinkBlock(
   const settings =
     get(
 
-      `SELECT linkBlockEnabled, linkBypassRoleId
+      `SELECT linkBlockEnabled, linkBypassRoleId, linkBypassRoleIds
        FROM guild_settings
        WHERE guildId = ?`,
 

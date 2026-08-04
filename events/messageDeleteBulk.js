@@ -13,16 +13,15 @@ const {
   formatExecutor
 } = require('../utils/auditLookup');
 
+const {
+  describeDeletedMessage
+} = require('../utils/deletedMessageSummary');
+
 function formatDeletedMessage(message) {
   const author = message.author
     ? `${message.author.tag} (${message.author.id})`
     : 'Unknown author';
-  const content = message.content || '*No text content*';
-  const attachments = message.attachments?.size
-    ? ` | Attachments: ${message.attachments.size}`
-    : '';
-
-  return `[${message.id}] ${author}\n${content}${attachments}`;
+  return `[${message.id}] ${author}\n${describeDeletedMessage(message)}`;
 }
 
 module.exports = {
@@ -54,7 +53,7 @@ module.exports = {
 
       const preview = deletedMessages
         .slice(0, 5)
-        .map(message => `- ${message.author?.tag || 'Unknown'}: ${message.content || '*No text content*'}`)
+        .map(message => `- ${message.author?.tag || 'Unknown'}: ${describeDeletedMessage(message)}`)
         .join('\n');
 
       await logAudit(
@@ -84,7 +83,7 @@ module.exports = {
             channel: `<#${channel.id}>`,
             reason: audit?.reason || undefined,
             extra:
-              `${preview || '*No text content*'}\n\n` +
+              `${preview || 'No text, embeds, or attachments.'}\n\n` +
               'A complete deleted-message report is attached.',
             color: 0xED4245
           })

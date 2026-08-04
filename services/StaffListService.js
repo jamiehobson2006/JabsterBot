@@ -31,7 +31,7 @@ class StaffListService {
 
       if (!groups.has(key)) {
         groups.set(key, {
-          label: role ? `${role}` : 'No Additional Role',
+          label: role?.name || 'No Additional Role',
           position: role?.position || 0,
           members: []
         });
@@ -48,7 +48,7 @@ class StaffListService {
         .sort((left, right) =>
           left.displayName.localeCompare(right.displayName)
         )
-        .map(member => `- <@${member.id}>`);
+        .map(member => `- **${member.displayName}** (<@${member.id}>)`);
 
       let value = '';
       let part = 1;
@@ -79,11 +79,18 @@ class StaffListService {
 
     const embed = new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle(`${guild.name} Staff Directory`)
+      .setAuthor({
+        name: `${guild.name} | Staff Directory`,
+        iconURL: guild.iconURL() || undefined
+      })
       .setDescription(
         members.length
-          ? `**${members.length}** staff member(s) with ${staffRole}. Listed by their highest server role.`
-          : `No members currently have ${staffRole}.`
+          ? [
+            `Staff role: **${staffRole.name}**`,
+            `Total staff: **${members.length}**`,
+            'Members are grouped by their highest server role.'
+          ].join('\n')
+          : `No members currently have the **${staffRole.name}** role.`
       )
       .setFooter({
         text: overflow

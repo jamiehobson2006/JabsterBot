@@ -16,13 +16,9 @@ const {
   consumeSuppressedMessageDelete
 } = require('../utils/messageDeletionTracker');
 
-function messageContent(message) {
-  const attachmentNote = message.attachments?.size
-    ? `\nAttachments: ${message.attachments.size}`
-    : '';
-
-  return `${message.content || '*No text content*'}${attachmentNote}`;
-}
+const {
+  describeDeletedMessage
+} = require('../utils/deletedMessageSummary');
 
 module.exports = {
   name: 'messageDelete',
@@ -59,6 +55,7 @@ module.exports = {
             channelId: message.channel?.id,
             messageId: message.id,
             content: message.content || null,
+            embedSummary: describeDeletedMessage(message),
             attachments: message.attachments?.map(item => item.url) || [],
             deletedBy: audit?.executor?.id || null
           },
@@ -72,7 +69,7 @@ module.exports = {
               ? `<#${message.channel.id}>`
               : 'Unknown',
             reason: audit?.reason || undefined,
-            extra: messageContent(message),
+            extra: describeDeletedMessage(message),
             color: 0xED4245
           })
         }

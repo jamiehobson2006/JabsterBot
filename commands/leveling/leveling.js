@@ -1,642 +1,257 @@
 const {
-  SlashCommandBuilder,
-  PermissionFlagsBits,
+  ChannelType,
   EmbedBuilder,
-  ChannelType
+  PermissionFlagsBits,
+  SlashCommandBuilder
 } = require('discord.js');
 
 const {
-  get,
   run
 } = require('../../database');
 
-module.exports = {
+const {
+  getLevelingConfig,
+  parseIdList,
+  stringifyIdList
+} = require('../../utils/levelingConfig');
 
+const levelChannelTypes = [
+  ChannelType.GuildText,
+  ChannelType.GuildAnnouncement
+];
+
+const mutedChannelTypes = [
+  ChannelType.GuildText,
+  ChannelType.GuildAnnouncement,
+  ChannelType.GuildForum,
+  ChannelType.GuildVoice,
+  ChannelType.GuildCategory
+];
+
+function formatMutedChannels(ids) {
+  const shownIds = ids.slice(0, 100);
+  const list = shownIds.map(id => `<#${id}>`).join('\n');
+
+  return ids.length
+    ? `${list}${ids.length > shownIds.length ? `\n...and ${ids.length - shownIds.length} more.` : ''}`
+    : 'No channels are muted for XP.';
+}
+
+module.exports = {
   cooldown: 3000,
 
   data: new SlashCommandBuilder()
-
     .setName('leveling')
-
-    .setDescription(
-      'Configure the leveling system'
-    )
-
-    .setDefaultMemberPermissions(
-      PermissionFlagsBits.ManageGuild
-    )
-
-    .addSubcommand(subcommand =>
-
-      subcommand
-
-        .setName('settings')
-
-        .setDescription(
-          'View leveling settings'
-        )
-    )
-
-    .addSubcommand(subcommand =>
-
-      subcommand
-
-        .setName('enable')
-
-        .setDescription(
-          'Enable leveling'
-        )
-    )
-
-    .addSubcommand(subcommand =>
-
-      subcommand
-
-        .setName('disable')
-
-        .setDescription(
-          'Disable leveling'
-        )
-    )
-
-    .addSubcommand(subcommand =>
-
-      subcommand
-
-        .setName('xp')
-
-        .setDescription(
-          'Set XP range'
-        )
-
-        .addIntegerOption(option =>
-          option
-
-            .setName('min')
-
-            .setDescription(
-              'Minimum XP'
-            )
-
-            .setMinValue(1)
-
-            .setRequired(true)
-        )
-
-        .addIntegerOption(option =>
-          option
-
-            .setName('max')
-
-            .setDescription(
-              'Maximum XP'
-            )
-
-            .setMinValue(1)
-
-            .setRequired(true)
-        )
-    )
-
-    .addSubcommand(subcommand =>
-
-      subcommand
-
-        .setName('cooldown')
-
-        .setDescription(
-          'Set XP cooldown'
-        )
-
-        .addIntegerOption(option =>
-          option
-
-            .setName('seconds')
-
-            .setDescription(
-              'Cooldown in seconds'
-            )
-
-            .setMinValue(0)
-
-            .setRequired(true)
-        )
-    )
-
-    .addSubcommand(subcommand =>
-
-      subcommand
-
+    .setDescription('Configure the server leveling system')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand(subcommand => subcommand
+      .setName('settings')
+      .setDescription('View the current leveling settings'))
+    .addSubcommand(subcommand => subcommand
+      .setName('enable')
+      .setDescription('Enable XP earning'))
+    .addSubcommand(subcommand => subcommand
+      .setName('disable')
+      .setDescription('Disable XP earning'))
+    .addSubcommand(subcommand => subcommand
+      .setName('xp')
+      .setDescription('Set XP awarded for eligible messages')
+      .addIntegerOption(option => option
+        .setName('min')
+        .setDescription('Minimum XP per eligible message')
+        .setMinValue(1)
+        .setMaxValue(1000)
+        .setRequired(true))
+      .addIntegerOption(option => option
+        .setName('max')
+        .setDescription('Maximum XP per eligible message')
+        .setMinValue(1)
+        .setMaxValue(1000)
+        .setRequired(true)))
+    .addSubcommand(subcommand => subcommand
+      .setName('cooldown')
+      .setDescription('Set time between XP awards')
+      .addIntegerOption(option => option
+        .setName('seconds')
+        .setDescription('Cooldown in seconds')
+        .setMinValue(5)
+        .setMaxValue(86400)
+        .setRequired(true)))
+    .addSubcommand(subcommand => subcommand
+      .setName('channel')
+      .setDescription('Set where level-up announcements are posted')
+      .addChannelOption(option => option
         .setName('channel')
-
-        .setDescription(
-          'Set level-up channel'
-        )
-
-        .addChannelOption(option =>
-          option
-
-            .setName('channel')
-
-            .setDescription(
-              'Level-up channel'
-            )
-
-            .addChannelTypes(
-              ChannelType.GuildText
-            )
-
-            .setRequired(true)
-        )
-    )
-
-  .addSubcommand(subcommand =>
-
-  subcommand
-
-    .setName('message')
-
-    .setDescription(
-      'Set level-up message'
-    )
-
-    .addStringOption(option =>
-      option
-
+        .setDescription('Announcement channel')
+        .addChannelTypes(...levelChannelTypes)
+        .setRequired(true)))
+    .addSubcommand(subcommand => subcommand
+      .setName('channel-reset')
+      .setDescription('Post level-up announcements in the message channel'))
+    .addSubcommand(subcommand => subcommand
+      .setName('message')
+      .setDescription('Set the plain-text level-up message')
+      .addStringOption(option => option
         .setName('text')
-
-        .setDescription(
-          'Custom message'
+        .setDescription('Uses {user}, {level}, {xp}, and {messages}')
+        .setMaxLength(1000)
+        .setRequired(true)))
+    .addSubcommand(subcommand => subcommand
+      .setName('announcement')
+      .setDescription('Choose how level-ups are announced')
+      .addStringOption(option => option
+        .setName('style')
+        .setDescription('Announcement style')
+        .addChoices(
+          { name: 'Styled embed', value: 'EMBED' },
+          { name: 'Custom message', value: 'MESSAGE' },
+          { name: 'No announcement', value: 'OFF' }
         )
-
-        .setMaxLength(500)
-
-        .setRequired(true)
-    )
-)
-
-.addSubcommand(subcommand =>
-
-  subcommand
-
-    .setName('ignore-channel-add')
-
-    .setDescription(
-      'Add an ignored channel'
-    )
-
-    .addChannelOption(option =>
-
-      option
-
+        .setRequired(true)))
+    .addSubcommand(subcommand => subcommand
+      .setName('mutechannel')
+      .setDescription('Stop members earning XP in a channel')
+      .addChannelOption(option => option
         .setName('channel')
-
-        .setDescription(
-          'Channel to ignore'
-        )
-
-        .addChannelTypes(
-          ChannelType.GuildText
-        )
-
-        .setRequired(true)
-    )
-)
-
-.addSubcommand(subcommand =>
-
-  subcommand
-
-    .setName('ignore-channel-list')
-
-    .setDescription(
-      'View ignored channels'
-    )
-)
-
-,
-
-    
+        .setDescription('Channel or category to mute for XP')
+        .addChannelTypes(...mutedChannelTypes)
+        .setRequired(true)))
+    .addSubcommand(subcommand => subcommand
+      .setName('unmutechannel')
+      .setDescription('Allow members to earn XP in a channel again')
+      .addChannelOption(option => option
+        .setName('channel')
+        .setDescription('Muted channel or category')
+        .addChannelTypes(...mutedChannelTypes)
+        .setRequired(true)))
+    .addSubcommand(subcommand => subcommand
+      .setName('mutedchannels')
+      .setDescription('List channels where XP is muted')),
 
   async execute(interaction) {
-
-    const guildId =
-      interaction.guild.id;
-
-    const subcommand =
-      interaction.options.getSubcommand();
-
-    let config =
-      get(
-
-        `SELECT *
-         FROM leveling_config
-         WHERE guildId = ?`,
-
-        [guildId]
-      );
-
-    if (!config) {
-
-      run(
-
-        `INSERT INTO leveling_config (
-          guildId
-        )
-        VALUES (?)`,
-
-        [guildId]
-      );
-
-      config =
-        get(
-
-          `SELECT *
-           FROM leveling_config
-           WHERE guildId = ?`,
-
-          [guildId]
-        );
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      return interaction.editReply({ content: 'You need Manage Server permission.' });
     }
 
-    if (
-      subcommand === 'settings'
-    ) {
+    const guildId = interaction.guild.id;
+    const subcommand = interaction.options.getSubcommand();
+    const config = getLevelingConfig(guildId);
+    const mutedChannels = parseIdList(config.ignoredChannels);
 
-      const embed =
-        new EmbedBuilder()
+    if (subcommand === 'settings') {
+      const announcement = config.levelUpStyle === 'OFF'
+        ? 'Disabled'
+        : config.levelUpStyle === 'MESSAGE'
+          ? 'Custom message'
+          : 'Styled embed';
 
-          .setColor(
-            0x5865F2
-          )
-
-          .setTitle(
-            '⚙️ Leveling Settings'
-          )
-
+      return interaction.editReply({
+        embeds: [new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('Leveling Settings')
+          .setDescription('XP is awarded once per cooldown for eligible messages.')
           .addFields(
-
-            {
-              name: 'Status',
-              value:
-                config.enabled
-                  ? '✅ Enabled'
-                  : '❌ Disabled',
-              inline: true
-            },
-
-            {
-              name: 'XP Range',
-              value:
-                `${config.xpMin} - ${config.xpMax}`,
-              inline: true
-            },
-
-            {
-              name: 'Cooldown',
-              value:
-                `${config.cooldown}s`,
-              inline: true
-            },
-
-            {
-              name: 'Level Channel',
-              value:
-                config.levelChannelId
-                  ? `<#${config.levelChannelId}>`
-                  : 'Not Set'
-            },
-
-            {
-              name: 'Level Message',
-              value:
-                config.levelMessage ||
-                '🎉 {user} reached level **{level}**!'
-            }
+            { name: 'Status', value: Number(config.enabled) === 1 ? 'Enabled' : 'Disabled', inline: true },
+            { name: 'XP per message', value: `${config.xpMin} - ${config.xpMax}`, inline: true },
+            { name: 'Cooldown', value: `${config.cooldown}s`, inline: true },
+            { name: 'Announcement', value: announcement, inline: true },
+            { name: 'Announcement channel', value: config.levelChannelId ? `<#${config.levelChannelId}>` : 'Message channel', inline: true },
+            { name: 'Muted channels', value: `${mutedChannels.length}`, inline: true },
+            { name: 'Custom message', value: config.levelMessage || 'Not set' }
           )
-
-          .setFooter({
-
-            text:
-              'Jabster Studios Leveling'
-          })
-
-          .setTimestamp();
-
-      return interaction.editReply({
-
-        embeds: [embed]
+          .setFooter({ text: 'Jabster Studios Leveling' })
+          .setTimestamp()]
       });
     }
 
-    if (
-      subcommand === 'enable'
-    ) {
-
-      run(
-
-        `UPDATE leveling_config
-         SET enabled = 1
-         WHERE guildId = ?`,
-
-        [guildId]
-      );
-
-      return interaction.editReply({
-
-        content:
-          '✅ Leveling enabled.'
-      });
+    if (subcommand === 'enable' || subcommand === 'disable') {
+      const enabled = subcommand === 'enable' ? 1 : 0;
+      run('UPDATE leveling_config SET enabled = ? WHERE guildId = ?', [enabled, guildId]);
+      return interaction.editReply({ content: `Leveling ${enabled ? 'enabled' : 'disabled'}.` });
     }
 
-    if (
-      subcommand === 'disable'
-    ) {
-
-      run(
-
-        `UPDATE leveling_config
-         SET enabled = 0
-         WHERE guildId = ?`,
-
-        [guildId]
-      );
-
-      return interaction.editReply({
-
-        content:
-          '✅ Leveling disabled.'
-      });
-    }
-
-    if (
-      subcommand === 'xp'
-    ) {
-
-      const min =
-        interaction.options.getInteger(
-          'min'
-        );
-
-      const max =
-        interaction.options.getInteger(
-          'max'
-        );
+    if (subcommand === 'xp') {
+      const min = interaction.options.getInteger('min', true);
+      const max = interaction.options.getInteger('max', true);
 
       if (min > max) {
-
-        return interaction.editReply({
-
-          content:
-            '❌ Minimum XP cannot be greater than maximum XP.'
-        });
+        return interaction.editReply({ content: 'Minimum XP cannot be greater than maximum XP.' });
       }
 
-      run(
+      run('UPDATE leveling_config SET xpMin = ?, xpMax = ? WHERE guildId = ?', [min, max, guildId]);
+      return interaction.editReply({ content: `XP range set to ${min}-${max} per eligible message.` });
+    }
 
-        `UPDATE leveling_config
+    if (subcommand === 'cooldown') {
+      const seconds = interaction.options.getInteger('seconds', true);
+      run('UPDATE leveling_config SET cooldown = ? WHERE guildId = ?', [seconds, guildId]);
+      return interaction.editReply({ content: `XP cooldown set to ${seconds} seconds.` });
+    }
 
-         SET
+    if (subcommand === 'channel') {
+      const channel = interaction.options.getChannel('channel', true);
+      run('UPDATE leveling_config SET levelChannelId = ? WHERE guildId = ?', [channel.id, guildId]);
+      return interaction.editReply({ content: `Level-up announcements will be posted in ${channel}.` });
+    }
 
-         xpMin = ?,
-         xpMax = ?
+    if (subcommand === 'channel-reset') {
+      run('UPDATE leveling_config SET levelChannelId = NULL WHERE guildId = ?', [guildId]);
+      return interaction.editReply({ content: 'Level-up announcements will be posted in the message channel.' });
+    }
 
-         WHERE guildId = ?`,
-
-        [
-
-          min,
-          max,
-
-          guildId
-        ]
-      );
-
+    if (subcommand === 'message') {
+      const text = interaction.options.getString('text', true);
+      run('UPDATE leveling_config SET levelMessage = ? WHERE guildId = ?', [text, guildId]);
       return interaction.editReply({
-
-        content:
-          `✅ XP range updated to **${min}-${max}**.`
+        embeds: [new EmbedBuilder()
+          .setColor(0x57F287)
+          .setTitle('Level-up Message Updated')
+          .setDescription(text)
+          .addFields({ name: 'Variables', value: '`{user}` ` {level}` ` {xp}` ` {messages}`' })]
       });
     }
 
-    if (
-      subcommand === 'cooldown'
-    ) {
-
-      const seconds =
-        interaction.options.getInteger(
-          'seconds'
-        );
-
-      run(
-
-        `UPDATE leveling_config
-
-         SET cooldown = ?
-
-         WHERE guildId = ?`,
-
-        [
-
-          seconds,
-          guildId
-        ]
-      );
-
-      return interaction.editReply({
-
-        content:
-          `✅ Cooldown updated to **${seconds}s**.`
-      });
+    if (subcommand === 'announcement') {
+      const style = interaction.options.getString('style', true);
+      run('UPDATE leveling_config SET levelUpStyle = ? WHERE guildId = ?', [style, guildId]);
+      const display = { EMBED: 'styled embeds', MESSAGE: 'custom messages', OFF: 'no announcements' }[style];
+      return interaction.editReply({ content: `Level-up announcements will use ${display}.` });
     }
 
-if (
-  subcommand === 'channel'
-) {
+    const channel = interaction.options.getChannel('channel');
 
-  const channel =
-    interaction.options.getChannel(
-      'channel'
-    );
+    if (subcommand === 'mutechannel') {
+      if (mutedChannels.includes(channel.id)) {
+        return interaction.editReply({ content: `${channel} is already muted for XP.` });
+      }
 
-  run(
+      if (mutedChannels.length >= 100) {
+        return interaction.editReply({ content: 'You can mute up to 100 channels or categories for XP.' });
+      }
 
-    `UPDATE leveling_config
+      mutedChannels.push(channel.id);
+      run('UPDATE leveling_config SET ignoredChannels = ? WHERE guildId = ?', [stringifyIdList(mutedChannels), guildId]);
+      return interaction.editReply({ content: `${channel} is now muted for XP.` });
+    }
 
-     SET levelChannelId = ?
+    if (subcommand === 'unmutechannel') {
+      if (!mutedChannels.includes(channel.id)) {
+        return interaction.editReply({ content: `${channel} is not muted for XP.` });
+      }
 
-     WHERE guildId = ?`,
+      const remaining = mutedChannels.filter(id => id !== channel.id);
+      run('UPDATE leveling_config SET ignoredChannels = ? WHERE guildId = ?', [stringifyIdList(remaining), guildId]);
+      return interaction.editReply({ content: `${channel} can now award XP again.` });
+    }
 
-    [
-
-      channel.id,
-      guildId
-    ]
-  );
-
-  return interaction.editReply({
-
-    content:
-      `✅ Level-up channel set to ${channel}.`
-  });
-}
-
-if (
-  subcommand === 'message'
-) {
-
-  const text =
-    interaction.options.getString(
-      'text'
-    );
-
-  run(
-
-    `UPDATE leveling_config
-
-     SET levelMessage = ?
-
-     WHERE guildId = ?`,
-
-    [
-
-      text,
-      guildId
-    ]
-  );
-
-  return interaction.editReply({
-
-    embeds: [
-
-      new EmbedBuilder()
-
-        .setColor(
-          0x57F287
-        )
-
-        .setTitle(
-          '✅ Level Message Updated'
-        )
-
-        .setDescription(text)
-
-        .addFields({
-
-          name:
-            'Available Variables',
-
-          value:
-            '`{user}` `{level}`'
-        })
-    ]
-  });
-}
-
-if (
-  subcommand ===
-  'ignore-channel-add'
-) {
-
-  const channel =
-    interaction.options.getChannel(
-      'channel'
-    );
-
-  const ignored =
-    config.ignoredChannels
-      ? config.ignoredChannels
-          .split(',')
-          .filter(Boolean)
-      : [];
-
-  if (
-    ignored.includes(
-      channel.id
-    )
-  ) {
-
-    return interaction.editReply({
-
-      content:
-        '❌ Channel is already ignored.'
-    });
-  }
-
-  ignored.push(
-    channel.id
-  );
-
-  run(
-
-    `UPDATE leveling_config
-
-     SET ignoredChannels = ?
-
-     WHERE guildId = ?`,
-
-    [
-
-      ignored.join(','),
-      guildId
-    ]
-  );
-
-  return interaction.editReply({
-
-    content:
-      `✅ ${channel} is now ignored for XP.`
-  });
-}
-
-if (
-  subcommand ===
-  'ignore-channel-list'
-) {
-
-  const ignored =
-    config.ignoredChannels
-      ? config.ignoredChannels
-          .split(',')
-          .filter(Boolean)
-      : [];
-
-  if (
-    ignored.length === 0
-  ) {
-
-    return interaction.editReply({
-
-      content:
-        '❌ No ignored channels configured.'
-    });
-  }
-
-  const channels =
-    ignored.map(
-      id => `<#${id}>`
-    );
-
-  return interaction.editReply({
-
-    embeds: [
-
-      new EmbedBuilder()
-
-        .setColor(
-          0x5865F2
-        )
-
-        .setTitle(
-          '🚫 Ignored Channels'
-        )
-
-        .setDescription(
-          channels.join('\n')
-        )
-    ]
-  });
-}
- 
+    if (subcommand === 'mutedchannels') {
+      return interaction.editReply({
+        embeds: [new EmbedBuilder()
+          .setColor(0xED4245)
+          .setTitle('XP-Muted Channels')
+          .setDescription(formatMutedChannels(mutedChannels))
+          .setFooter({ text: `${mutedChannels.length} channel(s) or category/categories muted` })]
+      });
+    }
   }
 };

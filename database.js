@@ -761,6 +761,8 @@ function createGuildSettingsTable() {
 
       linkBypassRoleId TEXT,
 
+      linkBypassRoleIds TEXT,
+
       censorEnabled INTEGER DEFAULT 0,
 
       censorRoleId TEXT
@@ -800,6 +802,7 @@ function createGuildSettingsTable() {
 
     ['linkBlockEnabled', 'INTEGER DEFAULT 0'],
     ['linkBypassRoleId', 'TEXT'],
+    ['linkBypassRoleIds', 'TEXT'],
     ['censorEnabled', 'INTEGER DEFAULT 0'],
     ['censorRoleId', 'TEXT']
   ];
@@ -1432,7 +1435,9 @@ rawRun(`
 
     ignoredChannels TEXT,
 
-    ignoredRoles TEXT
+    ignoredRoles TEXT,
+
+    levelUpStyle TEXT DEFAULT 'EMBED'
   )
 `);
 
@@ -1452,6 +1457,12 @@ ensureColumn(
   'leveling_config',
   'ignoredRoles',
   'TEXT'
+);
+
+ensureColumn(
+  'leveling_config',
+  'levelUpStyle',
+  "TEXT DEFAULT 'EMBED'"
 );
 
 rawRun(`
