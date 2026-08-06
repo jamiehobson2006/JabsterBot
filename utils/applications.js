@@ -12,7 +12,7 @@ const MAX_APPLICATION_QUESTIONS =
   25;
 
 const QUESTIONS_PER_MODAL =
-  5;
+  1;
 
 const DRAFT_LIFETIME_MS =
   30 * 60 * 1000;

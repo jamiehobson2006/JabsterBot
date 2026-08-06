@@ -5,7 +5,6 @@ const {
 
 const {
   all,
-  get,
   run
 } = require('../../database');
 
@@ -13,18 +12,16 @@ const {
   getStaffRole
 } = require('../../utils/tickets/permissions');
 
-function ticketChannel(interaction) {
-  return get(
-    `SELECT *
-     FROM tickets
-     WHERE guildId = ?
-     AND channelId = ?
-     AND status = 'OPEN'`,
-    [
-      interaction.guild.id,
-      interaction.channel.id
-    ]
-  );
+const {
+  findOrRecoverOpenTicket
+} = require('../../utils/tickets/recoverTicket');
+
+async function ticketChannel(interaction) {
+  return findOrRecoverOpenTicket({
+    guild: interaction.guild,
+    channel: interaction.channel,
+    client: interaction.client
+  });
 }
 
 async function getMember(interaction, userId) {
@@ -110,7 +107,7 @@ module.exports = {
 
   async execute(interaction) {
     const ticket =
-      ticketChannel(interaction);
+      await ticketChannel(interaction);
 
     if (!ticket) {
       return interaction.editReply({

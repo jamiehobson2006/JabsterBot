@@ -1,8 +1,4 @@
 const {
-  PermissionsBitField
-} = require('discord.js');
-
-const {
   run,
   get
 } = require('../database');
@@ -40,6 +36,10 @@ const {
 } = require('../utils/tickets/permissions');
 
 const {
+  findOrRecoverOpenTicket
+} = require('../utils/tickets/recoverTicket');
+
+const {
   getLinkCategoryWhitelist,
   getLinkChannelWhitelist,
   getLinkWhitelist
@@ -73,19 +73,6 @@ function canBypassLinkBlock(
   message,
   settings
 ) {
-
-  if (
-    message.member?.permissions.has(
-      PermissionsBitField.Flags.Administrator
-    ) ||
-    message.member?.permissions.has(
-      PermissionsBitField.Flags.ManageMessages
-    )
-  ) {
-
-    return true;
-  }
-
   return hasWhitelistedRole(
     message.member,
     getLinkWhitelist(settings)
@@ -94,6 +81,32 @@ function canBypassLinkBlock(
     getLinkChannelWhitelist(settings),
     getLinkCategoryWhitelist(settings)
   );
+}
+
+async function getOpenTicket(message, client) {
+  const ticket = get(
+    `SELECT *
+     FROM tickets
+     WHERE guildId = ?
+     AND channelId = ?
+     AND UPPER(status) = 'OPEN'`,
+    [message.guild.id, message.channel.id]
+  );
+
+  if (ticket) {
+    return ticket;
+  }
+
+  // Only attempt recovery in a channel that carries bot-created ticket metadata.
+  if (!String(message.channel.topic || '').startsWith('Jabster Studios ticket')) {
+    return null;
+  }
+
+  return findOrRecoverOpenTicket({
+    guild: message.guild,
+    channel: message.channel,
+    client
+  });
 }
 
 async function handleLinkBlock(
@@ -111,14 +124,7 @@ async function handleLinkBlock(
     return false;
   }
 
-  const ticket =
-    get(
-      `SELECT type
-       FROM tickets
-       WHERE channelId = ?
-       AND status = 'OPEN'`,
-      [message.channel.id]
-    );
+  const ticket = await getOpenTicket(message, client);
 
   if (['partnership', 'application'].includes(ticket?.type)) {
     return false;
@@ -299,17 +305,11 @@ async function handleCensor(
   return true;
 }
 
-function trackTicketStaffMessage(
-  message
+async function trackTicketStaffMessage(
+  message,
+  client
 ) {
-  const ticket =
-    get(
-      `SELECT *
-       FROM tickets
-       WHERE channelId = ?
-       AND status = 'OPEN'`,
-      [message.channel.id]
-    );
+  const ticket = await getOpenTicket(message, client);
 
   if (!ticket) {
     return;
@@ -467,13 +467,6 @@ module.exports = {
       // ==========================================
       // 🚫 IGNORE COMMANDS
       // ==========================================
-      if (
-        message.content?.startsWith('/')
-      ) {
-
-        return;
-      }
-
       const guildId =
         message.guild.id;
 
@@ -503,8 +496,9 @@ module.exports = {
         return;
       }
 
-      trackTicketStaffMessage(
-        message
+      await trackTicketStaffMessage(
+        message,
+        client
       );
 
       // ==========================================

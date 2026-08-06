@@ -26,11 +26,14 @@ require('dotenv').config();
 
 const {
   initDatabase,
-  startDatabaseCleanup
+  startDatabaseCleanup,
+  startDatabaseBackups,
+  checkpointDatabase
 } = require('./database');
 
 initDatabase();
 startDatabaseCleanup();
+startDatabaseBackups();
 
 const {
 
@@ -51,6 +54,10 @@ const {
 
 const StaffListService =
   require('./services/StaffListService');
+
+const {
+  startClosedTicketCleanup
+} = require('./utils/tickets/closedTicketCleanup');
 
   const DailyFactService =
   require('./services/DailyFactService');
@@ -128,6 +135,29 @@ const client =
       }
     }
   });
+
+let shuttingDown = false;
+
+function shutdown(signal) {
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
+  console.log(`Received ${signal}; saving database before shutdown.`);
+
+  try {
+    checkpointDatabase();
+  } catch (err) {
+    console.error('Database checkpoint during shutdown failed:', err);
+  }
+
+  client.destroy();
+  process.exit(0);
+}
+
+process.once('SIGINT', () => shutdown('SIGINT'));
+process.once('SIGTERM', () => shutdown('SIGTERM'));
 
 client.commands =
   new Collection();
@@ -597,6 +627,14 @@ console.log(
   '✅ Staff list service started'
 );
 
+startClosedTicketCleanup(
+  client
+);
+
+console.log(
+  '✅ Closed ticket cleanup started'
+);
+
       client.user.setPresence({
 
         activities: [
@@ -634,6 +672,8 @@ process.on(
       '❌ Unhandled Rejection:',
       err
     );
+
+    shutdown('unhandled rejection');
   }
 );
 
@@ -647,34 +687,9 @@ process.on(
       '❌ Uncaught Exception:',
       err
     );
+
+    shutdown('uncaught exception');
   }
-);
-
-async function shutdown(
-  signal
-) {
-
-  console.log(
-    `🛑 ${signal} received`
-  );
-
-  try {
-
-    await client.destroy();
-
-  } catch {}
-
-  process.exit(0);
-}
-
-process.on(
-  'SIGINT',
-  () => shutdown('SIGINT')
-);
-
-process.on(
-  'SIGTERM',
-  () => shutdown('SIGTERM')
 );
 
 loadCommands();

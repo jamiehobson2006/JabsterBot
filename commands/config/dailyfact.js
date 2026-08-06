@@ -1,7 +1,7 @@
 const {
-  SlashCommandBuilder,
+  ChannelType,
   PermissionFlagsBits,
-  ChannelType
+  SlashCommandBuilder
 } = require('discord.js');
 
 const {
@@ -9,175 +9,170 @@ const {
   run
 } = require('../../database');
 
+const DailyFactService =
+  require('../../services/DailyFactService');
+
 const {
   FACT_CATEGORIES,
   categoryName
 } = require('../../utils/dailyFacts');
+
+const DEFAULT_TIMEZONE =
+  'Europe/London';
+
+function validTimezone(timezone) {
+
+  try {
+
+    Intl.DateTimeFormat(
+      'en-GB',
+      { timeZone: timezone }
+    );
+
+    return true;
+
+  } catch {
+
+    return false;
+  }
+}
+
+function ensureConfig(guildId) {
+
+  let config =
+    get(
+      `SELECT *
+       FROM dailyfact_config
+       WHERE guildId = ?`,
+      [guildId]
+    );
+
+  if (config) {
+
+    return config;
+  }
+
+  run(
+    `INSERT INTO dailyfact_config (guildId)
+     VALUES (?)`,
+    [guildId]
+  );
+
+  config =
+    get(
+      `SELECT *
+       FROM dailyfact_config
+       WHERE guildId = ?`,
+      [guildId]
+    );
+
+  return config;
+}
+
+function safeReply(
+  interaction,
+  content
+) {
+
+  return interaction.editReply({
+    content,
+    allowedMentions: {
+      parse: []
+    }
+  });
+}
 
 module.exports = {
 
   ephemeral: true,
 
   data: new SlashCommandBuilder()
-
     .setName('dailyfact')
-
-    .setDescription(
-      'Configure daily facts'
-    )
-
+    .setDescription('Configure Daily Facts')
     .setDefaultMemberPermissions(
       PermissionFlagsBits.ManageGuild
     )
-
     .addSubcommand(subcommand =>
-
       subcommand
-
         .setName('channel')
-
-        .setDescription(
-          'Set daily fact channel'
-        )
-
+        .setDescription('Set the Daily Fact channel')
         .addChannelOption(option =>
-
           option
-
             .setName('channel')
-
-            .setDescription(
-              'Channel to post facts in'
-            )
-
-            .addChannelTypes(
-              ChannelType.GuildText
-            )
-
+            .setDescription('Channel to post facts in')
+            .addChannelTypes(ChannelType.GuildText)
             .setRequired(true)
         )
     )
-
     .addSubcommand(subcommand =>
-
       subcommand
-
         .setName('enable')
-
-        .setDescription(
-          'Enable daily facts'
-        )
+        .setDescription('Enable scheduled Daily Facts')
     )
-
-.addSubcommand(subcommand =>
-
-  subcommand
-
-    .setName('disable')
-
-    .setDescription(
-      'Disable daily facts'
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('disable')
+        .setDescription('Disable scheduled Daily Facts')
     )
-)
-
-.addSubcommand(subcommand => {
-
-  subcommand
-
-    .setName('category')
-
-    .setDescription(
-      'Set the type of facts to post'
-    );
-
-  const option =
-    optionBuilder =>
-
-      optionBuilder
-
+    .addSubcommand(subcommand =>
+      subcommand
         .setName('category')
-
-        .setDescription(
-          'Random uses every approved and coded fact'
+        .setDescription('Set the type of facts to post')
+        .addStringOption(option =>
+          option
+            .setName('category')
+            .setDescription('Random uses every approved and coded fact')
+            .setRequired(true)
+            .addChoices(
+              {
+                name: 'Random / All Facts',
+                value: 'random'
+              },
+              ...FACT_CATEGORIES.map(category => ({
+                name: category.name,
+                value: category.value
+              }))
+            )
         )
-
-        .setRequired(true)
-
-        .addChoices(
-          {
-            name: 'Random / All Facts',
-            value: 'random'
-          },
-          ...FACT_CATEGORIES.map(category => ({
-            name: category.name,
-            value: category.value
-          }))
-        );
-
-  return subcommand.addStringOption(
-    option
-  );
-})
-
-.addSubcommand(subcommand =>
-
-  subcommand
-
-    .setName('time')
-
-    .setDescription(
-      'Set posting time'
     )
-
-    .addIntegerOption(option =>
-
-      option
-
-        .setName('hour')
-
-        .setDescription(
-          'Hour (0-23)'
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('time')
+        .setDescription('Set the Daily Fact posting time')
+        .addIntegerOption(option =>
+          option
+            .setName('hour')
+            .setDescription('Hour from 0 to 23')
+            .setMinValue(0)
+            .setMaxValue(23)
+            .setRequired(true)
         )
-
-        .setMinValue(0)
-
-        .setMaxValue(23)
-
-        .setRequired(true)
-    )
-
-    .addIntegerOption(option =>
-
-      option
-
-        .setName('minute')
-
-        .setDescription(
-          'Minute (0-59)'
+        .addIntegerOption(option =>
+          option
+            .setName('minute')
+            .setDescription('Minute from 0 to 59')
+            .setMinValue(0)
+            .setMaxValue(59)
+            .setRequired(true)
         )
-
-        .setMinValue(0)
-
-        .setMaxValue(59)
-
-        .setRequired(true)
+        .addStringOption(option =>
+          option
+            .setName('timezone')
+            .setDescription('Optional IANA timezone, for example Europe/London')
+        )
     )
-)
-
-.addSubcommand(subcommand =>
-
-  subcommand
-
-    .setName('settings')
-
-    .setDescription(
-      'View daily fact settings'
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('force')
+        .setDescription('Post an approved community fact now')
     )
-),
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('settings')
+        .setDescription('View Daily Fact settings')
+    ),
 
-  async execute(
-    interaction
-  ) {
+  async execute(interaction) {
 
     const guildId =
       interaction.guild.id;
@@ -185,244 +180,153 @@ module.exports = {
     const subcommand =
       interaction.options.getSubcommand();
 
-    let config =
-      get(
+    const config =
+      ensureConfig(guildId);
 
-        `SELECT *
-         FROM dailyfact_config
-         WHERE guildId = ?`,
-
-        [guildId]
-      );
-
-    if (!config) {
-
-      run(
-
-        `INSERT INTO dailyfact_config (
-          guildId
-        )
-        VALUES (?)`,
-
-        [guildId]
-      );
-
-      config =
-        get(
-
-          `SELECT *
-           FROM dailyfact_config
-           WHERE guildId = ?`,
-
-          [guildId]
-        );
-    }
-
-    if (
-      subcommand === 'channel'
-    ) {
+    if (subcommand === 'channel') {
 
       const channel =
-        interaction.options.getChannel(
-          'channel'
-        );
+        interaction.options.getChannel('channel', true);
 
       run(
-
         `UPDATE dailyfact_config
-
          SET channelId = ?
-
          WHERE guildId = ?`,
-
-        [
-
-          channel.id,
-          guildId
-        ]
+        [channel.id, guildId]
       );
 
-      return interaction.editReply({
-
-        content:
-          `✅ Daily fact channel set to ${channel}`,
-
-        allowedMentions: {
-          parse: []
-        }
-      });
+      return safeReply(
+        interaction,
+        `Daily Fact channel set to ${channel}.`
+      );
     }
 
-    if (
-      subcommand === 'enable'
-    ) {
+    if (subcommand === 'enable') {
 
-      if (!config?.channelId) {
+      if (!config.channelId) {
 
-        return interaction.editReply({
-
-          content:
-            'Set a Daily Fact channel first with `/dailyfact channel`.',
-
-          allowedMentions: {
-            parse: []
-          }
-        });
+        return safeReply(
+          interaction,
+          'Set a Daily Fact channel first with `/dailyfact channel`.'
+        );
       }
 
       run(
-
         `UPDATE dailyfact_config
-
          SET enabled = 1
-
          WHERE guildId = ?`,
-
         [guildId]
       );
 
-      return interaction.editReply({
-
-        content:
-          '✅ Daily facts enabled.',
-
-        allowedMentions: {
-          parse: []
-        }
-      });
+      return safeReply(
+        interaction,
+        'Daily Facts enabled.'
+      );
     }
 
-    if (
-      subcommand === 'disable'
-    ) {
+    if (subcommand === 'disable') {
 
       run(
-
         `UPDATE dailyfact_config
-
          SET enabled = 0
-
          WHERE guildId = ?`,
-
         [guildId]
       );
 
-      return interaction.editReply({
-
-        content:
-          '✅ Daily facts disabled.',
-
-        allowedMentions: {
-          parse: []
-        }
-      });
+      return safeReply(
+        interaction, 'Daily Facts disabled.'
+      );
     }
 
-    if (
-      subcommand === 'category'
-    ) {
+    if (subcommand === 'category') {
 
       const category =
-        interaction.options.getString(
-          'category',
-          true
-        );
+        interaction.options.getString('category', true);
 
       run(
-
         `UPDATE dailyfact_config
-
          SET category = ?
-
          WHERE guildId = ?`,
-
-        [
-          category,
-          guildId
-        ]
+        [category, guildId]
       );
 
-      return interaction.editReply({
-
-        content:
-          `✅ Daily fact category set to **${categoryName(category)}**.`,
-
-        allowedMentions: {
-          parse: []
-        }
-      });
+      return safeReply(
+        interaction,
+        `Daily Fact category set to **${categoryName(category)}**.`
+      );
     }
 
-    if (
-  subcommand === 'time'
-) {
+    if (subcommand === 'time') {
 
-  const hour =
-    interaction.options.getInteger(
-      'hour'
-    );
+      const hour =
+        interaction.options.getInteger('hour', true);
 
-  const minute =
-    interaction.options.getInteger(
-      'minute'
-    );
+      const minute =
+        interaction.options.getInteger('minute', true);
 
-  run(
+      const timezone =
+        interaction.options.getString('timezone') ||
+        config.timezone ||
+        DEFAULT_TIMEZONE;
 
-    `UPDATE dailyfact_config
+      if (!validTimezone(timezone)) {
 
-     SET hour = ?,
-         minute = ?
+        return safeReply(
+          interaction,
+          'Use an IANA timezone such as `Europe/London` or `America/New_York`.'
+        );
+      }
 
-     WHERE guildId = ?`,
+      run(
+        `UPDATE dailyfact_config
+         SET hour = ?,
+             minute = ?,
+             timezone = ?
+         WHERE guildId = ?`,
+        [hour, minute, timezone, guildId]
+      );
 
-    [
-
-      hour,
-      minute,
-      guildId
-    ]
-  );
-
-  return interaction.editReply({
-
-    content:
-      `✅ Daily fact time set to ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
-
-    allowedMentions: {
-      parse: []
+      return safeReply(
+        interaction,
+        `Daily Fact time set to ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} (${timezone}).`
+      );
     }
-  });
-}
 
-if (
-  subcommand === 'settings'
-) {
+    if (subcommand === 'force') {
 
-  const current =
-    get(
+      const result =
+        await DailyFactService.forceCommunityFact(
+          interaction.client,
+          guildId
+        );
 
-      `SELECT *
-       FROM dailyfact_config
-       WHERE guildId = ?`,
+      const messages = {
+        'sent': 'Approved community fact posted.',
+        'missing-channel': 'Set a Daily Fact channel first with `/dailyfact channel`.',
+        'no-eligible-facts': 'There are no approved community facts available, or every one was shown in this server within the last 30 days.',
+        'already-delivered': 'That fact was just posted. Run `/dailyfact force` again.'
+      };
 
-      [guildId]
-    );
+      return safeReply(
+        interaction,
+        messages[result.status] ||
+          'Could not post an approved community fact right now.'
+      );
+    }
 
-  return interaction.editReply({
+    const current =
+      ensureConfig(guildId);
 
-    content:
+    return safeReply(
+      interaction,
       [
-        `Enabled: **${current?.enabled ? 'Yes' : 'No'}**`,
-        `Channel: ${current?.channelId ? `<#${current.channelId}>` : '**Not set**'}`,
-        `Category: **${categoryName(current?.category || 'random')}**`,
-        `Time: **${String(current?.hour ?? 12).padStart(2, '0')}:${String(current?.minute ?? 0).padStart(2, '0')}**`
-      ].join('\n'),
-
-    allowedMentions: {
-      parse: []
-    }
-  });
-}
+        `Enabled: **${current.enabled ? 'Yes' : 'No'}**`,
+        `Channel: ${current.channelId ? `<#${current.channelId}>` : '**Not set**'}`,
+        `Category: **${categoryName(current.category || 'random')}**`,
+        `Time: **${String(current.hour ?? 12).padStart(2, '0')}:${String(current.minute ?? 0).padStart(2, '0')}**`,
+        `Timezone: **${current.timezone || DEFAULT_TIMEZONE}**`,
+        'Rotation: **Facts are not repeated in this server for 30 days.**'
+      ].join('\n')
+    );
   }
 };

@@ -95,14 +95,14 @@ function buildApplicationPreview(form, questions, pageNumber, pageCount) {
       questionList
     ].join('\n\n'))
     .addFields(
-      { name: 'Page', value: `${pageNumber} of ${pageCount}`, inline: true },
-      { name: 'Questions', value: String(questions.length), inline: true }
+      { name: 'Question', value: `${pageNumber} of ${pageCount}`, inline: true },
+      { name: 'Response', value: questions[0].required ? 'Required' : 'Optional', inline: true }
     )
-    .setFooter({ text: 'Review the full questions, then select Answer this page.' });
+    .setFooter({ text: 'Select Answer question when you are ready.' });
 }
 
-function modalQuestionLabel(question) {
-  return `Question ${question.position} (see prompt)`;
+function modalQuestionLabel() {
+  return 'Your response';
 }
 
 async function showApplicationPreview(interaction, draftId) {
@@ -123,7 +123,7 @@ async function showApplicationPreview(interaction, draftId) {
   const pageCount = Math.ceil(questions.length / QUESTIONS_PER_MODAL);
   const answerButton = new ButtonBuilder()
     .setCustomId(`application_open_${draft.id}`)
-    .setLabel(`Answer page ${pageNumber}`)
+    .setLabel(`Answer question ${pageNumber}`)
     .setStyle(ButtonStyle.Primary);
 
   return interaction.update({
@@ -151,13 +151,13 @@ async function showApplicationModal(interaction, draftId) {
   const pageCount = Math.ceil(questions.length / QUESTIONS_PER_MODAL);
   const modal = new ModalBuilder()
     .setCustomId(`application_page_${draft.id}`)
-    .setTitle(`Application (${pageNumber}/${pageCount})`);
+    .setTitle(`Question ${pageNumber} of ${pageCount}`);
 
   for (const question of pageQuestions) {
     const input = new TextInputBuilder()
       .setCustomId(`q_${question.id}`)
-      .setLabel(modalQuestionLabel(question))
-      .setPlaceholder(question.required ? 'Your answer is required' : 'Optional answer')
+      .setLabel(modalQuestionLabel())
+      .setPlaceholder(question.required ? 'Write your answer here' : 'Optional answer')
       .setStyle(TextInputStyle.Paragraph)
       .setMaxLength(1000)
       .setRequired(Boolean(question.required));
@@ -193,7 +193,7 @@ async function handleApplicationSelect(interaction) {
 
   const startButton = new ButtonBuilder()
     .setCustomId(`application_start_${draft.id}`)
-    .setLabel('Start application')
+    .setLabel('View first question')
     .setStyle(ButtonStyle.Primary);
 
   try {
@@ -277,7 +277,7 @@ async function handleApplicationPage(interaction) {
   if (nextQuestionIndex < questions.length) {
     const button = new ButtonBuilder()
       .setCustomId(`application_continue_${draft.id}`)
-      .setLabel(`Continue (${nextQuestionIndex}/${questions.length})`)
+      .setLabel(`View question ${nextQuestionIndex + 1} of ${questions.length}`)
       .setStyle(ButtonStyle.Primary);
 
     return replyPrivate(

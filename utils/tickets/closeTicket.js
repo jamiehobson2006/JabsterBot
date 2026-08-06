@@ -28,6 +28,10 @@ const {
   findOrRecoverOpenTicket
 } = require('./recoverTicket');
 
+const {
+  deleteClosedTicketChannel
+} = require('./closedTicketCleanup');
+
 function cleanReason(reason) {
   return String(reason || '')
     .replace(/@everyone|@here/g, '[mention removed]')
@@ -247,11 +251,27 @@ async function closeTicket({
     };
   }
 
-  setTimeout(async () => {
-    await interaction.channel.delete(
-      `Ticket closed by ${interaction.user.tag}`
-    ).catch(err => console.error('Ticket channel delete error:', err));
-  }, 5000);
+  const deleteAfter =
+    Date.now() + 5000;
+
+  run(
+    `UPDATE tickets
+     SET deleteAfter = ?
+     WHERE channelId = ?
+     AND UPPER(status) = 'CLOSED'`,
+    [deleteAfter, interaction.channel.id]
+  );
+
+  setTimeout(
+    () => {
+
+      deleteClosedTicketChannel(
+        interaction.client,
+        interaction.channel.id
+      ).catch(err => console.error('Ticket channel delete error:', err));
+    },
+    5000
+  );
 
   return {
     success: true,

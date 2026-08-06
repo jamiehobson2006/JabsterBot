@@ -107,6 +107,7 @@ function codedFactRows() {
         fact: cleaned,
         category,
         source: 'coded',
+        factKey: `coded:${normalizeFact(cleaned)}`,
         status: 'APPROVED'
       });
     }
@@ -139,7 +140,8 @@ function approvedFactRows() {
     ...row,
     fact: cleanFact(row.fact),
     category: row.category || 'random',
-    source: 'community'
+    source: 'community',
+    factKey: `community:${row.id}`
   }));
 }
 
@@ -284,7 +286,8 @@ function buildDailyFactPools() {
         category: isRealCategory(row.category)
           ? row.category
           : 'random',
-        source: row.source
+        source: row.source,
+        factKey: row.factKey || `${row.source}:${normalized}`
       });
     }
 
@@ -298,7 +301,8 @@ function buildDailyFactPools() {
       byCategory[row.category].push({
         fact: row.fact,
         category: row.category,
-        source: row.source
+        source: row.source,
+        factKey: row.factKey || `${row.source}:${normalized}`
       });
     }
   };

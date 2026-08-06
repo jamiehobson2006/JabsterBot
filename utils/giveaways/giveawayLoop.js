@@ -129,6 +129,9 @@ function startGiveawayLoop(client) {
 
   console.log('Giveaway loop started');
 
+  processDueGiveaways(client)
+    .catch(err => console.error('Giveaway loop error:', err));
+
   giveawayLoop = setInterval(() => {
     processDueGiveaways(client)
       .catch(err => console.error('Giveaway loop error:', err));

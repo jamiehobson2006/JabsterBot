@@ -26,6 +26,7 @@ const {
 } = require('../database');
 
 const {
+  QUESTIONS_PER_MODAL,
   addQuestion,
   createDraft,
   createForm,
@@ -118,8 +119,9 @@ test(
     ).toJSON();
 
     assert.ok(preview.description.includes(question));
-    assert.equal(modalQuestionLabel({ position: 1 }), 'Question 1 (see prompt)');
-    assert.ok(modalQuestionLabel({ position: 1 }).length <= 45);
+    assert.equal(QUESTIONS_PER_MODAL, 1);
+    assert.equal(modalQuestionLabel(), 'Your response');
+    assert.ok(modalQuestionLabel().length <= 45);
   }
 );
 

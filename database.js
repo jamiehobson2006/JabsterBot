@@ -4,6 +4,9 @@
 const path =
   require('node:path');
 
+const fs =
+  require('node:fs');
+
 const databasePath =
   process.env.DATABASE_PATH ||
   path.join(__dirname, 'database.db');
@@ -23,7 +26,7 @@ db.pragma(
 );
 
 db.pragma(
-  'synchronous = NORMAL'
+  'synchronous = FULL'
 );
 
 db.pragma(
@@ -171,6 +174,109 @@ function checkpointDatabase() {
   } catch (err) {
     console.warn('SQLite checkpoint failed:', err.message);
   }
+}
+
+let backupInterval =
+  null;
+
+function backupRetentionCount() {
+
+  const configured =
+    Number(process.env.DATABASE_BACKUP_RETENTION || 14);
+
+  return Number.isInteger(configured) && configured > 0
+    ? configured
+    : 14;
+}
+
+function databaseBackupDirectory() {
+
+  return process.env.DATABASE_BACKUP_DIR ||
+    path.join(__dirname, 'database-backups');
+}
+
+async function createDatabaseBackup() {
+
+  const backupDirectory =
+    databaseBackupDirectory();
+
+  try {
+
+    checkpointDatabase();
+
+    fs.mkdirSync(
+      backupDirectory,
+      { recursive: true }
+    );
+
+    const stamp =
+      new Date()
+        .toISOString()
+        .replace(/[:.]/g, '-');
+
+    const backupPath =
+      path.join(
+        backupDirectory,
+        `${path.parse(databasePath).name}-${stamp}.db`
+      );
+
+    await db.backup(backupPath);
+
+    const backups =
+      fs.readdirSync(backupDirectory)
+        .filter(file => file.endsWith('.db'))
+        .map(file => ({
+          file,
+          modifiedAt: fs.statSync(
+            path.join(backupDirectory, file)
+          ).mtimeMs
+        }))
+        .sort((first, second) =>
+          second.modifiedAt - first.modifiedAt
+        );
+
+    for (const expiredBackup of backups.slice(backupRetentionCount())) {
+
+      fs.unlinkSync(
+        path.join(backupDirectory, expiredBackup.file)
+      );
+    }
+
+    console.log(
+      `Database backup created: ${path.basename(backupPath)}`
+    );
+
+    return backupPath;
+
+  } catch (err) {
+
+    console.error(
+      'Database backup failed:',
+      err.message
+    );
+
+    return null;
+  }
+}
+
+function startDatabaseBackups() {
+
+  if (backupInterval) {
+
+    return backupInterval;
+  }
+
+  createDatabaseBackup().catch(console.error);
+
+  backupInterval =
+    setInterval(
+      () => createDatabaseBackup().catch(console.error),
+      24 * 60 * 60 * 1000
+    );
+
+  backupInterval.unref?.();
+
+  return backupInterval;
 }
 
 
@@ -1002,6 +1108,12 @@ function createTicketsTable() {
     'tickets',
     'closeReason',
     'TEXT'
+  );
+
+  ensureColumn(
+    'tickets',
+    'deleteAfter',
+    'INTEGER'
   );
 
   rawRun(`
@@ -1886,6 +1998,8 @@ function createDailyFactTable() {
 
       minute INTEGER DEFAULT 0,
 
+      timezone TEXT DEFAULT 'Europe/London',
+
       lastSent TEXT
     )
   `);
@@ -1939,6 +2053,12 @@ function createDailyFactSubmissionTable() {
     'dailyfact_config',
     'minute',
     'INTEGER DEFAULT 0'
+  );
+
+  ensureColumn(
+    'dailyfact_config',
+    'timezone',
+    "TEXT DEFAULT 'Europe/London'"
   );
 
   ensureColumn(
@@ -2079,6 +2199,31 @@ function createDailyFactFactsTable() {
      WHERE status = 'APPROVED'
      AND normalizedFact IS NOT NULL
      AND normalizedFact != ''`
+  );
+}
+
+function createDailyFactDeliveryHistoryTable() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS dailyfact_delivery_history (
+
+      guildId TEXT NOT NULL,
+
+      factKey TEXT NOT NULL,
+
+      deliveredAt INTEGER NOT NULL,
+
+      PRIMARY KEY (guildId, factKey)
+    )
+  `);
+
+  createIndex(
+
+    'idx_dailyfact_delivery_history_expiry',
+
+    `CREATE INDEX IF NOT EXISTS idx_dailyfact_delivery_history_expiry
+     ON dailyfact_delivery_history(deliveredAt)`
   );
 }
 
@@ -2272,6 +2417,8 @@ createDailyFactSubmissionTable();
 
 createDailyFactFactsTable();
 
+createDailyFactDeliveryHistoryTable();
+
 createApplicationTables();
 
 databaseInitialized =
@@ -2374,6 +2521,10 @@ module.exports = {
   initDatabase,
 
   startDatabaseCleanup,
+
+  startDatabaseBackups,
+
+  createDatabaseBackup,
 
   checkDatabaseIntegrity,
   checkpointDatabase
