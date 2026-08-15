@@ -159,6 +159,45 @@ module.exports = {
     ]
   },
 
+  appeal: {
+
+    id:
+      'appeal',
+
+    name:
+      'Punishment Appeal',
+
+    emoji:
+      '\u{2696}',
+
+    description:
+      'Appeal a warning, mute, kick, or ban',
+
+    color:
+      0xF1C40F,
+
+    channelPrefix:
+      'appeal',
+
+    closeMessage:
+      'Your punishment appeal has been closed.',
+
+    welcomeMessage:
+
+      'Please explain which punishment you are appealing and why it should be reviewed.\n' +
+
+      'Include any relevant evidence or context.',
+
+    tags: [
+
+      'appeal',
+
+      'punishment',
+
+      'review'
+    ]
+  },
+
   // ==================================================
   // 📝 APPLICATION
   // ==================================================

@@ -13,6 +13,20 @@ const {
   run
 } = require('../database');
 
+const {
+  memberCanManageSuggestions
+} = require('../utils/suggestions/managers');
+
+function canReviewSuggestions(interaction) {
+
+  return interaction.memberPermissions?.has(
+    PermissionsBitField.Flags.Administrator
+  ) || memberCanManageSuggestions(
+    interaction.member,
+    interaction.guild.id
+  );
+}
+
 function isSuggestionButton(
   interaction
 ) {
@@ -222,14 +236,10 @@ function buildDecisionEmbed({
 async function handleDecisionButton(
   interaction
 ) {
-  if (
-    !interaction.memberPermissions?.has(
-      PermissionsBitField.Flags.Administrator
-    )
-  ) {
+  if (!canReviewSuggestions(interaction)) {
     return interaction.reply({
       content:
-        'Admin only.',
+        'You need Administrator permission or a suggestion manager role.',
       flags: MessageFlags.Ephemeral
     });
   }
@@ -309,6 +319,14 @@ async function handleDecisionModal(
   await interaction.deferReply({
     flags: MessageFlags.Ephemeral
   });
+
+  if (!canReviewSuggestions(interaction)) {
+
+    return interaction.editReply({
+      content:
+        'You need Administrator permission or a suggestion manager role.'
+    });
+  }
 
   const reason =
     cleanReason(

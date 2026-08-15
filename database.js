@@ -1301,6 +1301,177 @@ function createSuggestionTables() {
     `CREATE INDEX IF NOT EXISTS idx_suggestions
      ON suggestions(guildId, status)`
   );
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS suggestion_manager_roles (
+
+      guildId TEXT NOT NULL,
+
+      roleId TEXT NOT NULL,
+
+      addedBy TEXT NOT NULL,
+
+      addedAt INTEGER NOT NULL,
+
+      PRIMARY KEY (guildId, roleId)
+    )
+  `);
+
+  createIndex(
+
+    'idx_suggestion_manager_roles_guild',
+
+    `CREATE INDEX IF NOT EXISTS idx_suggestion_manager_roles_guild
+     ON suggestion_manager_roles(guildId)`
+  );
+}
+
+function createMemberExperienceTables() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS verification_settings (
+
+      guildId TEXT PRIMARY KEY,
+
+      enabled INTEGER NOT NULL DEFAULT 0,
+
+      channelId TEXT,
+
+      messageId TEXT,
+
+      verifiedRoleId TEXT,
+
+      unverifiedRoleId TEXT,
+
+      minimumAccountAgeDays INTEGER NOT NULL DEFAULT 0,
+
+      title TEXT NOT NULL DEFAULT 'Verify Your Account',
+
+      description TEXT NOT NULL DEFAULT 'Click the button below to verify.',
+
+      buttonLabel TEXT NOT NULL DEFAULT 'Verify',
+
+      buttonEmoji TEXT,
+
+      buttonStyle TEXT NOT NULL DEFAULT 'Success',
+
+      color INTEGER NOT NULL DEFAULT 5763719,
+
+      thumbnailUrl TEXT,
+
+      imageUrl TEXT,
+
+      footer TEXT,
+
+      updatedBy TEXT,
+
+      updatedAt INTEGER NOT NULL
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS reaction_role_panels (
+
+      messageId TEXT PRIMARY KEY,
+
+      guildId TEXT NOT NULL,
+
+      channelId TEXT NOT NULL,
+
+      title TEXT NOT NULL,
+
+      description TEXT NOT NULL,
+
+      color INTEGER NOT NULL DEFAULT 5763719,
+
+      thumbnailUrl TEXT,
+
+      imageUrl TEXT,
+
+      footer TEXT,
+
+      exclusive INTEGER NOT NULL DEFAULT 0,
+
+      createdBy TEXT NOT NULL,
+
+      createdAt INTEGER NOT NULL
+    )
+  `);
+
+  createIndex(
+
+    'idx_reaction_role_panels_guild',
+
+    `CREATE INDEX IF NOT EXISTS idx_reaction_role_panels_guild
+     ON reaction_role_panels(guildId, channelId)`
+  );
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS reaction_role_mappings (
+
+      messageId TEXT NOT NULL,
+
+      emojiKey TEXT NOT NULL,
+
+      emoji TEXT NOT NULL,
+
+      roleId TEXT NOT NULL,
+
+      createdAt INTEGER NOT NULL,
+
+      PRIMARY KEY (messageId, emojiKey)
+    )
+  `);
+
+  createIndex(
+
+    'idx_reaction_role_mappings_message',
+
+    `CREATE INDEX IF NOT EXISTS idx_reaction_role_mappings_message
+     ON reaction_role_mappings(messageId)`
+  );
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS greeting_settings (
+
+      guildId TEXT NOT NULL,
+
+      type TEXT NOT NULL,
+
+      enabled INTEGER NOT NULL DEFAULT 0,
+
+      channelId TEXT,
+
+      mode TEXT NOT NULL DEFAULT 'RANDOM',
+
+      customMessage TEXT,
+
+      ping INTEGER NOT NULL DEFAULT 0,
+
+      title TEXT,
+
+      color INTEGER NOT NULL DEFAULT 5763719,
+
+      updatedBy TEXT,
+
+      updatedAt INTEGER NOT NULL,
+
+      PRIMARY KEY (guildId, type)
+    )
+  `);
+
+  createIndex(
+
+    'idx_greeting_settings_enabled',
+
+    `CREATE INDEX IF NOT EXISTS idx_greeting_settings_enabled
+     ON greeting_settings(guildId, type, enabled)`
+  );
 }
 
 // ==================================================
@@ -2394,6 +2565,8 @@ function initDatabase() {
   createTicketStatsTable();
 
   createSuggestionTables();
+
+  createMemberExperienceTables();
 
   createAuditTables();
 

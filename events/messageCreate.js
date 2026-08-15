@@ -126,7 +126,7 @@ async function handleLinkBlock(
 
   const ticket = await getOpenTicket(message, client);
 
-  if (['partnership', 'application'].includes(ticket?.type)) {
+  if (['partnership', 'application', 'appeal'].includes(ticket?.type)) {
     return false;
   }
 

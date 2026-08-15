@@ -12,6 +12,10 @@ const {
   sendLog
 } = require('../utils/logger');
 
+const {
+  sendGreeting
+} = require('../utils/greetings');
+
 module.exports = {
 
   name: 'guildMemberRemove',
@@ -29,6 +33,12 @@ module.exports = {
         'MEMBERS',
         createMemberLeaveEmbed(member)
       );
+
+      await sendGreeting({
+        client,
+        member,
+        type: 'goodbye'
+      });
 
       // ==========================================
       // 🔍 GET INVITE DATA

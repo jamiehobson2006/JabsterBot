@@ -16,6 +16,10 @@ const {
   sendLog
 } = require('../utils/logger');
 
+const {
+  sendGreeting
+} = require('../utils/greetings');
+
 module.exports = {
 
   name: 'guildMemberAdd',
@@ -33,6 +37,12 @@ module.exports = {
         'MEMBERS',
         createMemberJoinEmbed(member)
       );
+
+      await sendGreeting({
+        client,
+        member,
+        type: 'welcome'
+      });
 
       // ==========================================
       // 📨 FIND USED INVITE
