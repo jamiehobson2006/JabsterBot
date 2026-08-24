@@ -25,7 +25,7 @@ module.exports = {
 
     try {
 
-      if (!channel.guild) {
+      if (!channel.guild || channel.isThread?.()) {
         return;
       }
 

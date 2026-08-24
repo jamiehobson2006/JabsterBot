@@ -24,6 +24,46 @@ function formatRoles(roles) {
     .join('\n');
 }
 
+function formatTimestamp(timestamp) {
+  return timestamp
+    ? `<t:${Math.floor(timestamp / 1000)}:F>`
+    : 'None';
+}
+
+async function logMemberChange({
+  client,
+  member,
+  action,
+  metadata,
+  details,
+  color = 0x5865F2
+}) {
+  const audit = await findRecentAuditLog(
+    member.guild,
+    AuditLogEvent.MemberUpdate,
+    member.id
+  );
+
+  return logAudit(client, member.guild.id, {
+    action,
+    targetId: member.id,
+    executorId: audit?.executor?.id,
+    type: 'MEMBERS',
+    metadata,
+    embed: createAuditEmbed({
+      action: action
+        .split('_')
+        .map(word => word[0] + word.slice(1).toLowerCase())
+        .join(' '),
+      target: formatMember(member),
+      executor: formatExecutor(audit),
+      reason: audit?.reason || undefined,
+      extra: details,
+      color
+    })
+  });
+}
+
 module.exports = {
 
   name: 'guildMemberUpdate',
@@ -144,6 +184,64 @@ module.exports = {
             })
           }
         );
+      }
+
+      if (
+        oldMember.communicationDisabledUntilTimestamp !==
+        newMember.communicationDisabledUntilTimestamp
+      ) {
+        const before = oldMember.communicationDisabledUntilTimestamp;
+        const after = newMember.communicationDisabledUntilTimestamp;
+        const action = after
+          ? (before ? 'MEMBER_TIMEOUT_UPDATED' : 'MEMBER_TIMEOUT_ADDED')
+          : 'MEMBER_TIMEOUT_REMOVED';
+
+        await logMemberChange({
+          client,
+          member: newMember,
+          action,
+          metadata: { before: before || null, after: after || null },
+          details:
+            `Before: ${formatTimestamp(before)}\n` +
+            `After: ${formatTimestamp(after)}`,
+          color: after ? 0xFEE75C : 0x57F287
+        });
+      }
+
+      if (oldMember.pending !== newMember.pending) {
+        await logMemberChange({
+          client,
+          member: newMember,
+          action: 'MEMBER_SCREENING_UPDATED',
+          metadata: { pending: newMember.pending },
+          details: newMember.pending
+            ? 'Membership screening is pending.'
+            : 'Membership screening was completed.',
+          color: newMember.pending ? 0xFEE75C : 0x57F287
+        });
+      }
+
+      if (
+        oldMember.premiumSinceTimestamp !==
+        newMember.premiumSinceTimestamp
+      ) {
+        const boosting = Boolean(newMember.premiumSinceTimestamp);
+
+        await logMemberChange({
+          client,
+          member: newMember,
+          action: boosting
+            ? 'MEMBER_BOOST_STARTED'
+            : 'MEMBER_BOOST_ENDED',
+          metadata: {
+            before: oldMember.premiumSinceTimestamp || null,
+            after: newMember.premiumSinceTimestamp || null
+          },
+          details: boosting
+            ? `Boost started: ${formatTimestamp(newMember.premiumSinceTimestamp)}`
+            : 'Server boost ended.',
+          color: boosting ? 0xFEE75C : 0xED4245
+        });
       }
 
     } catch (err) {

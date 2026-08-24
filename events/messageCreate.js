@@ -45,6 +45,11 @@ const {
   getLinkWhitelist
 } = require('../utils/linkWhitelist');
 
+const {
+  clearAntiSpamRuntime,
+  evaluateAntiSpam
+} = require('../utils/antispam');
+
 const LevelingService =
   require('../utils/LevelingService');
 
@@ -305,6 +310,90 @@ async function handleCensor(
   return true;
 }
 
+async function handleAntiSpam(message, client) {
+  const violation = evaluateAntiSpam(message);
+
+  if (!violation) {
+    return false;
+  }
+
+  suppressMessageDelete(message.id);
+
+  try {
+    await message.delete();
+  } catch (err) {
+    unsuppressMessageDelete(message.id);
+    console.error('Anti-spam delete failed:', err.message);
+    return false;
+  }
+
+  clearAntiSpamRuntime(message.guild.id, message.author.id);
+
+  let timedOut = false;
+  const timeoutSeconds = Number(violation.settings.timeoutSeconds || 0);
+
+  if (
+    timeoutSeconds > 0 &&
+    message.member?.moderatable
+  ) {
+    try {
+      await message.member.timeout(
+        timeoutSeconds * 1000,
+        `Anti-spam: ${violation.rule}`
+      );
+      timedOut = true;
+    } catch (err) {
+      console.error('Anti-spam timeout failed:', err.message);
+    }
+  }
+
+  await message.channel.send({
+    content:
+      `${message.author}, your message was removed by anti-spam protection.` +
+      (timedOut ? ' You have also been timed out.' : ''),
+    allowedMentions: {
+      users: [message.author.id],
+      roles: [],
+      parse: []
+    }
+  })
+    .then(sent => setTimeout(
+      () => sent.delete().catch(() => {}),
+      5000
+    ))
+    .catch(() => {});
+
+  await logAudit(client, message.guild.id, {
+    action: 'ANTI_SPAM_TRIGGERED',
+    targetId: message.author.id,
+    executorId: client.user?.id,
+    type: 'MESSAGES',
+    metadata: {
+      channelId: message.channel.id,
+      messageId: message.id,
+      rule: violation.rule,
+      detail: violation.detail,
+      timedOut,
+      content: message.content || null
+    },
+    embed: createAuditEmbed({
+      action: 'Anti-Spam Triggered',
+      target: `${message.author.tag}\n<@${message.author.id}>`,
+      executor: client.user
+        ? `${client.user.tag}\n<@${client.user.id}>`
+        : 'Bot',
+      channel: `<#${message.channel.id}>`,
+      extra:
+        `Rule: ${violation.rule}\n` +
+        `Details: ${violation.detail}\n` +
+        `Automatic timeout: ${timedOut ? 'Applied' : 'Not applied'}`,
+      color: 0xED4245
+    })
+  });
+
+  return true;
+}
+
 async function trackTicketStaffMessage(
   message,
   client
@@ -488,6 +577,16 @@ module.exports = {
 
       if (
         await handleLinkBlock(
+          message,
+          client
+        )
+      ) {
+
+        return;
+      }
+
+      if (
+        await handleAntiSpam(
           message,
           client
         )

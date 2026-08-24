@@ -850,6 +850,8 @@ function createGuildSettingsTable() {
 
       messageLogChannelId TEXT,
 
+      commandLogChannelId TEXT,
+
       memberLogChannelId TEXT,
 
       serverLogChannelId TEXT,
@@ -859,6 +861,8 @@ function createGuildSettingsTable() {
       ticketLogChannelId TEXT,
 
       suggestionLogChannelId TEXT,
+
+      reactionLogChannelId TEXT,
 
       staffRoleId TEXT,
 
@@ -912,11 +916,13 @@ function createGuildSettingsTable() {
     ['giveawayChannelId', 'TEXT'],
 
     ['messageLogChannelId', 'TEXT'],
+    ['commandLogChannelId', 'TEXT'],
     ['memberLogChannelId', 'TEXT'],
     ['serverLogChannelId', 'TEXT'],
     ['voiceLogChannelId', 'TEXT'],
     ['ticketLogChannelId', 'TEXT'],
     ['suggestionLogChannelId', 'TEXT'],
+    ['reactionLogChannelId', 'TEXT'],
 
     ['staffRoleId', 'TEXT'],
     ['adminRoleId', 'TEXT'],
@@ -968,7 +974,39 @@ function createLogSettingsTable() {
 
       enabled INTEGER DEFAULT 1,
 
+      color INTEGER,
+
+      style TEXT NOT NULL DEFAULT 'DEFAULT',
+
       PRIMARY KEY (guildId, type)
+    )
+  `);
+
+  ensureColumn(
+    'log_settings',
+    'color',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'log_settings',
+    'style',
+    "TEXT NOT NULL DEFAULT 'DEFAULT'"
+  );
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS logging_manager_roles (
+
+      guildId TEXT NOT NULL,
+
+      roleId TEXT NOT NULL,
+
+      addedBy TEXT NOT NULL,
+
+      addedAt INTEGER NOT NULL,
+
+      PRIMARY KEY (guildId, roleId)
     )
   `);
 }
@@ -1465,12 +1503,292 @@ function createMemberExperienceTables() {
     )
   `);
 
+  ensureColumn(
+    'greeting_settings',
+    'imageUrl',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'greeting_settings',
+    'milestoneInterval',
+    'INTEGER'
+  );
+
   createIndex(
 
     'idx_greeting_settings_enabled',
 
     `CREATE INDEX IF NOT EXISTS idx_greeting_settings_enabled
      ON greeting_settings(guildId, type, enabled)`
+  );
+}
+
+// ==================================================
+// COMMAND CONTROLS
+// ==================================================
+function createCommandControlTables() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS command_controls (
+
+      guildId TEXT NOT NULL,
+
+      commandName TEXT NOT NULL,
+
+      enabled INTEGER NOT NULL DEFAULT 1,
+
+      reason TEXT,
+
+      updatedBy TEXT NOT NULL,
+
+      updatedAt INTEGER NOT NULL,
+
+      PRIMARY KEY (guildId, commandName)
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS command_control_bypasses (
+
+      guildId TEXT NOT NULL,
+
+      commandName TEXT NOT NULL,
+
+      type TEXT NOT NULL,
+
+      valueId TEXT NOT NULL,
+
+      addedBy TEXT NOT NULL,
+
+      addedAt INTEGER NOT NULL,
+
+      PRIMARY KEY (guildId, commandName, type, valueId)
+    )
+  `);
+
+  createIndex(
+
+    'idx_command_controls_guild',
+
+    `CREATE INDEX IF NOT EXISTS idx_command_controls_guild
+     ON command_controls(guildId, enabled)`
+  );
+}
+
+// ==================================================
+// ANTI SPAM
+// ==================================================
+function createAntiSpamTables() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS antispam_settings (
+
+      guildId TEXT PRIMARY KEY,
+
+      enabled INTEGER NOT NULL DEFAULT 0,
+
+      managerRoleId TEXT,
+
+      maxMessages INTEGER NOT NULL DEFAULT 6,
+
+      intervalSeconds INTEGER NOT NULL DEFAULT 8,
+
+      duplicateLimit INTEGER NOT NULL DEFAULT 3,
+
+      duplicateWindowSeconds INTEGER NOT NULL DEFAULT 30,
+
+      mentionLimit INTEGER NOT NULL DEFAULT 6,
+
+      timeoutSeconds INTEGER NOT NULL DEFAULT 0,
+
+      updatedBy TEXT,
+
+      updatedAt INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS antispam_bypasses (
+
+      guildId TEXT NOT NULL,
+
+      type TEXT NOT NULL,
+
+      valueId TEXT NOT NULL,
+
+      addedBy TEXT NOT NULL,
+
+      addedAt INTEGER NOT NULL,
+
+      PRIMARY KEY (guildId, type, valueId)
+    )
+  `);
+}
+
+// ==================================================
+// TICKET TARGETS
+// ==================================================
+function createTicketTargetTables() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS ticket_targets (
+
+      guildId TEXT NOT NULL,
+
+      type TEXT NOT NULL,
+
+      responseMinutes INTEGER,
+
+      resolveMinutes INTEGER,
+
+      alertChannelId TEXT NOT NULL,
+
+      alertRoleId TEXT,
+
+      updatedBy TEXT NOT NULL,
+
+      updatedAt INTEGER NOT NULL,
+
+      PRIMARY KEY (guildId, type)
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS ticket_target_alerts (
+
+      ticketId INTEGER NOT NULL,
+
+      target TEXT NOT NULL,
+
+      alertedAt INTEGER NOT NULL,
+
+      PRIMARY KEY (ticketId, target)
+    )
+  `);
+}
+
+// ==================================================
+// TEMPORARY VOICE
+// ==================================================
+function createTempVoiceTables() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS temp_voice_settings (
+
+      guildId TEXT PRIMARY KEY,
+
+      enabled INTEGER NOT NULL DEFAULT 0,
+
+      lobbyChannelId TEXT,
+
+      categoryId TEXT,
+
+       nameTemplate TEXT NOT NULL DEFAULT '{username}''s Room',
+
+      userLimit INTEGER NOT NULL DEFAULT 0,
+
+      updatedBy TEXT,
+
+      updatedAt INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS temp_voice_rooms (
+
+      channelId TEXT PRIMARY KEY,
+
+      guildId TEXT NOT NULL,
+
+      ownerId TEXT NOT NULL,
+
+      createdAt INTEGER NOT NULL
+    )
+  `);
+
+  createIndex(
+
+    'idx_temp_voice_owner',
+
+    `CREATE INDEX IF NOT EXISTS idx_temp_voice_owner
+     ON temp_voice_rooms(guildId, ownerId)`
+  );
+}
+
+// ==================================================
+// CHANGELOGS
+// ==================================================
+function createChangelogTables() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS changelog_settings (
+
+      guildId TEXT PRIMARY KEY,
+
+      publishChannelId TEXT,
+
+      reviewChannelId TEXT,
+
+      reviewerRoleId TEXT,
+
+      updatedBy TEXT,
+
+      updatedAt INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS changelog_entries (
+
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+      guildId TEXT NOT NULL,
+
+      version TEXT NOT NULL,
+
+      title TEXT NOT NULL,
+
+      content TEXT NOT NULL,
+
+      status TEXT NOT NULL DEFAULT 'DRAFT',
+
+      createdBy TEXT NOT NULL,
+
+      createdAt INTEGER NOT NULL,
+
+      reviewedBy TEXT,
+
+      reviewedAt INTEGER,
+
+      reviewReason TEXT,
+
+      publishedBy TEXT,
+
+      publishedAt INTEGER,
+
+      reviewMessageId TEXT,
+
+      publishedMessageId TEXT
+    )
+  `);
+
+  createIndex(
+
+    'idx_changelog_entries',
+
+    `CREATE INDEX IF NOT EXISTS idx_changelog_entries
+     ON changelog_entries(guildId, status, createdAt DESC)`
   );
 }
 
@@ -1489,6 +1807,8 @@ function createAuditTables() {
 
       action TEXT NOT NULL,
 
+      type TEXT,
+
       targetId TEXT,
 
       executorId TEXT,
@@ -1499,12 +1819,26 @@ function createAuditTables() {
     )
   `);
 
+  ensureColumn(
+    'audit_logs',
+    'type',
+    'TEXT'
+  );
+
   createIndex(
 
     'idx_audit_logs',
 
     `CREATE INDEX IF NOT EXISTS idx_audit_logs
      ON audit_logs(guildId, timestamp)`
+  );
+
+  createIndex(
+
+    'idx_audit_logs_type',
+
+    `CREATE INDEX IF NOT EXISTS idx_audit_logs_type
+     ON audit_logs(guildId, type, timestamp)`
   );
 }
 
@@ -2567,6 +2901,16 @@ function initDatabase() {
   createSuggestionTables();
 
   createMemberExperienceTables();
+
+  createCommandControlTables();
+
+  createAntiSpamTables();
+
+  createTicketTargetTables();
+
+  createTempVoiceTables();
+
+  createChangelogTables();
 
   createAuditTables();
 

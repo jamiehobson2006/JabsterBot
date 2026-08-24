@@ -5,39 +5,25 @@
 } = require('discord.js');
 
 const {
-  get,
   run
 } = require('../database');
+
+const {
+  LOG_CATEGORIES,
+  getLogDestination
+} = require('./loggingConfig');
 
 // ==================================================
 // 📂 LOG TYPES
 // ==================================================
-const LOG_TYPES = {
-
-  MODERATION:
-    'modlogChannelId',
-
-  MESSAGES:
-    'messageLogChannelId',
-
-  MEMBERS:
-    'memberLogChannelId',
-
-  SERVER:
-    'serverLogChannelId',
-
-  VOICE:
-    'voiceLogChannelId',
-
-  TICKETS:
-    'ticketLogChannelId',
-
-  SUGGESTIONS:
-    'suggestionLogChannelId',
-
-  INVITES:
-    'inviteChannelId'
-};
+const LOG_TYPES =
+  Object.fromEntries(
+    Object.entries(LOG_CATEGORIES)
+      .map(([type, category]) => [
+        type,
+        category.legacyColumn
+      ])
+  );
 
 // ==================================================
 // 🧠 SAFE STRING
@@ -90,6 +76,44 @@ function truncate(
       max - 3
     ) + '...'
   );
+}
+
+function splitFieldText(text, maxLength = 1024, maxFields = 5) {
+  const value = String(text || '').trim();
+
+  if (!value) {
+    return [];
+  }
+
+  const chunks = [];
+  let remaining = value;
+
+  while (remaining.length && chunks.length < maxFields) {
+    if (remaining.length <= maxLength) {
+      chunks.push(remaining);
+      remaining = '';
+      break;
+    }
+
+    const newline = remaining.lastIndexOf('\n', maxLength);
+    const splitAt = newline > Math.floor(maxLength / 2)
+      ? newline
+      : maxLength;
+
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).trimStart();
+  }
+
+  if (remaining.length && chunks.length) {
+    const lastIndex = chunks.length - 1;
+    const suffix = '\n...additional details omitted.';
+    chunks[lastIndex] = truncate(
+      chunks[lastIndex],
+      maxLength - suffix.length
+    ) + suffix;
+  }
+
+  return chunks;
 }
 
 // ==================================================
@@ -196,42 +220,31 @@ async function getLogChannel(
 
   client,
   guildId,
-  type = 'MODERATION'
+  type = 'MODERATION',
+  configuredDestination = null
 
 ) {
 
   try {
 
-    const column =
-      LOG_TYPES[type];
-
-    if (!column) {
-
-      return null;
-    }
-
-    const settings =
-      get(
-
-        `SELECT ${column}, modlogChannelId
-         FROM guild_settings
-         WHERE guildId = ?`,
-
-        [guildId]
+    const destination =
+      configuredDestination ||
+      getLogDestination(
+        guildId,
+        type
       );
 
-    const channelId =
-      settings?.modlogChannelId ||
-      settings?.[column];
-
-    if (!channelId) {
+    if (
+      !destination.enabled ||
+      !destination.channelId
+    ) {
 
       return null;
     }
 
     const channel =
       await client.channels
-        .fetch(channelId)
+        .fetch(destination.channelId)
         .catch(() => null);
 
     if (!channel) {
@@ -288,6 +301,41 @@ async function getLogChannel(
   }
 }
 
+function applyLogPresentation(embed, type, destination) {
+  if (!embed || (!destination?.color && destination?.style !== 'BRANDED' && destination?.style !== 'COMPACT')) {
+    return embed;
+  }
+
+  const styled = EmbedBuilder.from(embed);
+
+  if (destination.color) {
+    styled.setColor(Number(destination.color));
+  }
+
+  if (destination.style === 'BRANDED' || destination.style === 'COMPACT') {
+    const category = LOG_CATEGORIES[String(type || '').toUpperCase()]?.label || 'Logs';
+    const currentFooter = styled.data.footer?.text;
+    const footer = destination.style === 'BRANDED'
+      ? `Jabster Studios | ${category}${currentFooter ? ` | ${currentFooter}` : ''}`
+      : `Jabster Studios | ${category}`;
+
+    styled.setFooter({ text: footer.slice(0, 2048) });
+  }
+
+  return styled;
+}
+
+function applyPayloadPresentation(payload, type, destination) {
+  if (!payload?.embeds?.length) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    embeds: payload.embeds.map(embed => applyLogPresentation(embed, type, destination))
+  };
+}
+
 // ==================================================
 // 📤 SEND LOG
 // ==================================================
@@ -313,12 +361,15 @@ async function sendLog(
       return null;
     }
 
+    const destination = getLogDestination(guildId, type);
+
     const channel =
       await getLogChannel(
 
         client,
         guildId,
-        type
+        type,
+        destination
       );
 
     if (!channel) {
@@ -326,7 +377,7 @@ async function sendLog(
       return null;
     }
 
-    const payload =
+    let payload =
       embed.embeds ||
       embed.files ||
       embed.content ||
@@ -338,7 +389,20 @@ async function sendLog(
             embeds: [embed]
           };
 
-    return await channel.send(payload);
+    payload = payload.embeds
+      ? applyPayloadPresentation(payload, type, destination)
+      : payload;
+
+    return await channel.send({
+      allowedMentions: {
+        parse: []
+      },
+      ...payload,
+      allowedMentions:
+        payload.allowedMentions || {
+          parse: []
+        }
+    });
 
   } catch (err) {
 
@@ -535,14 +599,16 @@ function createAuditEmbed({
   }
 
   if (extra) {
+    const detailFields = splitFieldText(extra);
 
-    embed.addFields({
-
-      name: 'Details',
-
-      value:
-        truncate(extra)
-    });
+    for (const [index, value] of detailFields.entries()) {
+      embed.addFields({
+        name: index
+          ? 'Details (continued)'
+          : 'Details',
+        value
+      });
+    }
   }
 
   return embed;
@@ -624,7 +690,7 @@ async function logCommand(
       action: 'COMMAND_RUN',
       targetId: interaction.user.id,
       executorId: interaction.user.id,
-      type: 'MODERATION',
+      type: 'COMMANDS',
       metadata: {
         command: interaction.commandName,
         channelId: interaction.channelId,
@@ -1152,19 +1218,22 @@ async function logAudit(
       (
         guildId,
         action,
+        type,
         targetId,
         executorId,
         metadata,
         timestamp
       )
 
-      VALUES (?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
 
       [
 
         guildId,
 
         action,
+
+        type,
 
         targetId || null,
 
@@ -1243,6 +1312,8 @@ module.exports = {
   createMessageDeleteEmbed,
 
   createMessageEditEmbed,
+
+  splitFieldText,
 
   formatCommandInvocation,
 

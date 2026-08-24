@@ -59,6 +59,14 @@ const {
   startClosedTicketCleanup
 } = require('./utils/tickets/closedTicketCleanup');
 
+const {
+  startTicketTargetLoop
+} = require('./utils/ticketTargets');
+
+const {
+  cleanupTempVoiceRooms
+} = require('./utils/tempVoice');
+
   const DailyFactService =
   require('./services/DailyFactService');
 
@@ -90,6 +98,8 @@ const client =
       GatewayIntentBits.GuildMessageReactions,
 
       GatewayIntentBits.GuildVoiceStates,
+
+      GatewayIntentBits.GuildScheduledEvents,
 
       GatewayIntentBits.GuildPresences,
 
@@ -633,6 +643,17 @@ startClosedTicketCleanup(
 
 console.log(
   '✅ Closed ticket cleanup started'
+);
+
+startTicketTargetLoop(
+  client
+);
+
+cleanupTempVoiceRooms(client)
+  .catch(err => console.error('Temporary voice cleanup error:', err));
+
+console.log(
+  '✅ Ticket targets and temporary voice recovery started'
 );
 
       client.user.setPresence({

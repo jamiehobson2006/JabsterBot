@@ -86,7 +86,7 @@ module.exports = {
 
   async execute(oldChannel, newChannel, client) {
     try {
-      if (!newChannel.guild) {
+      if (!newChannel.guild || newChannel.isThread?.()) {
         return;
       }
 
@@ -101,7 +101,9 @@ module.exports = {
       }
 
       if (oldChannel.topic !== newChannel.topic) {
-        changes.push('Topic changed');
+        changes.push(
+          `Topic: ${oldChannel.topic || 'None'} -> ${newChannel.topic || 'None'}`
+        );
       }
 
       if (oldChannel.nsfw !== newChannel.nsfw) {
@@ -110,6 +112,26 @@ module.exports = {
 
       if (oldChannel.rateLimitPerUser !== newChannel.rateLimitPerUser) {
         changes.push(`Slowmode: ${oldChannel.rateLimitPerUser || 0}s -> ${newChannel.rateLimitPerUser || 0}s`);
+      }
+
+      if (oldChannel.bitrate !== newChannel.bitrate) {
+        changes.push(`Bitrate: ${oldChannel.bitrate || 0} -> ${newChannel.bitrate || 0}`);
+      }
+
+      if (oldChannel.userLimit !== newChannel.userLimit) {
+        changes.push(`User limit: ${oldChannel.userLimit || 0} -> ${newChannel.userLimit || 0}`);
+      }
+
+      if (oldChannel.rtcRegion !== newChannel.rtcRegion) {
+        changes.push(`RTC region: ${oldChannel.rtcRegion || 'Automatic'} -> ${newChannel.rtcRegion || 'Automatic'}`);
+      }
+
+      if (oldChannel.defaultAutoArchiveDuration !== newChannel.defaultAutoArchiveDuration) {
+        changes.push(`Default thread archive: ${oldChannel.defaultAutoArchiveDuration || 'Unknown'} -> ${newChannel.defaultAutoArchiveDuration || 'Unknown'} minutes`);
+      }
+
+      if (oldChannel.defaultThreadRateLimitPerUser !== newChannel.defaultThreadRateLimitPerUser) {
+        changes.push(`Default thread slowmode: ${oldChannel.defaultThreadRateLimitPerUser || 0}s -> ${newChannel.defaultThreadRateLimitPerUser || 0}s`);
       }
 
       changes.push(...permissionOverwriteChanges(oldChannel, newChannel));

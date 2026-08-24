@@ -57,6 +57,18 @@ module.exports = {
         changes.push(`Mentionable: ${oldRole.mentionable} -> ${newRole.mentionable}`);
       }
 
+      if (oldRole.position !== newRole.position) {
+        changes.push(`Position: ${oldRole.position} -> ${newRole.position}`);
+      }
+
+      if (oldRole.icon !== newRole.icon) {
+        changes.push('Role icon changed');
+      }
+
+      if (oldRole.unicodeEmoji !== newRole.unicodeEmoji) {
+        changes.push(`Role emoji: ${oldRole.unicodeEmoji || 'None'} -> ${newRole.unicodeEmoji || 'None'}`);
+      }
+
       changes.push(...permissionChanges(oldRole, newRole));
 
       if (!changes.length) {

@@ -14,6 +14,10 @@ const {
   shouldLogCommand
 } = require('../utils/commandAudit');
 
+const {
+  getCommandAvailability
+} = require('../utils/commandControls');
+
 function isStaleInteractionError(error) {
   return (
     error?.code === 10062 ||
@@ -123,6 +127,23 @@ module.exports = {
         {
           content:
             'This command is outdated. Try redeploying slash commands.',
+          flags: MessageFlags.Ephemeral
+        }
+      );
+    }
+
+    const availability =
+      getCommandAvailability(interaction);
+
+    if (!availability.allowed) {
+      return safelyReply(
+        interaction,
+        {
+          content:
+            `/${interaction.commandName} is disabled in this server.` +
+            (availability.reason
+              ? `\nReason: ${availability.reason}`
+              : ''),
           flags: MessageFlags.Ephemeral
         }
       );

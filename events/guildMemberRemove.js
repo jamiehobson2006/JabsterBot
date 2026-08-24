@@ -159,31 +159,26 @@ module.exports = {
           [guild.id]
         );
 
-      if (
-        !settings?.inviteChannelId
-      ) {
-
-        return;
-      }
+      // The logging dashboard may configure invites without a legacy channel.
 
       // ==========================================
       // 📺 FETCH CHANNEL SAFELY
       // ==========================================
       const channel =
-        await guild.channels
-
-          .fetch(
-            settings.inviteChannelId
-          )
-
-          .catch(() => null);
+        settings?.inviteChannelId
+          ? await guild.channels
+            .fetch(settings.inviteChannelId)
+            .catch(() => null)
+          : null;
 
       if (
-        !channel ||
-        !channel.isTextBased()
+        settings?.inviteChannelId &&
+        (!channel || !channel.isTextBased())
       ) {
 
-        return;
+        console.warn(
+          `Invite log channel is unavailable for ${guild.id}; using logging dashboard settings instead.`
+        );
       }
 
       // ==========================================
@@ -431,10 +426,12 @@ module.exports = {
       // ==========================================
       // 📤 SEND LOG
       // ==========================================
-      await channel.send({
-
-        embeds: [embed]
-      });
+      await sendLog(
+        client,
+        guild.id,
+        'INVITES',
+        embed
+      );
 
     } catch (err) {
 

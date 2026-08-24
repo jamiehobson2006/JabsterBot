@@ -58,6 +58,7 @@ const permissionDefaults = {
   poll: PermissionFlagsBits.ManageMessages,
   setmodlogs: PermissionFlagsBits.ManageGuild,
   suggestchannel: PermissionFlagsBits.ManageGuild,
+  loggingmanager: PermissionFlagsBits.Administrator,
   suggestionmanager: PermissionFlagsBits.Administrator,
   verification: PermissionFlagsBits.Administrator,
   reactionrole: PermissionFlagsBits.Administrator,
@@ -91,7 +92,11 @@ const permissionDefaults = {
   leveling: PermissionFlagsBits.ManageGuild,
   levelreward: PermissionFlagsBits.ManageGuild,
   socialadd: PermissionFlagsBits.ManageGuild,
-  socialremove: PermissionFlagsBits.ManageGuild
+  socialremove: PermissionFlagsBits.ManageGuild,
+  commandcontrol: PermissionFlagsBits.ManageGuild,
+  antispam: PermissionFlagsBits.ManageGuild,
+  tickettargets: PermissionFlagsBits.Administrator,
+  changelog: PermissionFlagsBits.Administrator
 };
 
 async function getGuildCommandCleanupIds(rest) {

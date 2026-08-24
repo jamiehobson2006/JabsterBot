@@ -62,6 +62,26 @@ async function sendGreeting({
   }
 }
 
+async function sendMilestone({ client, member }) {
+  const settings = get(
+    `SELECT *
+     FROM greeting_settings
+     WHERE guildId = ?
+     AND type = 'milestone'
+     AND enabled = 1`,
+    [member.guild.id]
+  );
+
+  const interval = Number(settings?.milestoneInterval || 0);
+
+  if (!settings?.channelId || interval < 2 || member.guild.memberCount % interval !== 0) {
+    return false;
+  }
+
+  return sendGreeting({ client, member, type: 'milestone' });
+}
+
 module.exports = {
-  sendGreeting
+  sendGreeting,
+  sendMilestone
 };

@@ -188,6 +188,25 @@ module.exports = {
         ]
       );
 
+      await run(
+
+        `INSERT INTO log_settings (
+           guildId,
+           type,
+           channelId,
+           enabled
+         )
+         VALUES (?, 'MODERATION', ?, 1)
+         ON CONFLICT(guildId, type)
+         DO UPDATE SET channelId = excluded.channelId,
+                       enabled = 1`,
+
+        [
+          interaction.guild.id,
+          channel.id
+        ]
+      );
+
       // ========================
       // 🧪 TEST MESSAGE
       // ========================

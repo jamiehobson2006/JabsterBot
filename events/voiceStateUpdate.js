@@ -3,6 +3,15 @@ const {
   logAudit
 } = require('../utils/logger');
 
+const {
+  AuditLogEvent
+} = require('discord.js');
+
+const {
+  findRecentAuditLog,
+  formatExecutor
+} = require('../utils/auditLookup');
+
 function formatMember(state) {
 
   const user =
@@ -77,12 +86,21 @@ module.exports = {
           `Server Deaf: ${oldState.serverDeaf} -> ${newState.serverDeaf}`;
       }
 
+      const audit = await findRecentAuditLog(
+        newState.guild,
+        oldState.channelId !== newState.channelId
+          ? AuditLogEvent.MemberMove
+          : AuditLogEvent.MemberUpdate,
+        newState.id
+      );
+
       await logAudit(
         client,
         newState.guild.id,
         {
           action: action.toUpperCase().replaceAll(' ', '_'),
           targetId: newState.id,
+          executorId: audit?.executor?.id,
           type: 'VOICE',
           metadata: {
             beforeChannelId: oldState.channelId,
@@ -93,6 +111,8 @@ module.exports = {
           embed: createAuditEmbed({
             action,
             target: formatMember(newState),
+            executor: formatExecutor(audit),
+            reason: audit?.reason || undefined,
             extra: details,
             color: 0x5865F2
           })

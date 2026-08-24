@@ -7,6 +7,11 @@ const {
 } = require('../../database');
 
 const {
+  createAuditEmbed,
+  logAudit
+} = require('../logger');
+
+const {
   canCloseTicket
 } = require('./permissions');
 
@@ -214,6 +219,35 @@ async function closeTicket({
   await interaction.channel.send({
     embeds: [closeEmbed]
   });
+
+  await logAudit(
+    interaction.client,
+    interaction.guild.id,
+    {
+      action: 'TICKET_CLOSED',
+      targetId: ticket.userId,
+      executorId: interaction.user.id,
+      type: 'TICKETS',
+      metadata: {
+        ticketId: ticket.id,
+        channelId: interaction.channel.id,
+        type: ticket.type,
+        reason: closeReason,
+        handleTime
+      },
+      embed: createAuditEmbed({
+        action: 'Ticket Closed',
+        target: `<@${ticket.userId}>`,
+        executor: `${interaction.user.tag}\n<@${interaction.user.id}>`,
+        channel: `${interaction.channel}`,
+        reason: closeReason,
+        extra:
+          `Type: ${ticket.type}\n` +
+          `Handle time: ${formatDuration(handleTime)}`,
+        color: 0xED4245
+      })
+    }
+  ).catch(err => console.error('Ticket close log error:', err));
 
   const feedback =
     createFeedbackRecord({

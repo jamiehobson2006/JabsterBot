@@ -17,6 +17,11 @@ const {
   memberCanManageSuggestions
 } = require('../utils/suggestions/managers');
 
+const {
+  createAuditEmbed,
+  logAudit
+} = require('../utils/logger');
+
 function canReviewSuggestions(interaction) {
 
   return interaction.memberPermissions?.has(
@@ -441,6 +446,38 @@ async function handleDecisionModal(
       embeds: [copiedEmbed]
     }).catch(() => null);
   }
+
+  await logAudit(
+    interaction.client,
+    interaction.guild.id,
+    {
+      action: `SUGGESTION_${status}`,
+      targetId: suggestion.userId,
+      executorId: interaction.user.id,
+      type: 'SUGGESTIONS',
+      metadata: {
+        suggestionId: suggestion.id,
+        messageId,
+        status,
+        reason
+      },
+      embed: createAuditEmbed({
+        action: status === 'ACCEPTED'
+          ? 'Suggestion Accepted'
+          : 'Suggestion Denied',
+        target: `<@${suggestion.userId}>`,
+        executor: `${interaction.user.tag}\n<@${interaction.user.id}>`,
+        reason,
+        messageLink: suggestionMessage?.url
+          ? `[Jump to suggestion](${suggestionMessage.url})`
+          : undefined,
+        extra: `Suggestion #${suggestion.id}`,
+        color: status === 'ACCEPTED'
+          ? 0x57F287
+          : 0xED4245
+      })
+    }
+  ).catch(err => console.error('Suggestion decision log error:', err));
 
   return interaction.editReply({
     content:

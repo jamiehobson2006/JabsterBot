@@ -13,7 +13,8 @@ const {
 
 const {
   DEFAULT_COLOR,
-  parseEmbedColor
+  parseEmbedColor,
+  validHttpsUrl
 } = require('../../utils/memberExperience');
 
 const textChannelTypes = [
@@ -71,6 +72,12 @@ function addGreetingOptions(subcommand) {
         .setName('color')
         .setDescription('Embed colour in hex, for example #5865F2')
         .setMaxLength(7)
+    )
+    .addStringOption(option =>
+      option
+        .setName('image_url')
+        .setDescription('Optional HTTPS image for a branded greeting card')
+        .setMaxLength(2000)
     );
 }
 
@@ -111,6 +118,13 @@ function greetingSettingsEmbed(rows) {
         inline: true
       },
       {
+        name: 'Milestones',
+        value: settingsByType.get('milestone')?.enabled
+          ? `Every ${settingsByType.get('milestone').milestoneInterval} members in <#${settingsByType.get('milestone').channelId}>`
+          : 'Disabled',
+        inline: true
+      },
+      {
         name: 'Message Variables',
         value: '`{user}`, `{username}`, `{server}`, `{member_count}`'
       }
@@ -135,6 +149,47 @@ module.exports = {
           .setName('welcome')
           .setDescription('Configure welcome messages')
       )
+    )
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('milestone-set')
+        .setDescription('Celebrate every configured member milestone')
+        .addChannelOption(option => option
+          .setName('channel')
+          .setDescription('Channel for milestone announcements')
+          .addChannelTypes(...textChannelTypes)
+          .setRequired(true))
+        .addIntegerOption(option => option
+          .setName('interval')
+          .setDescription('Post every N members')
+          .setMinValue(2)
+          .setMaxValue(100000)
+          .setRequired(true))
+        .addStringOption(option => option
+          .setName('message')
+          .setDescription('Variables: {user}, {username}, {server}, {member_count}')
+          .setMaxLength(4000)
+          .setRequired(true))
+        .addBooleanOption(option => option
+          .setName('ping')
+          .setDescription('Ping the member who triggered the milestone'))
+        .addStringOption(option => option
+          .setName('title')
+          .setDescription('Optional embed title')
+          .setMaxLength(256))
+        .addStringOption(option => option
+          .setName('color')
+          .setDescription('Embed colour in hex, for example #5865F2')
+          .setMaxLength(7))
+        .addStringOption(option => option
+          .setName('image_url')
+          .setDescription('Optional HTTPS image for the milestone card')
+          .setMaxLength(2000))
+    )
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('milestone-disable')
+        .setDescription('Disable member milestone announcements')
     )
     .addSubcommand(subcommand =>
       addGreetingOptions(
@@ -230,6 +285,85 @@ module.exports = {
       });
     }
 
+    if (subcommand === 'milestone-disable') {
+      const result = run(
+        `UPDATE greeting_settings
+         SET enabled = 0,
+             updatedBy = ?,
+             updatedAt = ?
+         WHERE guildId = ?
+         AND type = 'milestone'`,
+        [interaction.user.id, Date.now(), interaction.guild.id]
+      );
+
+      return interaction.editReply({
+        content: result.changes
+          ? 'Member milestone announcements disabled.'
+          : 'Member milestones have not been configured.'
+      });
+    }
+
+    if (subcommand === 'milestone-set') {
+      const channel = interaction.options.getChannel('channel', true);
+      const interval = interaction.options.getInteger('interval', true);
+      const message = interaction.options.getString('message', true).trim();
+      const permissions = channel.permissionsFor(interaction.guild.members.me);
+
+      if (![PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks]
+        .every(permission => permissions?.has(permission))) {
+        return interaction.editReply({
+          content: 'I need View Channel, Send Messages, and Embed Links in that channel.'
+        });
+      }
+
+      const color = parseEmbedColor(interaction.options.getString('color'));
+      if (color === null) {
+        return interaction.editReply({ content: 'Use a six-digit hex colour such as `#5865F2`.' });
+      }
+
+      const imageInput = interaction.options.getString('image_url');
+      const imageUrl = validHttpsUrl(imageInput);
+      if (imageInput && !imageUrl) {
+        return interaction.editReply({ content: 'The image URL must begin with `https://`.' });
+      }
+
+      run(
+        `INSERT INTO greeting_settings (
+           guildId, type, enabled, channelId, mode, customMessage,
+           ping, title, color, imageUrl, milestoneInterval, updatedBy, updatedAt
+         )
+         VALUES (?, 'milestone', 1, ?, 'CUSTOM', ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(guildId, type)
+         DO UPDATE SET enabled = excluded.enabled,
+                       channelId = excluded.channelId,
+                       mode = excluded.mode,
+                       customMessage = excluded.customMessage,
+                       ping = excluded.ping,
+                       title = excluded.title,
+                       color = excluded.color,
+                       imageUrl = excluded.imageUrl,
+                       milestoneInterval = excluded.milestoneInterval,
+                       updatedBy = excluded.updatedBy,
+                       updatedAt = excluded.updatedAt`,
+        [
+          interaction.guild.id,
+          channel.id,
+          message,
+          interaction.options.getBoolean('ping') ? 1 : 0,
+          interaction.options.getString('title') || null,
+          color ?? DEFAULT_COLOR,
+          imageUrl,
+          interval,
+          interaction.user.id,
+          Date.now()
+        ]
+      );
+
+      return interaction.editReply({
+        content: `Member milestones will post in ${channel} every ${interval} members.`
+      });
+    }
+
     const type =
       subcommand;
 
@@ -275,12 +409,21 @@ module.exports = {
       });
     }
 
+    const imageInput = interaction.options.getString('image_url');
+    const imageUrl = validHttpsUrl(imageInput);
+
+    if (imageInput && !imageUrl) {
+      return interaction.editReply({
+        content: 'The image URL must begin with `https://`.'
+      });
+    }
+
     run(
       `INSERT INTO greeting_settings (
          guildId, type, enabled, channelId, mode, customMessage,
-         ping, title, color, updatedBy, updatedAt
+         ping, title, color, imageUrl, updatedBy, updatedAt
        )
-       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(guildId, type)
        DO UPDATE SET
          enabled = excluded.enabled,
@@ -288,8 +431,9 @@ module.exports = {
          mode = excluded.mode,
          customMessage = excluded.customMessage,
          ping = excluded.ping,
-         title = excluded.title,
-         color = excluded.color,
+          title = excluded.title,
+          color = excluded.color,
+          imageUrl = excluded.imageUrl,
          updatedBy = excluded.updatedBy,
          updatedAt = excluded.updatedAt`,
       [
@@ -301,6 +445,7 @@ module.exports = {
         interaction.options.getBoolean('ping') ? 1 : 0,
         interaction.options.getString('title') || null,
         color ?? DEFAULT_COLOR,
+        imageUrl,
         interaction.user.id,
         Date.now()
       ]

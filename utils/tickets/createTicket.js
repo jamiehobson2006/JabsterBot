@@ -20,6 +20,11 @@ const {
   checkpointDatabase
 } = require('../../database');
 
+const {
+  createAuditEmbed,
+  logAudit
+} = require('../logger');
+
 const ticketTypes =
   require('./ticketTypes');
 
@@ -616,6 +621,31 @@ async function createTicket({
 
   checkpointDatabase();
 
+  await logAudit(
+    interaction.client,
+    interaction.guild.id,
+    {
+      action: 'TICKET_CREATED',
+      targetId: interaction.user.id,
+      type: 'TICKETS',
+      metadata: {
+        ticketId: Number(ticketId),
+        channelId: channel.id,
+        type: safeType,
+        applicationFormId: application?.form?.id || null
+      },
+      embed: createAuditEmbed({
+        action: 'Ticket Created',
+        target: `${interaction.user.tag}\n<@${interaction.user.id}>`,
+        channel: `${channel}`,
+        extra:
+          `Ticket: #${ticketId}\n` +
+          `Type: ${config.name}`,
+        color: 0x57F287
+      })
+    }
+  ).catch(err => console.error('Ticket creation log error:', err));
+
   // ==========================================
   // ✅ RETURN
   // ==========================================
@@ -625,7 +655,9 @@ async function createTicket({
 
     channel,
 
-    message: msg
+    message: msg,
+
+    ticketId
   };
 }
 

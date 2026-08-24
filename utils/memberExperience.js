@@ -170,7 +170,9 @@ function buildGreetingEmbed({
     (
       type === 'welcome'
         ? `Welcome to ${member.guild.name}`
-        : `Goodbye from ${member.guild.name}`
+        : type === 'milestone'
+          ? `${member.guild.name} Member Milestone`
+          : `Goodbye from ${member.guild.name}`
     );
 
   const template =
@@ -180,7 +182,7 @@ function buildGreetingEmbed({
       settings.customMessage
     );
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(Number(settings.color) || DEFAULT_COLOR)
     .setTitle(title)
     .setDescription(renderGreeting(template, member))
@@ -188,6 +190,12 @@ function buildGreetingEmbed({
       member.user.displayAvatarURL({ size: 256 })
     )
     .setTimestamp();
+
+  if (settings.imageUrl) {
+    embed.setImage(settings.imageUrl);
+  }
+
+  return embed;
 }
 
 module.exports = {

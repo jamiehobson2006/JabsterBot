@@ -7,6 +7,11 @@ const {
 } = require('../../database');
 
 const {
+  createAuditEmbed,
+  logAudit
+} = require('../logger');
+
+const {
   canClaimTicket
 } = require('./permissions');
 
@@ -312,6 +317,30 @@ async function claimTicket({
 
     embeds: [embed]
   });
+
+  await logAudit(
+    interaction.client,
+    interaction.guild.id,
+    {
+      action: 'TICKET_CLAIMED',
+      targetId: ticket.userId,
+      executorId: interaction.user.id,
+      type: 'TICKETS',
+      metadata: {
+        ticketId: ticket.id,
+        channelId: interaction.channel.id,
+        type: ticket.type
+      },
+      embed: createAuditEmbed({
+        action: 'Ticket Claimed',
+        target: `<@${ticket.userId}>`,
+        executor: `${interaction.user.tag}\n<@${interaction.user.id}>`,
+        channel: `${interaction.channel}`,
+        extra: `Type: ${safeString(ticket.type)}`,
+        color: 0x57F287
+      })
+    }
+  ).catch(err => console.error('Ticket claim log error:', err));
 
   return {
 
