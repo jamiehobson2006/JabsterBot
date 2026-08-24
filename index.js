@@ -48,6 +48,9 @@ const {
 const socialMonitor =
   require('./utils/socialMonitor');
 
+const freeGameMonitor =
+  require('./utils/freeGames');
+
 const {
   startPollService
 } = require('./utils/polls');
@@ -611,6 +614,14 @@ socialMonitor.start(
 
 console.log(
   '✅ Social monitor started'
+);
+
+freeGameMonitor.start(
+  client
+);
+
+console.log(
+  '✅ Free game watch started'
 );
 
 DailyFactService.start(

@@ -7,6 +7,7 @@ const MUTATING_COMMANDS = new Set([
   'clearwarns',
   'commandcontrol',
   'dailyfact',
+  'freegames',
   'gblacklist',
   'gdelete',
   'gend',

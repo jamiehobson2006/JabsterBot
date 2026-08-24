@@ -2023,6 +2023,64 @@ ensureColumn(
   `);
 }
 
+// ==================================================
+// FREE GAME WATCH
+// ==================================================
+function createFreeGameTables() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS free_game_settings (
+
+      guildId TEXT PRIMARY KEY,
+
+      enabled INTEGER NOT NULL DEFAULT 0,
+
+      channelId TEXT,
+
+      pingRoleId TEXT,
+
+      epicEnabled INTEGER NOT NULL DEFAULT 1,
+
+      steamEnabled INTEGER NOT NULL DEFAULT 1,
+
+      steamCountry TEXT NOT NULL DEFAULT 'GB',
+
+      updatedBy TEXT,
+
+      updatedAt INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS free_game_announcements (
+
+      guildId TEXT NOT NULL,
+
+      offerKey TEXT NOT NULL,
+
+      source TEXT NOT NULL,
+
+      title TEXT NOT NULL,
+
+      announcedAt INTEGER NOT NULL,
+
+      messageId TEXT,
+
+      PRIMARY KEY (guildId, offerKey)
+    )
+  `);
+
+  createIndex(
+
+    'idx_free_game_announcements_cleanup',
+
+    `CREATE INDEX IF NOT EXISTS idx_free_game_announcements_cleanup
+     ON free_game_announcements(announcedAt)`
+  );
+}
+
 function createLevelingTables() {
 
   rawRun(`
@@ -2920,6 +2978,8 @@ function initDatabase() {
 
   createSocialTables();
 
+  createFreeGameTables();
+
   createLevelingTables();
 
   createPollTables();
@@ -2990,6 +3050,14 @@ function startDatabaseCleanup() {
          WHERE expiresAt < ?`,
 
         [Date.now()]
+      );
+
+      run(
+
+        `DELETE FROM free_game_announcements
+         WHERE announcedAt < ?`,
+
+        [ninetyDaysAgo]
       );
 
       console.log(

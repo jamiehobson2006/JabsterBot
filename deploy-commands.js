@@ -75,6 +75,7 @@ const permissionDefaults = {
   ticketdebug: PermissionFlagsBits.Administrator,
   ticketstats: PermissionFlagsBits.Administrator,
   ticketfeedback: PermissionFlagsBits.Administrator,
+  freegames: PermissionFlagsBits.Administrator,
   stafflist: PermissionFlagsBits.Administrator,
   giveaway: PermissionFlagsBits.ManageGuild,
   greroll: PermissionFlagsBits.ManageGuild,

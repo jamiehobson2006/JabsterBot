@@ -25,6 +25,8 @@ test('command audit logs server-changing commands and ignores normal utility com
   assert.equal(shouldLogCommand({}, interaction('ticketfeedback', 'list')), false);
   assert.equal(shouldLogCommand({}, interaction('loggingmanager', 'add')), true);
   assert.equal(shouldLogCommand({}, interaction('loggingmanager', 'list')), false);
+  assert.equal(shouldLogCommand({}, interaction('freegames', 'setup')), true);
+  assert.equal(shouldLogCommand({}, interaction('freegames', 'status')), false);
 });
 
 test('commands can explicitly opt in or out of command audit logging', () => {
