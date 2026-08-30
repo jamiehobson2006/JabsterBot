@@ -286,6 +286,14 @@ async function refreshPollMessage(client, messageId, ended = false) {
     await getPollMessage(client, poll);
 
   if (!message) {
+    if (ended || !poll.active) {
+      run(
+        `UPDATE polls
+         SET endedMessageUpdatedAt = ?
+         WHERE messageId = ?`,
+        [Date.now(), poll.messageId]
+      );
+    }
     return null;
   }
 
@@ -306,6 +314,15 @@ async function refreshPollMessage(client, messageId, ended = false) {
         ? []
         : buildPollComponents(poll.messageId, options)
   });
+
+  if (ended || !poll.active) {
+    run(
+      `UPDATE polls
+       SET endedMessageUpdatedAt = ?
+       WHERE messageId = ?`,
+      [Date.now(), poll.messageId]
+    );
+  }
 
   return {
     poll,
@@ -356,14 +373,27 @@ async function processExpiredPolls(client) {
     all(
       `SELECT messageId
        FROM polls
-       WHERE active = 1
-       AND endsAt IS NOT NULL
-       AND endsAt <= ?`,
+       WHERE (
+         active = 1
+         AND endsAt IS NOT NULL
+         AND endsAt <= ?
+       )
+       OR (
+         active = 0
+         AND endedAt IS NOT NULL
+         AND endedMessageUpdatedAt IS NULL
+       )`,
       [Date.now()]
     );
 
   for (const poll of expired) {
-    await endPoll(client, poll.messageId);
+    const existing = getPoll(poll.messageId);
+    if (existing?.active) {
+      await endPoll(client, poll.messageId);
+    } else {
+      await refreshPollMessage(client, poll.messageId, true)
+        .catch(err => console.error('Failed retrying ended poll update:', err));
+    }
   }
 
   return expired.length;

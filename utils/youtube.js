@@ -2,6 +2,10 @@ const axios = require('axios');
 
 const API_KEY = process.env.YOUTUBE_API_KEY;
 
+function isYouTubeConfigured() {
+  return Boolean(API_KEY && API_KEY.trim());
+}
+
 if (!API_KEY) {
   console.warn(
     '⚠️ YOUTUBE_API_KEY missing from .env'
@@ -13,6 +17,10 @@ if (!API_KEY) {
 // ========================================
 
 async function getChannel(query) {
+
+  if (!isYouTubeConfigured()) {
+    return null;
+  }
 
   try {
 
@@ -69,6 +77,10 @@ async function getChannel(query) {
 async function getLatestUpload(
   channelId
 ) {
+
+  if (!isYouTubeConfigured()) {
+    return null;
+  }
 
   try {
 
@@ -132,6 +144,10 @@ async function getLatestUpload(
 async function getVideoDetails(
   videoId
 ) {
+
+  if (!isYouTubeConfigured()) {
+    return null;
+  }
 
   try {
 
@@ -224,6 +240,10 @@ async function getUploadType(
   videoId
 ) {
 
+  if (!isYouTubeConfigured()) {
+    return 'video';
+  }
+
   try {
 
     const response =
@@ -296,6 +316,8 @@ async function getUploadType(
 }
 
 module.exports = {
+
+  isYouTubeConfigured,
 
   getChannel,
 

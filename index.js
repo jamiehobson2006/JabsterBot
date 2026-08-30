@@ -70,8 +70,16 @@ const {
   cleanupTempVoiceRooms
 } = require('./utils/tempVoice');
 
-  const DailyFactService =
+const DailyFactService =
   require('./services/DailyFactService');
+
+const {
+  DailyInteractionService
+} = require('./services/DailyInteractionService');
+
+const {
+  TicketSlaService
+} = require('./services/TicketSlaService');
 
 if (!process.env.TOKEN) {
 
@@ -151,7 +159,7 @@ const client =
 
 let shuttingDown = false;
 
-function shutdown(signal) {
+function shutdown(signal, exitCode = 0) {
   if (shuttingDown) {
     return;
   }
@@ -166,7 +174,7 @@ function shutdown(signal) {
   }
 
   client.destroy();
-  process.exit(0);
+  process.exit(exitCode);
 }
 
 process.once('SIGINT', () => shutdown('SIGINT'));
@@ -632,6 +640,22 @@ console.log(
   '✅ Daily Fact Service Started'
 );
 
+DailyInteractionService.start(
+  client
+);
+
+console.log(
+  '✅ Daily Interaction Service Started'
+);
+
+TicketSlaService.start(
+  client
+);
+
+console.log(
+  '✅ Ticket SLA service started'
+);
+
 startPollService(
   client
 );
@@ -705,7 +729,8 @@ process.on(
       err
     );
 
-    shutdown('unhandled rejection');
+    // A rejected API request should be logged, not take every scheduled system offline.
+    // Individual command and service handlers already surface their own failures.
   }
 );
 
@@ -720,7 +745,7 @@ process.on(
       err
     );
 
-    shutdown('uncaught exception');
+    shutdown('uncaught exception', 1);
   }
 );
 

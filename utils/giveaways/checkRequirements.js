@@ -37,6 +37,46 @@ function safeArray(value) {
     : [];
 }
 
+function isSameUtcDay(first, second) {
+  const left = new Date(Number(first) || 0);
+  const right = new Date(Number(second) || Date.now());
+
+  return left.getUTCFullYear() === right.getUTCFullYear() &&
+    left.getUTCMonth() === right.getUTCMonth() &&
+    left.getUTCDate() === right.getUTCDate();
+}
+
+function getUtcWeekKey(value) {
+  const date = new Date(Number(value) || 0);
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() - day + 1);
+  date.setUTCHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+function getCurrentMessageCounts(stats, now = Date.now()) {
+  if (!stats) {
+    return { total: 0, daily: 0, weekly: 0, monthly: 0 };
+  }
+
+  const current = new Date(now);
+  const monthlyReset = new Date(Number(stats.lastMonthlyReset) || 0);
+
+  return {
+    total: safeNumber(stats.totalMessages),
+    daily: isSameUtcDay(stats.lastDailyReset, now)
+      ? safeNumber(stats.dailyMessages)
+      : 0,
+    weekly: getUtcWeekKey(stats.lastWeeklyReset) === getUtcWeekKey(now)
+      ? safeNumber(stats.weeklyMessages)
+      : 0,
+    monthly: monthlyReset.getUTCFullYear() === current.getUTCFullYear() &&
+      monthlyReset.getUTCMonth() === current.getUTCMonth()
+      ? safeNumber(stats.monthlyMessages)
+      : 0
+  };
+}
+
 // ==================================================
 // 🎯 REQUIREMENT ENGINE
 // ==================================================
@@ -355,25 +395,8 @@ async function checkRequirements(
           ]
         );
 
-      const total =
-        safeNumber(
-          stats?.totalMessages
-        );
-
-      const daily =
-        safeNumber(
-          stats?.dailyMessages
-        );
-
-      const weekly =
-        safeNumber(
-          stats?.weeklyMessages
-        );
-
-      const monthly =
-        safeNumber(
-          stats?.monthlyMessages
-        );
+      const counts = getCurrentMessageCounts(stats);
+      const { total, daily, weekly, monthly } = counts;
 
       // ======================================
       // TOTAL
@@ -608,6 +631,7 @@ module.exports = {
   checkRequirements,
 
   calculateBonusEntries,
+  getCurrentMessageCounts,
 
   safeNumber,
 

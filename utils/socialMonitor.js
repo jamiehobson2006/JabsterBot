@@ -30,6 +30,57 @@ let monitorInterval =
 let monitorStartTimeout =
   null;
 
+let monitorRun =
+  null;
+
+function feedColor(feed, fallback) {
+  const color = Number(feed.embedColor);
+  return Number.isInteger(color) && color >= 0 && color <= 0xFFFFFF
+    ? color
+    : fallback;
+}
+
+function isQuietHours(feed, now = new Date()) {
+  if (feed.quietStartHour === null || feed.quietStartHour === undefined ||
+      feed.quietEndHour === null || feed.quietEndHour === undefined) {
+    return false;
+  }
+
+  const start = Number(feed.quietStartHour);
+  const end = Number(feed.quietEndHour);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start === end) return false;
+
+  try {
+    const hour = Number(new Intl.DateTimeFormat('en-GB', {
+      timeZone: feed.timezone || 'Europe/London',
+      hour: '2-digit',
+      hourCycle: 'h23'
+    }).format(now));
+
+    return start < end
+      ? hour >= start && hour < end
+      : hour >= start || hour < end;
+  } catch {
+    return false;
+  }
+}
+
+function renderTemplate(template, values) {
+  if (!template) return null;
+
+  return String(template)
+    .replace(/\{(creator|title|url|type)\}/gi, (_, key) => values[key.toLowerCase()] || '')
+    .replace(/@everyone|@here/g, '[mention removed]')
+    .trim()
+    .slice(0, 1800) || null;
+}
+
+function socialAllowedMentions(feed) {
+  return feed.pingRoleId
+    ? { roles: [feed.pingRoleId], parse: [] }
+    : { parse: [] };
+}
+
 // ====================================
 // MESSAGES
 // ====================================
@@ -121,7 +172,7 @@ if (details.live) {
 
       const channel =
         await client.channels.fetch(
-          social.targetChannelId
+          social.lastLiveChannelId || social.targetChannelId
         ).catch(() => null);
 
       if (!channel) {
@@ -177,9 +228,7 @@ if (details.live) {
       const endedEmbed =
         new EmbedBuilder()
 
-          .setColor(
-            0x2F3136
-          )
+          .setColor(feedColor(social, 0x2F3136))
 
           .setAuthor({
 
@@ -244,6 +293,7 @@ if (details.live) {
 
          SET lastLiveVideoId = NULL,
              lastLiveMessageId = NULL,
+             lastLiveChannelId = NULL,
              peakLiveViewers = 0,
              streamStartTime = NULL
 
@@ -289,7 +339,8 @@ async function checkEndedTwitchStreams(client) {
      FROM social_channels
      WHERE platform = 'twitch'
      AND contentType IN ('all', 'streams')
-     AND lastTwitchStreamId IS NOT NULL`
+     AND lastTwitchStreamId IS NOT NULL
+     AND lastLiveMessageId IS NOT NULL`
   );
 
   for (const social of socials) {
@@ -340,7 +391,7 @@ async function checkEndedTwitchStreams(client) {
 
       const channel =
         await client.channels.fetch(
-          social.targetChannelId
+          social.lastLiveChannelId || social.targetChannelId
         ).catch(() => null);
 
       if (!channel) {
@@ -391,9 +442,7 @@ async function checkEndedTwitchStreams(client) {
       const endedEmbed =
         new EmbedBuilder()
 
-          .setColor(
-            0x2F3136
-          )
+          .setColor(feedColor(social, 0x2F3136))
 
           .setAuthor({
 
@@ -449,6 +498,7 @@ async function checkEndedTwitchStreams(client) {
 
          SET lastTwitchStreamId = NULL,
              lastLiveMessageId = NULL,
+             lastLiveChannelId = NULL,
              peakTwitchViewers = 0,
              twitchStartTime = NULL
 
@@ -506,13 +556,24 @@ const stream =
 
 if (!stream) {
 
+  // Let the end-state pass edit the original live message first. Clearing this
+  // here would make a temporary Discord API failure leave the announcement
+  // looking live forever.
+  if (social.lastTwitchStreamId && social.lastLiveMessageId) {
+    continue;
+  }
+
   if (social.lastTwitchStreamId) {
 
     run(
 
       `UPDATE social_channels
 
-       SET lastTwitchStreamId = NULL
+       SET lastTwitchStreamId = NULL,
+           lastLiveMessageId = NULL,
+           lastLiveChannelId = NULL,
+           peakTwitchViewers = 0,
+           twitchStartTime = NULL
 
        WHERE guildId = ?
        AND platform = ?
@@ -555,7 +616,7 @@ if (
       const embed =
         new EmbedBuilder()
 
-          .setColor(0x9146FF)
+          .setColor(feedColor(social, 0x9146FF))
 
           .setTitle(
             '🟣 LIVE ON TWITCH'
@@ -642,14 +703,31 @@ if (
             watchButton
           );
 
+if (isQuietHours(social)) {
+  run(
+    `UPDATE social_channels
+     SET lastTwitchStreamId = ?
+     WHERE guildId = ? AND platform = ? AND creatorId = ? AND contentType = ?`,
+    [stream.id, social.guildId, social.platform, social.creatorId, social.contentType]
+  );
+  continue;
+}
+
 const message =
   await channel.send({
 
-    content: ping,
+    content: [ping, renderTemplate(social.messageTemplate, {
+      creator: social.creatorName,
+      title: stream.title,
+      url: `https://twitch.tv/${stream.user_login}`,
+      type: 'stream'
+    })].filter(Boolean).join('\n'),
 
     embeds: [embed],
 
-    components: [row]
+    components: [row],
+
+    allowedMentions: socialAllowedMentions(social)
   });
 
 run(
@@ -658,6 +736,7 @@ run(
 
    SET lastTwitchStreamId = ?,
        lastLiveMessageId = ?,
+       lastLiveChannelId = ?,
        peakTwitchViewers = ?,
        twitchStartTime = ?
 
@@ -671,6 +750,8 @@ run(
     stream.id,
 
     message.id,
+
+    channel.id,
 
     stream.viewer_count,
 
@@ -892,11 +973,10 @@ async function checkYouTube(client) {
       const embed =
         new EmbedBuilder()
 
-          .setColor(
-            uploadType === 'stream'
-              ? 0xFF0000
-              : 0x5865F2
-          )
+          .setColor(feedColor(
+            social,
+            uploadType === 'stream' ? 0xFF0000 : 0x5865F2
+          ))
 
           .setAuthor({
 
@@ -1000,14 +1080,31 @@ const row =
       watchButton
     );
 
+if (isQuietHours(social)) {
+  run(
+    `UPDATE social_channels
+     SET lastItemId = ?
+     WHERE guildId = ? AND platform = ? AND creatorId = ? AND contentType = ?`,
+    [latestUpload.videoId, social.guildId, social.platform, social.creatorId, social.contentType]
+  );
+  continue;
+}
+
 const message =
   await channel.send({
 
-    content: ping,
+    content: [ping, renderTemplate(social.messageTemplate, {
+      creator: social.creatorName,
+      title: details.title,
+      url: `https://youtube.com/watch?v=${latestUpload.videoId}`,
+      type: uploadType
+    })].filter(Boolean).join('\n'),
 
     embeds: [embed],
 
-    components: [row]
+    components: [row],
+
+    allowedMentions: socialAllowedMentions(social)
   });
 
 if (uploadType === 'stream') {
@@ -1018,6 +1115,7 @@ if (uploadType === 'stream') {
 
 SET lastLiveVideoId = ?,
     lastLiveMessageId = ?,
+    lastLiveChannelId = ?,
     peakLiveViewers = ?,
     streamStartTime = ?
 
@@ -1031,6 +1129,8 @@ SET lastLiveVideoId = ?,
       latestUpload.videoId,
 
       message.id,
+
+      channel.id,
 
       details.viewers,
 
@@ -1089,6 +1189,25 @@ run(
   }
 }
 
+async function runMonitor(client) {
+  if (monitorRun) return monitorRun;
+
+  monitorRun = (async () => {
+    try {
+      // These share state, so run them in order rather than allowing a stream
+      // to be marked ended while its live-state update is still in flight.
+      await checkEndedStreams(client);
+      await checkEndedTwitchStreams(client);
+      await checkYouTube(client);
+      await checkTwitch(client);
+    } finally {
+      monitorRun = null;
+    }
+  })();
+
+  return monitorRun;
+}
+
 function start(client) {
 
   if (
@@ -1111,20 +1230,14 @@ function start(client) {
   monitorStartTimeout =
     setTimeout(() => {
 
-checkEndedStreams(client);
-checkEndedTwitchStreams(client);
-checkYouTube(client);
-checkTwitch(client);
+runMonitor(client).catch(err => console.error('Social monitor cycle error:', err));
 
 monitorStartTimeout = null;
 
 monitorInterval =
   setInterval(() => {
 
-checkEndedStreams(client);
-checkEndedTwitchStreams(client);
-checkYouTube(client);
-checkTwitch(client);
+runMonitor(client).catch(err => console.error('Social monitor cycle error:', err));
 
 }, CHECK_INTERVAL);
 
@@ -1138,5 +1251,6 @@ monitorInterval.unref?.();
 }
 
 module.exports = {
-  start
+  start,
+  runMonitor
 };

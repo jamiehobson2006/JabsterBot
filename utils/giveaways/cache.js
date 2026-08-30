@@ -3,6 +3,7 @@ const {
 } = require('discord.js');
 
 const {
+  all,
   run
 } = require('../../database');
 
@@ -36,10 +37,13 @@ const cache = {
 const TEMP_TTL =
   1000 * 60 * 30;
 
+const VANITY_CACHE_CODE = '__VANITY__';
+const inviteLookupQueues = new Map();
+
 // ==================================================
 // 🧹 TEMP CACHE SWEEPER
 // ==================================================
-setInterval(() => {
+const tempCacheCleanupInterval = setInterval(() => {
 
   try {
 
@@ -107,6 +111,10 @@ setInterval(() => {
 
 }, 1000 * 60 * 5);
 
+// Cache eviction is maintenance only. It must not keep deployment scripts,
+// migrations, or the test runner alive after their real work has finished.
+tempCacheCleanupInterval.unref?.();
+
 // ==================================================
 // 📨 LOAD GUILD INVITES
 // ==================================================
@@ -163,13 +171,24 @@ async function loadGuildInvites(guild) {
 
         invite.inviter?.id || null,
 
-        invite.uses || 0
+        invite.uses || 0,
+
+        Date.now()
       ]);
     }
 
     // ==============================================
     // 💾 SAVE DATABASE CACHE
     // ==============================================
+    // Keep the persisted snapshot identical to Discord's current invite list.
+    // This removes invites deleted while the bot was offline before the next
+    // member join needs to compare invite-use counts.
+    run(
+      `DELETE FROM invite_cache
+       WHERE guildId = ?`,
+      [guild.id]
+    );
+
     for (
       const update of dbUpdates
     ) {
@@ -182,19 +201,42 @@ async function loadGuildInvites(guild) {
            guildId,
            inviteCode,
            inviterId,
-           uses
+           uses,
+           updatedAt
          )
 
-         VALUES (?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?)
 
          ON CONFLICT(guildId, inviteCode)
 
          DO UPDATE SET
 
            uses = excluded.uses,
-           inviterId = excluded.inviterId`,
+           inviterId = excluded.inviterId,
+           updatedAt = excluded.updatedAt`,
 
         update
+      );
+    }
+
+    const vanity = await guild.fetchVanityData().catch(() => null);
+    if (vanity?.code) {
+      const vanityData = {
+        code: vanity.code,
+        uses: vanity.uses || 0,
+        inviterId: null,
+        inviterTag: 'Vanity URL',
+        vanity: true,
+        createdAt: Date.now()
+      };
+
+      guildCache.set(VANITY_CACHE_CODE, vanityData);
+      run(
+        `INSERT INTO invite_cache (guildId, inviteCode, inviterId, uses, updatedAt)
+         VALUES (?, ?, NULL, ?, ?)
+         ON CONFLICT(guildId, inviteCode)
+         DO UPDATE SET uses = excluded.uses, updatedAt = excluded.updatedAt`,
+        [guild.id, VANITY_CACHE_CODE, vanityData.uses, Date.now()]
       );
     }
 
@@ -237,6 +279,34 @@ async function loadGuildInvites(guild) {
   }
 }
 
+function hydrateGuildInvites(guildId) {
+  if (cache.invites.has(guildId)) {
+    return cache.invites.get(guildId);
+  }
+
+  const guildCache = new Collection();
+  const rows = all(
+    `SELECT guildId, inviteCode, inviterId, uses
+     FROM invite_cache
+     WHERE guildId = ?`,
+    [guildId]
+  );
+
+  for (const row of rows) {
+    guildCache.set(row.inviteCode, {
+      code: row.inviteCode === VANITY_CACHE_CODE ? 'vanity' : row.inviteCode,
+      uses: Number(row.uses) || 0,
+      inviterId: row.inviterId || null,
+      inviterTag: row.inviteCode === VANITY_CACHE_CODE ? 'Vanity URL' : 'Unknown',
+      vanity: row.inviteCode === VANITY_CACHE_CODE,
+      createdAt: Date.now()
+    });
+  }
+
+  cache.invites.set(guildId, guildCache);
+  return guildCache;
+}
+
 // ==================================================
 // 📥 GET GUILD INVITES
 // ==================================================
@@ -245,8 +315,7 @@ function getGuildInvites(guildId) {
   return (
 
     cache.invites.get(guildId) ||
-
-    new Collection()
+    hydrateGuildInvites(guildId)
   );
 }
 
@@ -254,16 +323,37 @@ function getGuildInvites(guildId) {
 // 🧠 FIND USED INVITE
 // ==================================================
 async function findUsedInvite(member) {
+  const guildId = member?.guild?.id;
+  if (!guildId) return null;
+
+  const previous = inviteLookupQueues.get(guildId) || Promise.resolve();
+  const current = previous
+    .catch(() => null)
+    .then(() => findUsedInviteInternal(member));
+
+  inviteLookupQueues.set(guildId, current);
+  try {
+    return await current;
+  } finally {
+    if (inviteLookupQueues.get(guildId) === current) {
+      inviteLookupQueues.delete(guildId);
+    }
+  }
+}
+
+async function findUsedInviteInternal(member) {
 
   try {
 
     const guild =
       member.guild;
 
+    const hadMemoryBaseline = cache.invites.has(guild.id);
     const oldInvites =
       getGuildInvites(
         guild.id
       );
+    const canAttributeFromBaseline = hadMemoryBaseline || oldInvites.size > 0;
 
     let newInvites;
 
@@ -285,8 +375,7 @@ async function findUsedInvite(member) {
       return null;
     }
 
-    let usedInvite =
-      null;
+    const changedInvites = [];
 
     // ==============================================
     // 🔍 FIND DIFFERENCE
@@ -310,11 +399,8 @@ async function findUsedInvite(member) {
       // ==========================================
       // 🎯 USED INVITE FOUND
       // ==========================================
-      if (
-        newUses > oldUses
-      ) {
-
-        usedInvite = {
+      if (newUses > oldUses) {
+        changedInvites.push({
 
           code:
             invite.code,
@@ -325,12 +411,28 @@ async function findUsedInvite(member) {
           inviterId:
             invite.inviter?.id || null,
 
-          uses:
-            newUses
-        };
-
-        break;
+          uses: newUses,
+          delta: newUses - oldUses
+        });
       }
+    }
+
+    let usedInvite = null;
+    if (canAttributeFromBaseline && changedInvites.length === 1 && changedInvites[0].delta === 1) {
+      usedInvite = {
+        ...changedInvites[0],
+        confidence: 'EXACT',
+        source: 'INVITE'
+      };
+    } else if (changedInvites.length) {
+      usedInvite = {
+        code: 'Unknown',
+        inviter: null,
+        inviterId: null,
+        uses: 0,
+        confidence: 'AMBIGUOUS',
+        source: 'INVITE'
+      };
     }
 
     // ==============================================
@@ -344,9 +446,8 @@ async function findUsedInvite(member) {
           await guild.fetchVanityData()
             .catch(() => null);
 
-        if (
-          vanity?.code
-        ) {
+        const cachedVanity = oldInvites.get(VANITY_CACHE_CODE);
+        if (canAttributeFromBaseline && vanity?.code && Number(vanity.uses || 0) > Number(cachedVanity?.uses || 0)) {
 
           usedInvite = {
 
@@ -363,7 +464,11 @@ async function findUsedInvite(member) {
               vanity.uses || 0,
 
             vanity:
-              true
+              true,
+            confidence: Number(vanity.uses || 0) - Number(cachedVanity?.uses || 0) === 1
+              ? 'EXACT'
+              : 'AMBIGUOUS',
+            source: 'VANITY'
           };
         }
 
@@ -377,7 +482,14 @@ async function findUsedInvite(member) {
       guild
     );
 
-    return usedInvite;
+    return usedInvite || {
+      code: 'Unknown',
+      inviter: null,
+      inviterId: null,
+      uses: 0,
+      confidence: 'UNKNOWN',
+      source: 'UNKNOWN'
+    };
 
   } catch (err) {
 
@@ -450,17 +562,19 @@ function addInvite(
        guildId,
        inviteCode,
        inviterId,
-       uses
+       uses,
+       updatedAt
      )
 
-     VALUES (?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?)
 
      ON CONFLICT(guildId, inviteCode)
 
-     DO UPDATE SET
+       DO UPDATE SET
 
        uses = excluded.uses,
-       inviterId = excluded.inviterId`,
+       inviterId = excluded.inviterId,
+       updatedAt = excluded.updatedAt`,
 
     [
 
@@ -470,7 +584,9 @@ function addInvite(
 
       invite.inviter?.id || null,
 
-      invite.uses || 0
+       invite.uses || 0,
+
+       Date.now()
     ]
   );
 }
@@ -550,7 +666,8 @@ function updateInviteUses(
 
     `UPDATE invite_cache
 
-     SET uses = ?
+     SET uses = ?,
+         updatedAt = ?
 
      WHERE guildId = ?
      AND inviteCode = ?`,
@@ -558,6 +675,8 @@ function updateInviteUses(
     [
 
       uses,
+
+      Date.now(),
 
       guildId,
 
@@ -628,6 +747,8 @@ module.exports = {
   cache,
 
   loadGuildInvites,
+
+  hydrateGuildInvites,
 
   getGuildInvites,
 

@@ -1284,6 +1284,47 @@ function createTicketStatsTable() {
 }
 
 // ==================================================
+// TICKET SLA
+// ==================================================
+function createTicketSlaTables() {
+
+  ensureColumn(
+    'tickets',
+    'firstStaffResponseAt',
+    'INTEGER'
+  );
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS ticket_sla_settings (
+      guildId TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      firstResponseMinutes INTEGER NOT NULL DEFAULT 60,
+      resolutionMinutes INTEGER NOT NULL DEFAULT 1440,
+      alertChannelId TEXT,
+      pingRoleId TEXT,
+      updatedBy TEXT,
+      updatedAt INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS ticket_sla_alerts (
+      guildId TEXT NOT NULL,
+      channelId TEXT NOT NULL,
+      alertType TEXT NOT NULL,
+      alertedAt INTEGER NOT NULL,
+      PRIMARY KEY (guildId, channelId, alertType)
+    )
+  `);
+
+  createIndex(
+    'idx_ticket_sla_open_tickets',
+    `CREATE INDEX IF NOT EXISTS idx_ticket_sla_open_tickets
+     ON tickets(guildId, status, createdAt, firstStaffResponseAt)`
+  );
+}
+
+// ==================================================
 // ?? SUGGESTIONS
 // ==================================================
 function createSuggestionTables() {
@@ -2008,6 +2049,42 @@ ensureColumn(
   'addedAt',
   'INTEGER DEFAULT 0'
 );
+
+ensureColumn(
+  'social_channels',
+  'embedColor',
+  'INTEGER'
+);
+
+ensureColumn(
+  'social_channels',
+  'messageTemplate',
+  'TEXT'
+);
+
+ensureColumn(
+  'social_channels',
+  'quietStartHour',
+  'INTEGER'
+);
+
+ensureColumn(
+  'social_channels',
+  'quietEndHour',
+  'INTEGER'
+);
+
+ensureColumn(
+  'social_channels',
+  'timezone',
+  'TEXT'
+);
+
+ensureColumn(
+  'social_channels',
+  'lastLiveChannelId',
+  'TEXT'
+);
   rawRun(`
 
     CREATE TABLE IF NOT EXISTS social_links (
@@ -2078,6 +2155,222 @@ function createFreeGameTables() {
 
     `CREATE INDEX IF NOT EXISTS idx_free_game_announcements_cleanup
      ON free_game_announcements(announcedAt)`
+  );
+}
+
+// ==================================================
+// DAILY INTERACTIONS
+// ==================================================
+function createDailyInteractionTables() {
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS daily_interaction_config (
+
+      guildId TEXT PRIMARY KEY,
+
+      enabled INTEGER NOT NULL DEFAULT 0,
+
+      channelId TEXT,
+
+      pingRoleId TEXT,
+
+      hour INTEGER NOT NULL DEFAULT 12,
+
+      minute INTEGER NOT NULL DEFAULT 0,
+
+      timezone TEXT NOT NULL DEFAULT 'Europe/London',
+
+      titlePrefix TEXT NOT NULL DEFAULT 'Daily Interaction',
+
+      color INTEGER NOT NULL DEFAULT 5763719,
+
+      discussionEnabled INTEGER NOT NULL DEFAULT 1,
+
+      lastDateKey TEXT,
+
+      updatedBy TEXT,
+
+      updatedAt INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS daily_interaction_types (
+
+      guildId TEXT NOT NULL,
+
+      type TEXT NOT NULL,
+
+      enabled INTEGER NOT NULL DEFAULT 1,
+
+      weight INTEGER NOT NULL DEFAULT 1,
+
+      PRIMARY KEY (guildId, type)
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS daily_interaction_prompts (
+
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+      guildId TEXT NOT NULL,
+
+      type TEXT NOT NULL,
+
+      prompt TEXT NOT NULL,
+
+      title TEXT,
+
+      enabled INTEGER NOT NULL DEFAULT 1,
+
+      createdBy TEXT NOT NULL,
+
+      createdAt INTEGER NOT NULL
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS daily_interaction_history (
+
+      guildId TEXT NOT NULL,
+
+      promptKey TEXT NOT NULL,
+
+      deliveredAt INTEGER NOT NULL,
+
+      PRIMARY KEY (guildId, promptKey)
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS daily_interaction_posts (
+
+      messageId TEXT PRIMARY KEY,
+
+      guildId TEXT NOT NULL,
+
+      channelId TEXT NOT NULL,
+
+      type TEXT NOT NULL,
+
+      promptKey TEXT NOT NULL,
+
+      sentAt INTEGER NOT NULL,
+
+      threadId TEXT
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS daily_interaction_participants (
+
+      messageId TEXT NOT NULL,
+
+      userId TEXT NOT NULL,
+
+      joinedAt INTEGER NOT NULL,
+
+      PRIMARY KEY (messageId, userId)
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS daily_interaction_day_themes (
+
+      guildId TEXT NOT NULL,
+
+      dayOfWeek INTEGER NOT NULL,
+
+      type TEXT NOT NULL,
+
+      PRIMARY KEY (guildId, dayOfWeek)
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS daily_interaction_responses (
+
+      messageId TEXT NOT NULL,
+
+      userId TEXT NOT NULL,
+
+      response TEXT NOT NULL,
+
+      submittedAt INTEGER NOT NULL,
+
+      threadMessageId TEXT,
+
+      PRIMARY KEY (messageId, userId)
+    )
+  `);
+
+  rawRun(`
+
+    CREATE TABLE IF NOT EXISTS daily_interaction_member_stats (
+
+      guildId TEXT NOT NULL,
+
+      userId TEXT NOT NULL,
+
+      totalJoins INTEGER NOT NULL DEFAULT 0,
+
+      totalResponses INTEGER NOT NULL DEFAULT 0,
+
+      currentStreak INTEGER NOT NULL DEFAULT 0,
+
+      longestStreak INTEGER NOT NULL DEFAULT 0,
+
+      lastDateKey TEXT,
+
+      lastParticipatedAt INTEGER,
+
+      PRIMARY KEY (guildId, userId)
+    )
+  `);
+
+  ensureColumn(
+    'daily_interaction_posts',
+    'prompt',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'daily_interaction_posts',
+    'title',
+    'TEXT'
+  );
+
+  createIndex(
+
+    'idx_daily_interaction_history_expiry',
+
+    `CREATE INDEX IF NOT EXISTS idx_daily_interaction_history_expiry
+     ON daily_interaction_history(deliveredAt)`
+  );
+
+  createIndex(
+
+    'idx_daily_interaction_prompts_type',
+
+    `CREATE INDEX IF NOT EXISTS idx_daily_interaction_prompts_type
+     ON daily_interaction_prompts(guildId, type, enabled)`
+  );
+
+  createIndex(
+
+    'idx_daily_interaction_member_stats_leaderboard',
+
+    `CREATE INDEX IF NOT EXISTS idx_daily_interaction_member_stats_leaderboard
+     ON daily_interaction_member_stats(guildId, totalResponses DESC, totalJoins DESC)`
   );
 }
 
@@ -2221,6 +2514,12 @@ function createPollTables() {
 
   ensureColumn(
     'polls',
+    'endedMessageUpdatedAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'polls',
     'creatorTag',
     'TEXT'
   );
@@ -2280,6 +2579,12 @@ function createInviteTables() {
      ON invite_cache(guildId, inviterId)`
   );
 
+  ensureColumn(
+    'invite_cache',
+    'updatedAt',
+    'INTEGER DEFAULT 0'
+  );
+
   rawRun(`
 
     CREATE TABLE IF NOT EXISTS invites (
@@ -2305,6 +2610,24 @@ function createInviteTables() {
       PRIMARY KEY (guildId, userId)
     )
   `);
+
+  ensureColumn(
+    'invites',
+    'confidence',
+    "TEXT NOT NULL DEFAULT 'UNKNOWN'"
+  );
+
+  ensureColumn(
+    'invites',
+    'source',
+    "TEXT NOT NULL DEFAULT 'UNKNOWN'"
+  );
+
+  ensureColumn(
+    'invites',
+    'rejoinCount',
+    'INTEGER NOT NULL DEFAULT 0'
+  );
 
   createIndex(
 
@@ -2341,6 +2664,46 @@ function createInviteTables() {
       PRIMARY KEY (guildId, userId)
     )
   `);
+
+  ensureColumn(
+    'invite_stats',
+    'unknown',
+    'INTEGER NOT NULL DEFAULT 0'
+  );
+
+  ensureColumn(
+    'invite_stats',
+    'vanity',
+    'INTEGER NOT NULL DEFAULT 0'
+  );
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS invite_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guildId TEXT NOT NULL,
+      memberId TEXT NOT NULL,
+      inviterId TEXT,
+      inviteCode TEXT,
+      eventType TEXT NOT NULL,
+      confidence TEXT NOT NULL,
+      source TEXT NOT NULL,
+      fake INTEGER NOT NULL DEFAULT 0,
+      timestamp INTEGER NOT NULL,
+      metadata TEXT
+    )
+  `);
+
+  createIndex(
+    'idx_invite_events_guild_member',
+    `CREATE INDEX IF NOT EXISTS idx_invite_events_guild_member
+     ON invite_events(guildId, memberId, timestamp DESC)`
+  );
+
+  createIndex(
+    'idx_invite_events_inviter',
+    `CREATE INDEX IF NOT EXISTS idx_invite_events_inviter
+     ON invite_events(guildId, inviterId, timestamp DESC)`
+  );
 
   createIndex(
 
@@ -2956,6 +3319,8 @@ function initDatabase() {
 
   createTicketStatsTable();
 
+  createTicketSlaTables();
+
   createSuggestionTables();
 
   createMemberExperienceTables();
@@ -2979,6 +3344,8 @@ function initDatabase() {
   createSocialTables();
 
   createFreeGameTables();
+
+  createDailyInteractionTables();
 
   createLevelingTables();
 
@@ -3056,6 +3423,14 @@ function startDatabaseCleanup() {
 
         `DELETE FROM free_game_announcements
          WHERE announcedAt < ?`,
+
+        [ninetyDaysAgo]
+      );
+
+      run(
+
+        `DELETE FROM daily_interaction_history
+         WHERE deliveredAt < ?`,
 
         [ninetyDaysAgo]
       );

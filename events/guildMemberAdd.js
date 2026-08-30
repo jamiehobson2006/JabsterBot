@@ -62,6 +62,12 @@ module.exports = {
       const inviteCode =
         usedInvite?.code || 'Unknown';
 
+      const confidence =
+        usedInvite?.confidence || 'UNKNOWN';
+
+      const source =
+        usedInvite?.source || 'UNKNOWN';
+
       // ==========================================
       // 🕵️ ACCOUNT AGE
       // ==========================================
@@ -125,10 +131,13 @@ module.exports = {
           inviteCode,
           uses,
           joinedAt,
-          fake
+          fake,
+          confidence,
+          source,
+          rejoinCount
         )
 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
 
         ON CONFLICT(guildId, userId)
 
@@ -138,7 +147,11 @@ module.exports = {
           inviteCode = excluded.inviteCode,
           uses = excluded.uses,
           joinedAt = excluded.joinedAt,
-          fake = excluded.fake`,
+          leftAt = NULL,
+          fake = excluded.fake,
+          confidence = excluded.confidence,
+          source = excluded.source,
+          rejoinCount = COALESCE(invites.rejoinCount, 0) + 1`,
 
         [
 
@@ -154,14 +167,36 @@ module.exports = {
 
           Date.now(),
 
-          isFake ? 1 : 0
+          isFake ? 1 : 0,
+
+          confidence,
+
+          source
+        ]
+      );
+
+      run(
+        `INSERT INTO invite_events (
+           guildId, memberId, inviterId, inviteCode, eventType,
+           confidence, source, fake, timestamp, metadata
+         ) VALUES (?, ?, ?, ?, 'JOIN', ?, ?, ?, ?, ?)`,
+        [
+          guild.id,
+          member.id,
+          inviterId,
+          inviteCode,
+          confidence,
+          source,
+          isFake ? 1 : 0,
+          Date.now(),
+          JSON.stringify({ uses: Number(usedInvite?.uses) || 0, suspiciousFlags })
         ]
       );
 
       // ==========================================
       // 📊 UPDATE INVITER STATS
       // ==========================================
-      if (inviterId) {
+      if (inviterId && confidence === 'EXACT' && source === 'INVITE') {
 
         run(
 
@@ -362,6 +397,21 @@ module.exports = {
 
               value:
                 `\`${inviteCode}\``,
+
+              inline: true
+            },
+
+            {
+              name: 'Attribution',
+
+              value:
+                source === 'VANITY'
+                  ? 'Vanity URL'
+                  : confidence === 'EXACT'
+                    ? 'Verified invite'
+                    : confidence === 'AMBIGUOUS'
+                      ? 'Multiple changes detected'
+                      : 'Unknown',
 
               inline: true
             },

@@ -415,6 +415,15 @@ async function trackTicketStaffMessage(
     return;
   }
 
+  run(
+    `UPDATE tickets
+     SET firstStaffResponseAt = ?
+     WHERE channelId = ?
+     AND UPPER(status) = 'OPEN'
+     AND firstStaffResponseAt IS NULL`,
+    [Date.now(), message.channel.id]
+  );
+
   addMessage(
     message.guild.id,
     message.author.id

@@ -78,7 +78,11 @@ module.exports = {
               feed.pingRoleId
                 ? `<@&${feed.pingRoleId}>`
                 : 'None'
-            }`
+            }\n` +
+            `Style: ${feed.messageTemplate ? 'Custom template' : 'Default'}\n` +
+            `Quiet Hours: ${feed.quietStartHour !== null && feed.quietEndHour !== null && Number.isInteger(Number(feed.quietStartHour)) && Number.isInteger(Number(feed.quietEndHour))
+              ? `${String(feed.quietStartHour).padStart(2, '0')}:00-${String(feed.quietEndHour).padStart(2, '0')}:00 (${feed.timezone || 'Europe/London'})`
+              : 'Disabled'}`
 
           ).join('\n\n')
         )

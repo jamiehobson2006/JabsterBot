@@ -94,14 +94,15 @@ module.exports = {
       // ==========================================
       // 💾 MARK LEFT
       // ==========================================
-      run(
+      const markedLeft = run(
 
         `UPDATE invites
 
         SET leftAt = ?
 
         WHERE guildId = ?
-        AND userId = ?`,
+        AND userId = ?
+        AND leftAt IS NULL`,
 
         [
 
@@ -113,10 +114,36 @@ module.exports = {
         ]
       );
 
+      if (!markedLeft.changes) {
+        return;
+      }
+
+      run(
+        `INSERT INTO invite_events (
+           guildId, memberId, inviterId, inviteCode, eventType,
+           confidence, source, fake, timestamp, metadata
+         ) VALUES (?, ?, ?, ?, 'LEAVE', ?, ?, ?, ?, ?)`,
+        [
+          guild.id,
+          member.id,
+          inviterId,
+          inviteData.inviteCode || 'Unknown',
+          inviteData.confidence || 'UNKNOWN',
+          inviteData.source || 'UNKNOWN',
+          wasFake ? 1 : 0,
+          leftAt,
+          JSON.stringify({ fastLeave, stayDuration })
+        ]
+      );
+
       // ==========================================
       // 📊 UPDATE STATS
       // ==========================================
-      if (inviterId) {
+      if (
+        inviterId &&
+        inviteData.confidence === 'EXACT' &&
+        inviteData.source === 'INVITE'
+      ) {
 
         run(
 
