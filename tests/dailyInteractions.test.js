@@ -15,6 +15,7 @@ const {
 } = require('../database');
 
 const {
+  DAILY_INTERACTION_TYPES,
   addCustomPrompt,
   buildInteractionEmbed,
   chooseInteraction,
@@ -98,6 +99,24 @@ test('custom prompts can be managed and random selection returns an enabled acti
   assert.ok(interaction.prompt.length > 0);
 
   assert.equal(removeCustomPrompt('guild-1', id).changes, 1);
+});
+
+test('daily interactions offer a broad built-in pool and reject unsafe custom prompts', () => {
+  initDatabase();
+
+  assert.equal(Object.keys(DAILY_INTERACTION_TYPES).length, 10);
+  assert.ok(
+    Object.values(DAILY_INTERACTION_TYPES)
+      .every(definition => definition.prompts.length >= 10)
+  );
+
+  assert.throws(() => addCustomPrompt({
+    guildId: 'guild-3',
+    type: 'QUESTION',
+    prompt: 'Join discord.gg/example',
+    title: 'Unsafe prompt',
+    createdBy: 'admin-1'
+  }), /Prompt rejected/);
 });
 
 test('daily interaction embeds show participation and the community activity', () => {

@@ -50,6 +50,10 @@ const {
   evaluateAntiSpam
 } = require('../utils/antispam');
 
+const {
+  validateDailyInteractionContent
+} = require('../utils/dailyInteractionSafety');
+
 const LevelingService =
   require('../utils/LevelingService');
 
@@ -310,6 +314,86 @@ async function handleCensor(
   return true;
 }
 
+async function handleDailyInteractionThreadSafety(message, client) {
+  const post = get(
+    `SELECT messageId, type
+     FROM daily_interaction_posts
+     WHERE guildId = ?
+     AND threadId = ?`,
+    [message.guild.id, message.channel.id]
+  );
+
+  const configuredChannel = post
+    ? null
+    : get(
+      `SELECT guildId
+       FROM daily_interaction_config
+       WHERE guildId = ?
+       AND channelId = ?
+       AND enabled = 1`,
+      [message.guild.id, message.channel.id]
+    );
+
+  if (!post && !configuredChannel) return false;
+
+  const hasAttachment = Number(message.attachments?.size) > 0;
+  const hasSticker = Number(message.stickers?.size) > 0;
+  const hasCustomEmoji = /<a?:[A-Za-z0-9_]{2,32}:\d+>/u.test(message.content || '');
+  const validation = hasAttachment || hasSticker || hasCustomEmoji
+    ? {
+      valid: false,
+      message: 'Uploads, stickers, and custom emojis are not allowed in daily interaction discussions.'
+    }
+    : validateDailyInteractionContent({
+      answer: message.content,
+      censorTerms: listCensorTerms(message.guild.id)
+    });
+
+  if (validation.valid) return false;
+
+  suppressMessageDelete(message.id);
+  try {
+    await message.delete();
+  } catch (err) {
+    unsuppressMessageDelete(message.id);
+    console.error('Daily interaction safety delete failed:', err.message);
+    return false;
+  }
+
+  await message.channel.send({
+    content: `${message.author}, ${validation.message}`,
+    allowedMentions: { users: [message.author.id], roles: [], parse: [] }
+  })
+    .then(sent => setTimeout(() => sent.delete().catch(() => {}), 5000))
+    .catch(() => {});
+
+  await logAudit(client, message.guild.id, {
+    action: 'DAILY_INTERACTION_CONTENT_BLOCKED',
+    targetId: message.author.id,
+    executorId: client.user?.id,
+    type: 'MESSAGES',
+    metadata: {
+      channelId: message.channel.id,
+      messageId: message.id,
+      interactionMessageId: post?.messageId || null,
+      interactionType: post?.type || 'DAILY_INTERACTION_CHANNEL',
+      reason: validation.message
+    },
+    embed: createAuditEmbed({
+      action: 'Daily Interaction Content Blocked',
+      target: `${message.author.tag}\n<@${message.author.id}>`,
+      executor: client.user
+        ? `${client.user.tag}\n<@${client.user.id}>`
+        : 'Bot',
+      channel: `<#${message.channel.id}>`,
+      extra: `Reason: ${validation.message}`,
+      color: 0xED4245
+    })
+  }).catch(err => console.error('Daily interaction safety log error:', err.message));
+
+  return true;
+}
+
 async function handleAntiSpam(message, client) {
   const violation = evaluateAntiSpam(message);
 
@@ -554,9 +638,13 @@ module.exports = {
       const hasAttachments =
         message.attachments?.size > 0;
 
+      const hasStickers =
+        message.stickers?.size > 0;
+
       if (
         !hasContent &&
-        !hasAttachments
+        !hasAttachments &&
+        !hasStickers
       ) {
 
         return;
@@ -573,6 +661,16 @@ module.exports = {
 
       const now =
         Date.now();
+
+      if (
+        await handleDailyInteractionThreadSafety(
+          message,
+          client
+        )
+      ) {
+
+        return;
+      }
 
       if (
         await handleCensor(

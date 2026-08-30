@@ -216,7 +216,7 @@ module.exports = {
       .addStringOption(option => option
         .setName('title')
         .setDescription('Title shown before the activity type')
-        .setMaxLength(180))
+        .setMaxLength(120))
       .addStringOption(option => option
         .setName('color')
         .setDescription('Six-digit hex colour, for example #5865F2')
@@ -279,12 +279,12 @@ module.exports = {
       .addStringOption(option => option
         .setName('prompt')
         .setDescription('Prompt shown to the community')
-        .setMaxLength(3900)
+        .setMaxLength(600)
         .setRequired(true))
       .addStringOption(option => option
         .setName('title')
         .setDescription('Optional title replacing the standard heading')
-        .setMaxLength(220)))
+        .setMaxLength(120)))
     .addSubcommand(subcommand => subcommand
       .setName('prompt-remove')
       .setDescription('Remove one custom prompt')
@@ -510,11 +510,15 @@ module.exports = {
         return interaction.editReply({ content: 'Use a six-digit hex colour such as `#5865F2`.' });
       }
 
-      updateDailyInteractionConfig(guildId, {
-        ...(title ? { titlePrefix: title } : {}),
-        ...(colorInput ? { color } : {}),
-        updatedBy: interaction.user.id
-      });
+      try {
+        updateDailyInteractionConfig(guildId, {
+          ...(title ? { titlePrefix: title } : {}),
+          ...(colorInput ? { color } : {}),
+          updatedBy: interaction.user.id
+        });
+      } catch (err) {
+        return interaction.editReply({ content: err.message });
+      }
 
       return interaction.editReply({ content: 'Daily interaction appearance updated.' });
     }
@@ -596,13 +600,18 @@ module.exports = {
     }
 
     if (subcommand === 'prompt-add') {
-      const id = addCustomPrompt({
-        guildId,
-        type: interaction.options.getString('type', true),
-        prompt: interaction.options.getString('prompt', true),
-        title: interaction.options.getString('title'),
-        createdBy: interaction.user.id
-      });
+      let id;
+      try {
+        id = addCustomPrompt({
+          guildId,
+          type: interaction.options.getString('type', true),
+          prompt: interaction.options.getString('prompt', true),
+          title: interaction.options.getString('title'),
+          createdBy: interaction.user.id
+        });
+      } catch (err) {
+        return interaction.editReply({ content: err.message });
+      }
 
       return interaction.editReply({ content: `Custom prompt #${id} added.` });
     }

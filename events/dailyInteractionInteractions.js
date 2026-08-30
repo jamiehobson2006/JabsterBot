@@ -19,7 +19,18 @@ const {
   recordMemberEngagement
 } = require('../services/DailyInteractionService');
 
+const {
+  listCensorTerms
+} = require('../utils/censor');
+
+const {
+  MAX_GAME_RESPONSE_LENGTH,
+  MAX_RESPONSE_LENGTH,
+  validateDailyInteractionAnswer
+} = require('../utils/dailyInteractionSafety');
+
 const RESPONSE_MODAL_PREFIX = 'dailyinteraction_answer_';
+const responseSubmissionLocks = new Map();
 
 function isDailyInteractionButton(interaction) {
   return interaction.isButton() && [
@@ -87,17 +98,20 @@ function addParticipant(post, userId) {
   );
 }
 
-function responseModal(messageId) {
+function responseModal(post) {
+  const maxLength = String(post?.type || '').toUpperCase() === 'GAME'
+    ? MAX_GAME_RESPONSE_LENGTH
+    : MAX_RESPONSE_LENGTH;
   const input = new TextInputBuilder()
     .setCustomId('response')
-    .setLabel('Your answer')
-    .setPlaceholder('Share your answer with the community...')
+    .setLabel('Your family-friendly answer')
+    .setPlaceholder('Keep it kind. Links and mentions are not accepted.')
     .setStyle(TextInputStyle.Paragraph)
-    .setMaxLength(1800)
+    .setMaxLength(maxLength)
     .setRequired(true);
 
   return new ModalBuilder()
-    .setCustomId(`${RESPONSE_MODAL_PREFIX}${messageId}`)
+    .setCustomId(`${RESPONSE_MODAL_PREFIX}${post.messageId}`)
     .setTitle('Daily Interaction Answer')
     .addComponents(new ActionRowBuilder().addComponents(input));
 }
@@ -145,26 +159,42 @@ async function handleDiscussion(interaction, post) {
   return interaction.editReply({ content: `Discussion: ${thread}` });
 }
 
-async function handleAnswerModal(interaction) {
-  const messageId = interaction.customId.slice(RESPONSE_MODAL_PREFIX.length);
+function withResponseSubmissionLock(key, operation) {
+  const previous = responseSubmissionLocks.get(key) || Promise.resolve();
+  const current = previous
+    .catch(() => null)
+    .then(operation);
+
+  responseSubmissionLocks.set(key, current);
+
+  return current.finally(() => {
+    if (responseSubmissionLocks.get(key) === current) {
+      responseSubmissionLocks.delete(key);
+    }
+  });
+}
+
+async function processAnswerModal(interaction, messageId) {
   const post = getPost(interaction.guild.id, messageId);
 
   if (!post) {
-    return interaction.reply({
-      content: 'This daily interaction is no longer active.',
-      flags: MessageFlags.Ephemeral
-    });
+    return interaction.editReply({ content: 'This daily interaction is no longer active.' });
   }
 
-  const answer = interaction.fields.getTextInputValue('response').trim();
-  if (!answer) {
-    return interaction.reply({
-      content: 'Your answer cannot be empty.',
-      flags: MessageFlags.Ephemeral
-    });
+  const submittedAnswer = interaction.fields.getTextInputValue('response');
+  const validation = validateDailyInteractionAnswer({
+    post,
+    answer: submittedAnswer,
+    // Responses are posted by the bot, so honor the server's terms even when
+    // the normal message censor is disabled or has a channel exemption.
+    censorTerms: listCensorTerms(interaction.guild.id)
+  });
+
+  if (!validation.valid) {
+    return interaction.editReply({ content: validation.message });
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const answer = validation.answer;
 
   const sourceMessage = await fetchPostMessage(interaction, post);
   if (!sourceMessage) {
@@ -241,6 +271,16 @@ async function handleAnswerModal(interaction) {
   });
 }
 
+async function handleAnswerModal(interaction) {
+  const messageId = interaction.customId.slice(RESPONSE_MODAL_PREFIX.length);
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  return withResponseSubmissionLock(
+    `${interaction.guild.id}:${messageId}:${interaction.user.id}`,
+    () => processAnswerModal(interaction, messageId)
+  );
+}
+
 module.exports = {
   name: 'interactionCreate',
 
@@ -269,7 +309,7 @@ module.exports = {
       }
 
       if (interaction.customId === 'dailyinteraction_answer') {
-        return interaction.showModal(responseModal(post.messageId));
+        return interaction.showModal(responseModal(post));
       }
 
       return handleDiscussion(interaction, post);
