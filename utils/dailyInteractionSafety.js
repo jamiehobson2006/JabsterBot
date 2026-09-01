@@ -14,6 +14,7 @@ const INVISIBLE_OR_DIRECTIONAL_PATTERN = /[\u180E\u200B-\u200F\u202A-\u202E\u206
 // Daily interactions are intended to be family-friendly. The server's custom
 // censor list remains the extensible layer for community-specific terms.
 const BUILT_IN_UNSAFE_TERMS = Object.freeze([
+  'ass',
   'asshole',
   'arsehole',
   'bastard',
@@ -200,7 +201,9 @@ function validateDailyInteractionContent({ answer, censorTerms = [], maxLength =
     return { valid: false, message: 'Mentions are not allowed in daily interaction answers.' };
   }
 
-  if (findCensoredTerm(cleaned, censorTerms) || containsBuiltInUnsafeLanguage(cleaned)) {
+  const matchedCustomTerm = findCensoredTerm(cleaned, censorTerms);
+
+  if (matchedCustomTerm || containsBuiltInUnsafeLanguage(cleaned)) {
     return { valid: false, message: 'Keep daily interaction answers family-friendly and respectful.' };
   }
 

@@ -19,6 +19,15 @@ test('daily interaction answers reject links, mentions, hidden text, and configu
     answer: 'A forbidden answer',
     censorTerms: [{ word: 'forbidden' }]
   }).valid, false);
+  assert.equal(validateDailyInteractionAnswer({
+    post,
+    answer: 'An ass is another name for a donkey.',
+    censorTerms: [{ word: 'ass' }]
+  }).valid, false);
+  assert.equal(validateDailyInteractionAnswer({
+    post,
+    answer: 'A class project went well today.'
+  }).valid, true);
 });
 
 test('daily interaction answers reject punctuation, symbol, and spacing bypasses before anything is posted', () => {
@@ -27,6 +36,24 @@ test('daily interaction answers reject punctuation, symbol, and spacing bypasses
     assert.equal(validateDailyInteractionAnswer({ post, answer }).valid, false, answer);
   }
   assert.equal(validateDailyInteractionAnswer({ post, answer: 'That was a great day.' }).valid, true);
+});
+
+test('daily interaction safety checks every word in the submitted response', () => {
+  const post = { type: 'QUESTION', prompt: 'Share a positive moment.' };
+
+  assert.equal(validateDailyInteractionAnswer({
+    post,
+    answer: 'This starts as a normal answer but has fuck at the end.'
+  }).valid, false);
+  assert.equal(validateDailyInteractionAnswer({
+    post,
+    answer: 'This starts normally but has ass at the end.'
+  }).valid, false);
+  assert.equal(validateDailyInteractionAnswer({
+    post,
+    answer: 'This starts normally and includes a blocked phrase later.',
+    censorTerms: [{ word: 'blocked phrase' }]
+  }).valid, false);
 });
 
 test('word-chain answers must be one word beginning with the required letter', () => {
