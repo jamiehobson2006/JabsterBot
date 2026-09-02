@@ -23,11 +23,13 @@ const {
 
 const {
   validateDailyInteractionContent,
-  validateDailyInteractionPrompt
+  validateDailyInteractionPrompt,
+  supportsSubmittedAnswer
 } = require('../utils/dailyInteractionSafety');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DELIVERY_COOLDOWN_MS = 30 * DAY_MS;
+const THREAD_DELETE_AFTER_MS = 7 * DAY_MS;
 const DEFAULT_TIMEZONE = 'Europe/London';
 const threadCreationLocks = new Map();
 
@@ -119,7 +121,7 @@ const INTERACTION_TYPES = Object.freeze({
       'Alphabet challenge: name a game, film, or show beginning with the letter **S**.',
       'Rhyme round: name one word that rhymes with light.',
       'Five-letter round: share one ordinary word with exactly five letters.',
-      'Co-op pick: name one game that would make a fun community game night.'
+      'Co-op pick: choose Roblox, Minecraft, Fortnite, or Rocket League.'
     ]
   },
   TRIVIA: {
@@ -613,6 +615,7 @@ function restorePromptDelivery(guildId, promptKey, previous) {
 
 function buildInteractionEmbed(config, interaction, participants = 0) {
   const type = interactionType(interaction.type);
+  const acceptsAnswers = supportsSubmittedAnswer(interaction);
   const censorTerms = listCensorTerms(config.guildId);
   const titleValidation = validateDailyInteractionContent({
     answer: interaction.title || `${config.titlePrefix || 'Jabster Studios'} | ${type.label}`,
@@ -638,7 +641,12 @@ function buildInteractionEmbed(config, interaction, participants = 0) {
     .addFields(
       { name: 'Type', value: type.label, inline: true },
       { name: 'Participants', value: String(participants), inline: true },
-      { name: 'How to Join', value: 'Click **Join In** to count, then use **Submit Answer** to share your response.' }
+      {
+        name: 'How to Join',
+        value: acceptsAnswers
+          ? 'Click **Join In** to count, then use **Submit Answer** for a verified response.'
+          : 'Click **Join In** to count your participation. This activity does not accept free-text responses.'
+      }
     )
     .setFooter({ text: `Jabster Studios Daily Interactions | ${interaction.source === 'custom' ? 'Community custom prompt' : 'Built-in prompt'}` })
     .setTimestamp();
@@ -646,7 +654,7 @@ function buildInteractionEmbed(config, interaction, participants = 0) {
   return embed;
 }
 
-function buildInteractionComponents({ discussionEnabled }) {
+function buildInteractionComponents({ discussionEnabled, interaction }) {
   const buttons = [
     new ButtonBuilder()
       .setCustomId('dailyinteraction_join')
@@ -654,20 +662,21 @@ function buildInteractionComponents({ discussionEnabled }) {
       .setStyle(ButtonStyle.Success)
   ];
 
-  if (discussionEnabled) {
+  if (discussionEnabled && supportsSubmittedAnswer(interaction)) {
     buttons.push(
       new ButtonBuilder()
         .setCustomId('dailyinteraction_answer')
         .setLabel('Submit Answer')
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId('dailyinteraction_discuss')
-        .setLabel('Open Discussion')
         .setStyle(ButtonStyle.Primary)
     );
   }
 
   return [new ActionRowBuilder().addComponents(buttons)];
+}
+
+function isDailyInteractionOpen(post, now = Date.now()) {
+  const sentAt = Number(post?.sentAt);
+  return Number.isFinite(sentAt) && now < sentAt + DAY_MS;
 }
 
 async function getOrCreateDiscussionThread({ guild, message, post, openedBy }) {
@@ -703,6 +712,45 @@ async function getOrCreateDiscussionThread({ guild, message, post, openedBy }) {
   } finally {
     if (threadCreationLocks.get(post.messageId) === creation) {
       threadCreationLocks.delete(post.messageId);
+    }
+  }
+}
+
+async function cleanupDiscussionThreads(client, now = Date.now()) {
+  const posts = all(
+    `SELECT messageId, guildId, threadId, sentAt
+     FROM daily_interaction_posts
+     WHERE threadId IS NOT NULL
+     AND sentAt <= ?`,
+    [now - DAY_MS]
+  );
+
+  for (const post of posts) {
+    const guild = client.guilds.cache.get(post.guildId);
+    if (!guild) continue;
+
+    const thread = await guild.channels.fetch(post.threadId).catch(() => null);
+    if (!thread) continue;
+
+    if (now >= Number(post.sentAt) + THREAD_DELETE_AFTER_MS) {
+      const deleted = await thread
+        .delete('Daily interaction discussion expired after seven days')
+        .then(() => true)
+        .catch(() => false);
+
+      if (deleted) {
+        run(
+          `UPDATE daily_interaction_posts
+           SET threadId = NULL
+           WHERE messageId = ?`,
+          [post.messageId]
+        );
+      }
+      continue;
+    }
+
+    if (!thread.archived) {
+      await thread.setArchived(true, 'Daily interaction discussion archived after one day').catch(() => null);
     }
   }
 }
@@ -896,7 +944,10 @@ async function sendDailyInteraction({
     const message = await channel.send({
       content: config.pingRoleId ? `<@&${config.pingRoleId}>` : undefined,
       embeds: [buildInteractionEmbed(config, picked)],
-      components: buildInteractionComponents({ discussionEnabled }),
+      components: buildInteractionComponents({
+        discussionEnabled,
+        interaction: picked
+      }),
       allowedMentions: config.pingRoleId
         ? { roles: [config.pingRoleId], parse: [] }
         : { parse: [] }
@@ -995,6 +1046,9 @@ class DailyInteractionService {
   }
 
   static async runTick(client) {
+    await cleanupDiscussionThreads(client)
+      .catch(err => console.error('Daily interaction thread cleanup failed:', err));
+
     const configs = all(
       `SELECT *
        FROM daily_interaction_config
@@ -1068,6 +1122,7 @@ module.exports = {
   buildInteractionEmbed,
   chooseInteraction,
   clearDayTheme,
+  cleanupDiscussionThreads,
   getDailyInteractionAnalytics,
   getDailyInteractionConfig,
   getDateParts,
@@ -1076,6 +1131,7 @@ module.exports = {
   getMemberEngagementStats,
   getInteractionTypes,
   getOrCreateDiscussionThread,
+  isDailyInteractionOpen,
   interactionType,
   listCustomPrompts,
   listInteractionTypes,

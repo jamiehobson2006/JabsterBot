@@ -339,15 +339,20 @@ async function handleDailyInteractionThreadSafety(message, client) {
   const hasAttachment = Number(message.attachments?.size) > 0;
   const hasSticker = Number(message.stickers?.size) > 0;
   const hasCustomEmoji = /<a?:[A-Za-z0-9_]{2,32}:\d+>/u.test(message.content || '');
-  const validation = hasAttachment || hasSticker || hasCustomEmoji
+  const validation = post
     ? {
       valid: false,
-      message: 'Uploads, stickers, and custom emojis are not allowed in daily interaction discussions.'
+      message: 'Direct discussion messages are disabled. Use Submit Answer on the original daily interaction.'
     }
-    : validateDailyInteractionContent({
-      answer: message.content,
-      censorTerms: listCensorTerms(message.guild.id)
-    });
+    : hasAttachment || hasSticker || hasCustomEmoji
+      ? {
+        valid: false,
+        message: 'Uploads, stickers, and custom emojis are not allowed in daily interaction discussions.'
+      }
+      : validateDailyInteractionContent({
+        answer: message.content,
+        censorTerms: listCensorTerms(message.guild.id)
+      });
 
   if (validation.valid) return false;
 

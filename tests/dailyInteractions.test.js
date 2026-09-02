@@ -11,7 +11,9 @@ const tempDir = fs.mkdtempSync(
 process.env.DATABASE_PATH = path.join(tempDir, 'database.db');
 
 const {
-  initDatabase
+  get,
+  initDatabase,
+  run
 } = require('../database');
 
 const {
@@ -20,6 +22,7 @@ const {
   buildInteractionEmbed,
   chooseInteraction,
   clearDayTheme,
+  cleanupDiscussionThreads,
   getDailyInteractionAnalytics,
   getDailyInteractionConfig,
   getEngagementLeaderboard,
@@ -188,4 +191,51 @@ test('member engagement tracks points and one streak update per local date', () 
   assert.equal(analytics.participants, 0);
   assert.equal(analytics.responses, 0);
   assert.deepEqual(analytics.types, []);
+});
+
+test('daily interaction discussion threads archive after one day and delete after seven days', async () => {
+  initDatabase();
+  const now = Date.now();
+  const archivedThread = {
+    archived: false,
+    setArchived: async () => {
+      archivedThread.archived = true;
+    }
+  };
+  const deletedThread = {
+    archived: true,
+    deleted: false,
+    delete: async () => {
+      deletedThread.deleted = true;
+    }
+  };
+
+  run(
+    `INSERT OR REPLACE INTO daily_interaction_posts (
+       messageId, guildId, channelId, type, promptKey, prompt, sentAt, threadId
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ['archive-post', 'guild-4', 'daily-channel', 'TRIVIA', 'archive', 'Trivia: How many minutes are in one hour?', now - (2 * 24 * 60 * 60 * 1000), 'archive-thread']
+  );
+  run(
+    `INSERT OR REPLACE INTO daily_interaction_posts (
+       messageId, guildId, channelId, type, promptKey, prompt, sentAt, threadId
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ['delete-post', 'guild-4', 'daily-channel', 'TRIVIA', 'delete', 'Trivia: How many minutes are in one hour?', now - (8 * 24 * 60 * 60 * 1000), 'delete-thread']
+  );
+
+  const client = {
+    guilds: {
+      cache: new Map([['guild-4', {
+        channels: {
+          fetch: async id => id === 'archive-thread' ? archivedThread : deletedThread
+        }
+      }]])
+    }
+  };
+
+  await cleanupDiscussionThreads(client, now);
+
+  assert.equal(archivedThread.archived, true);
+  assert.equal(deletedThread.deleted, true);
+  assert.equal(get('SELECT threadId FROM daily_interaction_posts WHERE messageId = ?', ['delete-post']).threadId, null);
 });

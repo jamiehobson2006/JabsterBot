@@ -7,6 +7,27 @@ const MAX_GAME_RESPONSE_LENGTH = 300;
 const MAX_PROMPT_LENGTH = 600;
 const MAX_TITLE_LENGTH = 120;
 
+const SUBMITTABLE_INTERACTION_TYPES = Object.freeze([
+  'WOULD_YOU_RATHER',
+  'THIS_OR_THAT',
+  'COMMUNITY_PICK',
+  'TRIVIA',
+  'GAME'
+]);
+
+const TRIVIA_ANSWERS = Object.freeze({
+  'largest planet': ['jupiter'],
+  'largest on earth': ['pacific', 'pacific ocean'],
+  'sides does a hexagon': ['six', '6'],
+  'blue and yellow': ['green'],
+  'black and white stripes': ['zebra', 'a zebra'],
+  'capital city of japan': ['tokyo'],
+  'after summer in the uk': ['autumn', 'fall'],
+  'minutes are in one hour': ['sixty', '60'],
+  'tallest type of land animal': ['giraffe', 'a giraffe'],
+  'red planet': ['mars']
+});
+
 const LINK_PATTERN = /\b(?:https?:\/\/|www\.|discord\.gg\/|discord(?:app)?\.com\/invite\/|[a-z0-9][a-z0-9-]{0,62}\.(?:com|net|org|gg|io|tv|me|co|uk|app|dev|info|xyz|site|online|link|live|shop|games)(?:[/?#][^\s<]*)?)/iu;
 const MENTION_PATTERN = /(?:@everyone|@here|<@!?\d+>|<@&\d+>|<#\d+>)/u;
 const INVISIBLE_OR_DIRECTIONAL_PATTERN = /[\u180E\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/u;
@@ -126,6 +147,105 @@ function promptText(post) {
     .replace(/\*/g, '');
 }
 
+function normalizeAnswer(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function cleanChoice(value) {
+  return String(value || '')
+    .replace(/\?$/u, '')
+    .replace(/^\s*(?:and|or)\s+/iu, '')
+    .trim();
+}
+
+function choicesFromPrompt(post) {
+  const prompt = promptText(post);
+  const type = String(post?.type || '').toUpperCase();
+
+  if (type === 'WOULD_YOU_RATHER') {
+    const match = prompt.match(/^Would you rather\s+(.+?)\s+or\s+(.+?)\?$/iu);
+    return match ? [cleanChoice(match[1]), cleanChoice(match[2])] : [];
+  }
+
+  if (type === 'THIS_OR_THAT') {
+    const match = prompt.match(/^(.+?)\s+or\s+(.+?)\?$/iu);
+    return match ? [cleanChoice(match[1]), cleanChoice(match[2])] : [];
+  }
+
+  if (type === 'COMMUNITY_PICK' || /^Co-op pick:/iu.test(prompt)) {
+    const choicesText = prompt.split(':').at(-1);
+    const trimmedChoices = choicesText
+      ?.replace(/^\s*choose\s+/iu, '');
+
+    return trimmedChoices
+      ? choicesText
+        .replace(/\.$/u, '')
+        .replace(/^\s*choose\s+/iu, '')
+        .split(/,|\s+or\s+/iu)
+        .map(cleanChoice)
+        .filter(Boolean)
+      : [];
+  }
+
+  return [];
+}
+
+function choiceMatchesAnswer(answer, choice) {
+  const normalizedAnswer = normalizeAnswer(answer);
+  const normalizedChoice = normalizeAnswer(choice);
+  if (normalizedAnswer === normalizedChoice) return true;
+
+  const words = normalizedChoice.split(' ').filter(Boolean);
+  const shortChoice = words.at(-1);
+  return words.length > 1 && normalizedAnswer === shortChoice;
+}
+
+function triviaAnswersForPrompt(post) {
+  const prompt = normalizeAnswer(promptText(post));
+  const matchedQuestion = Object.keys(TRIVIA_ANSWERS)
+    .find(question => prompt.includes(question));
+
+  return matchedQuestion ? TRIVIA_ANSWERS[matchedQuestion] : [];
+}
+
+function hasSupportedGameRule(post) {
+  const prompt = promptText(post);
+
+  return /^Word chain:/iu.test(prompt) ||
+    /^Two truths and a lie:/iu.test(prompt) ||
+    /^Alphabet challenge:/iu.test(prompt) ||
+    /^Emoji story:/iu.test(prompt) ||
+    /^One-word story:/iu.test(prompt) ||
+    /^Rhyme round:/iu.test(prompt) ||
+    /^Five-letter round:/iu.test(prompt) ||
+    choicesFromPrompt(post).length > 0;
+}
+
+function supportsSubmittedAnswer(post) {
+  const type = String(post?.type || '').toUpperCase();
+  if (!SUBMITTABLE_INTERACTION_TYPES.includes(type)) return false;
+  if (type === 'GAME') return hasSupportedGameRule(post);
+  if (type === 'TRIVIA') return triviaAnswersForPrompt(post).length > 0;
+  return choicesFromPrompt(post).length > 0;
+}
+
+function answerInstruction(post) {
+  const choices = choicesFromPrompt(post);
+  if (choices.length) {
+    return `Choose exactly one: ${choices.join(' / ')}`.slice(0, 100);
+  }
+
+  if (String(post?.type || '').toUpperCase() === 'TRIVIA') {
+    return 'Enter the trivia answer only.';
+  }
+
+  return 'Follow the game instructions exactly.';
+}
+
 function firstLetter(value) {
   return [...String(value || '').matchAll(/\p{L}/gu)][0]?.[0]?.toLocaleLowerCase('en-GB') || null;
 }
@@ -164,11 +284,35 @@ function validateGameAnswer(post, answer) {
     return 'This game only accepts one normal word.';
   }
 
+  if (/^Two truths and a lie:/iu.test(prompt)) {
+    const statements = answer
+      .split(/\n+|(?<=[.!?])\s+/u)
+      .map(statement => statement.trim())
+      .filter(Boolean);
+
+    if (statements.length !== 3 || statements.some(statement => statement.length < 4)) {
+      return 'Submit exactly three short statements, one per line.';
+    }
+  }
+
   if (/^Emoji story:/iu.test(prompt)) {
     const emojiCount = (answer.match(/\p{Extended_Pictographic}/gu) || []).length;
     if (/\p{L}|\p{N}/u.test(answer) || emojiCount !== 5) {
       return 'This game only accepts exactly five emojis.';
     }
+  }
+
+  if (/^Rhyme round:/iu.test(prompt) && !/^\p{L}{1,28}ight$/iu.test(answer)) {
+    return 'Reply with one word that rhymes with light.';
+  }
+
+  if (/^Five-letter round:/iu.test(prompt) && !/^[A-Za-z]{5}$/u.test(answer)) {
+    return 'Reply with one ordinary five-letter word.';
+  }
+
+  const choices = choicesFromPrompt(post);
+  if (choices.length && !choices.some(choice => choiceMatchesAnswer(answer, choice))) {
+    return `Choose one of the listed options: ${choices.join(', ')}.`;
   }
 
   return null;
@@ -243,6 +387,13 @@ function validateDailyInteractionPrompt({ prompt, title = null, censorTerms = []
 }
 
 function validateDailyInteractionAnswer({ post, answer, censorTerms = [] }) {
+  if (!supportsSubmittedAnswer(post)) {
+    return {
+      valid: false,
+      message: 'This activity tracks participation through Join In and does not accept text responses.'
+    };
+  }
+
   const maxLength = String(post?.type || '').toUpperCase() === 'GAME'
     ? MAX_GAME_RESPONSE_LENGTH
     : MAX_RESPONSE_LENGTH;
@@ -254,7 +405,23 @@ function validateDailyInteractionAnswer({ post, answer, censorTerms = [] }) {
 
   if (!contentValidation.valid) return contentValidation;
 
-  if (String(post?.type || '').toUpperCase() === 'GAME') {
+  const type = String(post?.type || '').toUpperCase();
+  const choices = choicesFromPrompt(post);
+  if (choices.length && !choices.some(choice => choiceMatchesAnswer(contentValidation.answer, choice))) {
+    return {
+      valid: false,
+      message: `Choose exactly one listed option: ${choices.join(', ')}.`
+    };
+  }
+
+  if (type === 'TRIVIA') {
+    const answers = triviaAnswersForPrompt(post);
+    if (!answers.length || !answers.some(expected => normalizeAnswer(expected) === normalizeAnswer(contentValidation.answer))) {
+      return { valid: false, message: 'That is not the expected trivia answer. Try again.' };
+    }
+  }
+
+  if (type === 'GAME') {
     const gameError = validateGameAnswer(post, contentValidation.answer);
     if (gameError) return { valid: false, message: gameError };
   }
@@ -269,10 +436,15 @@ module.exports = {
   MAX_PROMPT_LENGTH,
   MAX_RESPONSE_LENGTH,
   MAX_TITLE_LENGTH,
+  SUBMITTABLE_INTERACTION_TYPES,
+  answerInstruction,
+  choicesFromPrompt,
   containsBuiltInUnsafeLanguage,
   hasUnsupportedAlphabet,
+  hasSupportedGameRule,
   validateDailyInteractionContent,
   validateDailyInteractionAnswer,
   validateDailyInteractionPrompt,
-  validateGameAnswer
+  validateGameAnswer,
+  supportsSubmittedAnswer
 };

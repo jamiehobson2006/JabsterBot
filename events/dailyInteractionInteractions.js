@@ -16,6 +16,7 @@ const {
   getDailyInteractionConfig,
   getDateParts,
   getOrCreateDiscussionThread,
+  isDailyInteractionOpen,
   recordMemberEngagement
 } = require('../services/DailyInteractionService');
 
@@ -26,6 +27,8 @@ const {
 const {
   MAX_GAME_RESPONSE_LENGTH,
   MAX_RESPONSE_LENGTH,
+  answerInstruction,
+  supportsSubmittedAnswer,
   validateDailyInteractionAnswer
 } = require('../utils/dailyInteractionSafety');
 
@@ -104,8 +107,8 @@ function responseModal(post) {
     : MAX_RESPONSE_LENGTH;
   const input = new TextInputBuilder()
     .setCustomId('response')
-    .setLabel('Your family-friendly answer')
-    .setPlaceholder('Keep it kind. Links and mentions are not accepted.')
+    .setLabel('Your verified answer')
+    .setPlaceholder(answerInstruction(post))
     .setStyle(TextInputStyle.Paragraph)
     .setMaxLength(maxLength)
     .setRequired(true);
@@ -123,6 +126,13 @@ async function fetchPostMessage(interaction, post) {
 }
 
 async function handleJoin(interaction, post) {
+  if (!isDailyInteractionOpen(post)) {
+    return interaction.reply({
+      content: 'This daily interaction has closed.',
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
   const joined = addParticipant(post, interaction.user.id);
   const config = getDailyInteractionConfig(interaction.guild.id);
 
@@ -147,16 +157,10 @@ async function handleJoin(interaction, post) {
 }
 
 async function handleDiscussion(interaction, post) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  const thread = await getOrCreateDiscussionThread({
-    guild: interaction.guild,
-    message: interaction.message,
-    post,
-    openedBy: interaction.user.tag
+  return interaction.reply({
+    content: 'Daily interaction discussions are read-only. Use Submit Answer for supported activities.',
+    flags: MessageFlags.Ephemeral
   });
-
-  return interaction.editReply({ content: `Discussion: ${thread}` });
 }
 
 function withResponseSubmissionLock(key, operation) {
@@ -179,6 +183,10 @@ async function processAnswerModal(interaction, messageId) {
 
   if (!post) {
     return interaction.editReply({ content: 'This daily interaction is no longer active.' });
+  }
+
+  if (!isDailyInteractionOpen(post)) {
+    return interaction.editReply({ content: 'This daily interaction has closed.' });
   }
 
   const submittedAnswer = interaction.fields.getTextInputValue('response');
@@ -304,11 +312,25 @@ module.exports = {
         });
       }
 
+      if (!isDailyInteractionOpen(post)) {
+        return interaction.reply({
+          content: 'This daily interaction has closed.',
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
       if (interaction.customId === 'dailyinteraction_join') {
         return handleJoin(interaction, post);
       }
 
       if (interaction.customId === 'dailyinteraction_answer') {
+        if (!supportsSubmittedAnswer(post)) {
+          return interaction.reply({
+            content: 'This activity tracks participation through Join In and does not accept text responses.',
+            flags: MessageFlags.Ephemeral
+          });
+        }
+
         return interaction.showModal(responseModal(post));
       }
 
