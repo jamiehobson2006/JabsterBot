@@ -25,6 +25,10 @@ const {
   canManageApplications
 } = require('../../utils/applicationAccess');
 
+const {
+  reviewApplication
+} = require('../../utils/tickets/applicationReview');
+
 function formatQuestions(
   questions
 ) {
@@ -173,6 +177,32 @@ module.exports = {
               .setRequired(true)
           )
       )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('accept')
+          .setDescription('Accept and close the application in this ticket')
+          .addStringOption(option =>
+            option
+              .setName('reason')
+              .setDescription('Reason for accepting this application')
+              .setRequired(true)
+              .setMinLength(3)
+              .setMaxLength(1000)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('deny')
+          .setDescription('Deny and close the application in this ticket')
+          .addStringOption(option =>
+            option
+              .setName('reason')
+              .setDescription('Reason for denying this application')
+              .setRequired(true)
+              .setMinLength(3)
+              .setMaxLength(1000)
+          )
+      )
       .addSubcommandGroup(group =>
         group
           .setName('edit')
@@ -306,6 +336,22 @@ module.exports = {
 
       const subcommand =
         interaction.options.getSubcommand();
+
+      if (!group && ['accept', 'deny'].includes(subcommand)) {
+        const result = await reviewApplication({
+          interaction,
+          decision: subcommand === 'accept' ? 'ACCEPTED' : 'DENIED',
+          reason: interaction.options.getString('reason', true)
+        });
+
+        return interaction.editReply({
+          content:
+            `Application ${result.decision.toLowerCase()} and archived.` +
+            (result.applicantNotified
+              ? ' The applicant was notified.'
+              : ' I could not DM the applicant.')
+        });
+      }
 
       const isAdministrator =
         interaction.memberPermissions.has(

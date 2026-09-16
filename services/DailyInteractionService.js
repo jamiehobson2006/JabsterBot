@@ -613,9 +613,14 @@ function restorePromptDelivery(guildId, promptKey, previous) {
   );
 }
 
-function buildInteractionEmbed(config, interaction, participants = 0) {
+function buildInteractionEmbed(
+  config,
+  interaction,
+  participants = 0,
+  canSubmitAnswers = true
+) {
   const type = interactionType(interaction.type);
-  const acceptsAnswers = supportsSubmittedAnswer(interaction);
+  const acceptsAnswers = canSubmitAnswers && supportsSubmittedAnswer(interaction);
   const censorTerms = listCensorTerms(config.guildId);
   const titleValidation = validateDailyInteractionContent({
     answer: interaction.title || `${config.titlePrefix || 'Jabster Studios'} | ${type.label}`,
@@ -654,7 +659,7 @@ function buildInteractionEmbed(config, interaction, participants = 0) {
   return embed;
 }
 
-function buildInteractionComponents({ discussionEnabled, interaction }) {
+function buildInteractionComponents({ canSubmitAnswers, interaction }) {
   const buttons = [
     new ButtonBuilder()
       .setCustomId('dailyinteraction_join')
@@ -662,7 +667,7 @@ function buildInteractionComponents({ discussionEnabled, interaction }) {
       .setStyle(ButtonStyle.Success)
   ];
 
-  if (discussionEnabled && supportsSubmittedAnswer(interaction)) {
+  if (canSubmitAnswers && supportsSubmittedAnswer(interaction)) {
     buttons.push(
       new ButtonBuilder()
         .setCustomId('dailyinteraction_answer')
@@ -934,7 +939,7 @@ async function sendDailyInteraction({
     savePromptDelivery(config.guildId, picked.key, now);
   }
 
-  const discussionEnabled = Number(config.discussionEnabled) === 1 &&
+  const canSubmitAnswers = Number(config.discussionEnabled) === 1 &&
     permissions.has([
       PermissionFlagsBits.CreatePublicThreads,
       PermissionFlagsBits.SendMessagesInThreads
@@ -943,9 +948,9 @@ async function sendDailyInteraction({
   try {
     const message = await channel.send({
       content: config.pingRoleId ? `<@&${config.pingRoleId}>` : undefined,
-      embeds: [buildInteractionEmbed(config, picked)],
+      embeds: [buildInteractionEmbed(config, picked, 0, canSubmitAnswers)],
       components: buildInteractionComponents({
-        discussionEnabled,
+        canSubmitAnswers,
         interaction: picked
       }),
       allowedMentions: config.pingRoleId

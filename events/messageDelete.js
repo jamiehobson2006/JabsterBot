@@ -4,7 +4,8 @@ const {
 
 const {
   createAuditEmbed,
-  logAudit
+  logAudit,
+  sendLog
 } = require('../utils/logger');
 
 const {
@@ -20,6 +21,14 @@ const {
   describeDeletedMessage
 } = require('../utils/deletedMessageSummary');
 
+const {
+  buildDeletedMessageCopy
+} = require('../utils/deletedMessageCopy');
+
+const {
+  getMessageSnapshot
+} = require('../utils/messageSnapshots');
+
 module.exports = {
   name: 'messageDelete',
 
@@ -33,47 +42,64 @@ module.exports = {
         message = await message.fetch().catch(() => message);
       }
 
-      if (!message.guild || message.author?.bot) {
+      const snapshot = getMessageSnapshot(message.id);
+      const loggedMessage = snapshot || message;
+      const guild = message.guild || await client.guilds.fetch(loggedMessage.guildId).catch(() => null);
+
+      if (!guild || loggedMessage.author?.bot) {
         return;
       }
 
+      const visualCopy = await buildDeletedMessageCopy(loggedMessage);
+
       const audit = await findRecentAuditLog(
-        message.guild,
+        guild,
         AuditLogEvent.MessageDelete,
-        message.author?.id
+        loggedMessage.author?.id
       );
 
       await logAudit(
         client,
-        message.guild.id,
+        guild.id,
         {
           action: 'MESSAGE_DELETED',
-          targetId: message.author?.id,
+          targetId: loggedMessage.author?.id,
           executorId: audit?.executor?.id,
           type: 'MESSAGES',
           metadata: {
-            channelId: message.channel?.id,
+            channelId: loggedMessage.channel?.id,
             messageId: message.id,
-            content: message.content || null,
-            embedSummary: describeDeletedMessage(message),
-            attachments: message.attachments?.map(item => item.url) || [],
+            content: loggedMessage.content || null,
+            embedSummary: describeDeletedMessage(loggedMessage),
+            attachments: loggedMessage.attachments?.map(item => item.url) || [],
             deletedBy: audit?.executor?.id || null
           },
           embed: createAuditEmbed({
             action: 'Message Deleted',
-            target: `${message.author?.tag || 'Unknown'}\n<@${message.author?.id || 'unknown'}>`,
+            target: `${loggedMessage.author?.tag || 'Unknown'}\n<@${loggedMessage.author?.id || 'unknown'}>`,
             executor: audit
               ? formatExecutor(audit)
               : 'Author or unknown',
-            channel: message.channel?.id
-              ? `<#${message.channel.id}>`
+            channel: loggedMessage.channel?.id
+              ? `<#${loggedMessage.channel.id}>`
               : 'Unknown',
             reason: audit?.reason || undefined,
-            extra: describeDeletedMessage(message),
+            extra: `${describeDeletedMessage(loggedMessage)}${visualCopy ? '\n\nA visual copy of the deleted message is posted below.' : ''}`,
             color: 0xED4245
           })
         }
       );
+
+      if (visualCopy) {
+        const sent = await sendLog(client, guild.id, 'MESSAGES', visualCopy);
+
+        if (!sent && visualCopy.files?.length) {
+          await sendLog(client, guild.id, 'MESSAGES', {
+            ...visualCopy,
+            files: []
+          });
+        }
+      }
     } catch (err) {
       console.error('MessageDelete Error:', err);
     }

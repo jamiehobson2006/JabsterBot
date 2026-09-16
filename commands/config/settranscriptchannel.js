@@ -1,277 +1,98 @@
 const {
-
-  SlashCommandBuilder,
-
-  PermissionsBitField,
-
   ChannelType,
-
-  EmbedBuilder
-
+  EmbedBuilder,
+  PermissionsBitField,
+  SlashCommandBuilder
 } = require('discord.js');
 
 const {
   run
 } = require('../../database');
 
+const TRANSCRIPT_TYPES = {
+  TICKETS: {
+    column: 'transcriptChannelId',
+    label: 'Ticket'
+  },
+  APPLICATIONS: {
+    column: 'applicationTranscriptChannelId',
+    label: 'Application'
+  }
+};
+
 module.exports = {
-
   cooldown: 5000,
+  ephemeral: true,
 
-  data:
-    new SlashCommandBuilder()
-
-      .setName(
-        'settranscriptchannel'
-      )
-
-      .setDescription(
-        'Set the transcript log channel'
-      )
-
-      .addChannelOption(option =>
-
-        option
-
-          .setName('channel')
-
-          .setDescription(
-            'Channel for ticket transcripts'
-          )
-
-          .addChannelTypes(
-            ChannelType.GuildText
-          )
-
-          .setRequired(true)
-      ),
+  data: new SlashCommandBuilder()
+    .setName('settranscriptchannel')
+    .setDescription('Set where ticket or application transcripts are saved')
+    .addChannelOption(option => option
+      .setName('channel')
+      .setDescription('Staff-only channel for transcript archives')
+      .addChannelTypes(ChannelType.GuildText)
+      .setRequired(true))
+    .addStringOption(option => option
+      .setName('type')
+      .setDescription('Transcript type to send to this channel')
+      .addChoices(
+        { name: 'Tickets', value: 'TICKETS' },
+        { name: 'Applications', value: 'APPLICATIONS' }
+      )),
 
   async execute(interaction) {
-
-    try {
-
-      // ==========================================
-      // 🔐 PERMISSION CHECK
-      // ==========================================
-      if (
-
-        !interaction.memberPermissions.has(
-          PermissionsBitField.Flags.Administrator
-        )
-      ) {
-
-        return interaction.editReply({
-
-          content:
-            '❌ You need Administrator permission.'
-        });
-      }
-
-      // ==========================================
-      // 📥 CHANNEL
-      // ==========================================
-      const channel =
-        interaction.options.getChannel(
-          'channel',
-          true
-        );
-
-      // ==========================================
-      // 🤖 BOT PERMISSIONS
-      // ==========================================
-      const perms =
-        channel.permissionsFor(
-          interaction.guild.members.me
-        );
-
-      if (
-
-        !perms?.has([
-
-          PermissionsBitField.Flags.ViewChannel,
-
-          PermissionsBitField.Flags.SendMessages,
-
-          PermissionsBitField.Flags.AttachFiles,
-
-          PermissionsBitField.Flags.EmbedLinks,
-
-          PermissionsBitField.Flags.ReadMessageHistory
-        ])
-      ) {
-
-        return interaction.editReply({
-
-          content:
-
-            '❌ I am missing required permissions in that channel.'
-        });
-      }
-
-      // ==========================================
-      // 💾 SAVE
-      // ==========================================
-      run(
-
-        `INSERT INTO guild_settings
-         (
-           guildId,
-           transcriptChannelId
-         )
-
-         VALUES (?, ?)
-
-         ON CONFLICT(guildId)
-
-         DO UPDATE SET
-
-           transcriptChannelId =
-           excluded.transcriptChannelId`,
-
-        [
-
-          interaction.guild.id,
-
-          channel.id
-        ]
-      );
-
-      // ==========================================
-      // 🎨 SUCCESS EMBED
-      // ==========================================
-      const embed =
-        new EmbedBuilder()
-
-          .setColor(0x57F287)
-
-          .setTitle(
-            '📜 Transcript Channel Configured'
-          )
-
-          .setDescription(
-
-            `Ticket transcripts will now be sent to ${channel}`
-          )
-
-          .addFields(
-
-            {
-
-              name: 'Enabled Features',
-
-              value:
-
-                '• HTML transcripts\n' +
-                '• Ticket close logs\n' +
-                '• Staff close tracking\n' +
-                '• Ticket analytics\n' +
-                '• Transcript storage',
-
-              inline: false
-            },
-
-            {
-
-              name: 'Important',
-
-              value:
-                'Ensure this channel is only visible to staff members.',
-
-              inline: false
-            },
-
-            {
-
-              name: 'Configured By',
-
-              value:
-                `${interaction.user}`,
-
-              inline: true
-            },
-
-            {
-
-              name: 'Channel',
-
-              value:
-                `${channel}`,
-
-              inline: true
-            }
-          )
-
-          .setFooter({
-
-            text:
-              `Guild ID: ${interaction.guild.id}`
-          })
-
-          .setTimestamp();
-
-      await interaction.editReply({
-
-        embeds: [embed]
-      });
-
-      // ==========================================
-      // 🧪 TEST MESSAGE
-      // ==========================================
-      try {
-
-        await channel.send({
-
-          embeds: [
-
-            new EmbedBuilder()
-
-              .setColor(0x5865F2)
-
-              .setTitle(
-                '📜 Transcript Logging Enabled'
-              )
-
-              .setDescription(
-
-                'This channel will now receive:\n\n' +
-
-                '• Ticket transcripts\n' +
-                '• Ticket close logs\n' +
-                '• Staff close tracking\n' +
-                '• Ticket analytics\n' +
-                '• Transcript files'
-              )
-
-              .setFooter({
-
-                text:
-                  `Configured by ${interaction.user.tag}`
-              })
-
-              .setTimestamp()
-          ]
-        });
-
-      } catch (messageError) {
-
-        console.warn(
-          'Failed to send transcript setup message:',
-          messageError
-        );
-      }
-
-    } catch (err) {
-
-      console.error(
-        'SetTranscriptChannel Error:',
-        err
-      );
-
+    if (!interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator)) {
+      return interaction.editReply({ content: 'Administrator permission is required.' });
+    }
+
+    const channel = interaction.options.getChannel('channel', true);
+    const selectedType = interaction.options.getString('type') || 'TICKETS';
+    const transcriptType = TRANSCRIPT_TYPES[selectedType];
+    const permissions = channel.permissionsFor(interaction.guild.members.me);
+
+    if (!permissions?.has([
+      PermissionsBitField.Flags.ViewChannel,
+      PermissionsBitField.Flags.SendMessages,
+      PermissionsBitField.Flags.AttachFiles,
+      PermissionsBitField.Flags.EmbedLinks,
+      PermissionsBitField.Flags.ReadMessageHistory
+    ])) {
       return interaction.editReply({
-
-        content:
-          '❌ Failed to set transcript channel.'
+        content: 'I need View Channel, Send Messages, Attach Files, Embed Links, and Read Message History in that channel.'
       });
     }
+
+    run(
+      `INSERT INTO guild_settings (guildId, ${transcriptType.column})
+       VALUES (?, ?)
+       ON CONFLICT(guildId)
+       DO UPDATE SET ${transcriptType.column} = excluded.${transcriptType.column}`,
+      [interaction.guild.id, channel.id]
+    );
+
+    const embed = new EmbedBuilder()
+      .setColor(0x57F287)
+      .setTitle(`${transcriptType.label} Transcript Channel Configured`)
+      .setDescription(`${transcriptType.label} transcripts will be saved in ${channel}.`)
+      .addFields(
+        { name: 'Archive', value: 'HTML transcript with ticket details, staff activity, timestamps, and close reason.' },
+        { name: 'Configured By', value: `${interaction.user}`, inline: true },
+        { name: 'Channel', value: `${channel}`, inline: true }
+      )
+      .setFooter({ text: 'Keep transcript channels visible to staff only.' })
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed] });
+
+    await channel.send({
+      embeds: [new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle(`${transcriptType.label} Transcript Logging Enabled`)
+        .setDescription('This channel will receive protected HTML transcript archives.')
+        .setFooter({ text: `Configured by ${interaction.user.tag}` })
+        .setTimestamp()]
+    }).catch(error => {
+      console.warn('Transcript setup message error:', error.message);
+    });
   }
 };

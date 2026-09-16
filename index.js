@@ -81,6 +81,10 @@ const {
   TicketSlaService
 } = require('./services/TicketSlaService');
 
+const {
+  startFeedbackPublisher
+} = require('./utils/ticketFeedback');
+
 if (!process.env.TOKEN) {
 
   throw new Error(
@@ -654,6 +658,14 @@ TicketSlaService.start(
 
 console.log(
   '✅ Ticket SLA service started'
+);
+
+startFeedbackPublisher(
+  client
+);
+
+console.log(
+  '✅ Ticket feedback publisher started'
 );
 
 startPollService(

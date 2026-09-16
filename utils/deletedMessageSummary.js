@@ -33,6 +33,33 @@ function summarizeEmbed(embed, index) {
   return parts.length ? `${label}\n${parts.join('\n')}` : `${label}\nEmpty embed`;
 }
 
+function summarizeMedia(items, label) {
+  const media = [...(items?.values?.() || items || [])];
+  if (!media.length) return '';
+
+  const listed = media
+    .slice(0, 8)
+    .map(item => {
+      const name = item.name || 'Unnamed file';
+      const url = item.url || item.proxyURL || '';
+      return url ? `[${name}](${url})` : name;
+    })
+    .join('\n');
+
+  const more = media.length > 8 ? `\n+${media.length - 8} more` : '';
+  return `${label} (${media.length})\n${listed}${more}`;
+}
+
+function summarizeReactions(message) {
+  const reactions = [...(message.reactions?.cache?.values?.() || [])];
+  if (!reactions.length) return '';
+
+  return `Reactions: ${reactions
+    .slice(0, 12)
+    .map(reaction => `${reaction.emoji} x${reaction.count}`)
+    .join(', ')}`;
+}
+
 function describeDeletedMessage(message) {
   const parts = [];
   const content = compact(message.content, 1200);
@@ -44,9 +71,13 @@ function describeDeletedMessage(message) {
     parts.push(embeds.map(summarizeEmbed).join('\n\n'));
   }
 
-  if (message.attachments?.size) {
-    parts.push(`Attachments: ${message.attachments.size}`);
-  }
+  const attachments = summarizeMedia(message.attachments, 'Attachments');
+  const stickers = summarizeMedia(message.stickers, 'Stickers');
+  const reactions = summarizeReactions(message);
+
+  if (attachments) parts.push(attachments);
+  if (stickers) parts.push(stickers);
+  if (reactions) parts.push(reactions);
 
   return parts.join('\n\n') || 'No text, embeds, or attachments.';
 }

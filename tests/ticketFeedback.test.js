@@ -32,6 +32,7 @@ const {
   getFeedback,
   listFeedback,
   publishFeedback,
+  publishPendingFeedback,
   sendFeedbackPrompt,
   submitFeedback
 } = require('../utils/ticketFeedback');
@@ -106,7 +107,10 @@ test('every ticket category sends and publishes feedback through the shared feed
     channels: {
       fetch: async () => ({
         isTextBased: () => true,
-        send: async payload => published.push(payload)
+        send: async payload => {
+          published.push(payload);
+          return { id: `feedback-${published.length}` };
+        }
       })
     }
   };
@@ -144,4 +148,71 @@ test('every ticket category sends and publishes feedback through the shared feed
 
   assert.deepEqual(feedbackTypes, ['support', 'bug', 'giveaway', 'partnership', 'application']);
   assert.equal(all('SELECT * FROM ticket_feedback WHERE guildId = ?', ['feedback-guild']).length, 5);
+});
+
+test('submitted feedback retries until it is posted once in the feedback channel', async () => {
+  initDatabase();
+
+  run(
+    `INSERT INTO guild_settings (guildId, ticketFeedbackChannelId)
+     VALUES ('retry-guild', 'retry-channel')
+     ON CONFLICT(guildId) DO UPDATE SET ticketFeedbackChannelId = excluded.ticketFeedbackChannelId`
+  );
+
+  const record = submitFeedback({
+    id: createFeedbackRecord({
+      ticket: {
+        guildId: 'retry-guild',
+        channelId: 'retry-ticket',
+        type: 'appeal',
+        userId: 'retry-user'
+      },
+      closedBy: { id: 'retry-staff' },
+      closeReason: 'Appeal reviewed.'
+    }).id,
+    userId: 'retry-user',
+    rating: 5,
+    feedback: 'Thank you for reviewing my appeal.'
+  });
+
+  let sends = 0;
+  const client = {
+    channels: {
+      fetch: async () => ({
+        isTextBased: () => true,
+        send: async () => {
+          sends += 1;
+          if (sends === 1) throw new Error('Temporary Discord failure');
+          return { id: 'published-feedback' };
+        }
+      })
+    }
+  };
+
+  await assert.rejects(
+    publishFeedback(client, record),
+    /temporary discord failure/i
+  );
+
+  const failed = getFeedback(record.id);
+  assert.equal(failed.publishedMessageId, null);
+  assert.equal(failed.publishAttempts, 1);
+  assert.match(failed.lastPublishError, /temporary discord failure/i);
+
+  run(
+    `UPDATE ticket_feedback
+     SET lastPublishAttemptAt = 0
+     WHERE id = ?`,
+    [record.id]
+  );
+
+  const retry = await publishPendingFeedback(client);
+  const published = getFeedback(record.id);
+
+  assert.equal(retry.published, 1);
+  assert.equal(published.publishedMessageId, 'published-feedback');
+  assert.ok(published.publishedAt);
+
+  assert.equal(await publishFeedback(client, published), true);
+  assert.equal(sends, 2);
 });

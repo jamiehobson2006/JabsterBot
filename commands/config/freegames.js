@@ -189,8 +189,29 @@ module.exports = {
     }
 
     if (subcommand === 'check') {
-      await checkFreeGames(interaction.client);
-      return interaction.editReply({ content: 'Checked Epic Games and Steam. Any new eligible offers were posted.' });
+      const summary = await checkFreeGames(interaction.client, {
+        guildId: interaction.guild.id
+      });
+
+      if (summary.busy) {
+        return interaction.editReply({
+          content: 'A free-game check is already running. Please try again in a moment.'
+        });
+      }
+
+      const detected = [
+        `Epic Games: ${summary.detected.EPIC}`,
+        `Steam: ${summary.detected.STEAM}`
+      ].join(' | ');
+      const result = [
+        `Checked ${summary.configurations} configured watch${summary.configurations === 1 ? '' : 'es'}.`,
+        detected,
+        `Posted: ${summary.announced}.`,
+        summary.skipped ? `Already posted or unavailable: ${summary.skipped}.` : null,
+        summary.failures.length ? `Store errors: ${summary.failures.join(' | ').slice(0, 800)}` : null
+      ].filter(Boolean).join('\n');
+
+      return interaction.editReply({ content: result });
     }
 
     const sample = {

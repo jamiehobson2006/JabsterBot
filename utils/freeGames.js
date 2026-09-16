@@ -24,6 +24,9 @@ const EPIC_ENDPOINT =
 const STEAM_ENDPOINT =
   'https://store.steampowered.com/api/featuredcategories';
 
+const STEAM_SEARCH_ENDPOINT =
+  'https://store.steampowered.com/search/results/';
+
 const CHECK_INTERVAL = 15 * 60 * 1000;
 
 let monitorInterval = null;
@@ -39,13 +42,15 @@ function getFreeGameSettings(guildId) {
   );
 }
 
-function listEnabledFreeGameSettings() {
+function listEnabledFreeGameSettings(guildId = null) {
   return all(
     `SELECT *
      FROM free_game_settings
      WHERE enabled = 1
      AND channelId IS NOT NULL
-     AND channelId <> ''`
+     AND channelId <> ''
+     ${guildId ? 'AND guildId = ?' : ''}`,
+    guildId ? [guildId] : []
   );
 }
 
@@ -203,6 +208,104 @@ function normalizeSteamOffers(payload) {
   });
 }
 
+function decodeHtml(value) {
+  return String(value || '')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)));
+}
+
+function stripHtml(value) {
+  return decodeHtml(value)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getHtmlAttribute(source, name) {
+  const escapedName = String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = String(source || '').match(
+    new RegExp(`\\s${escapedName}=(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i')
+  );
+
+  return decodeHtml(match?.[1] || match?.[2] || match?.[3] || '');
+}
+
+function getSteamSearchRows(html) {
+  return String(html || '').match(
+    /<a\b(?=[^>]*\bsearch_result_row\b)[^>]*>[\s\S]*?<\/a>/gi
+  ) || [];
+}
+
+function normalizeSteamSearchOffers(payload) {
+  const html = typeof payload === 'string'
+    ? payload
+    : payload?.results_html || '';
+
+  return getSteamSearchRows(html).flatMap(row => {
+    const appId = getHtmlAttribute(row, 'data-ds-appid');
+    const finalPrice = getHtmlAttribute(row, 'data-price-final');
+    const discount = getHtmlAttribute(row, 'data-discount');
+
+    if (
+      !/^\d+$/.test(appId) ||
+      Number(finalPrice) !== 0 ||
+      Number(discount) !== 100
+    ) {
+      return [];
+    }
+
+    const titleMatch = row.match(
+      /<span\b[^>]*class="[^"]*\btitle\b[^"]*"[^>]*>([\s\S]*?)<\/span>/i
+    );
+    const originalPriceMatch = row.match(
+      /<div\b[^>]*class="[^"]*\bdiscount_original_price\b[^"]*"[^>]*>([\s\S]*?)<\/div>/i
+    );
+    const imageMatch = row.match(/<img\b[^>]*\bsrc="([^"]+)"/i);
+    const url = getHtmlAttribute(row, 'href');
+    const title = stripHtml(titleMatch?.[1]);
+    const originalPrice = stripHtml(originalPriceMatch?.[1]);
+
+    if (!title || !url || !originalPrice) {
+      return [];
+    }
+
+    return [{
+      key: `steam:${appId}`,
+      source: 'STEAM',
+      title: title.slice(0, 256),
+      url,
+      image: decodeHtml(imageMatch?.[1] || '') || null,
+      originalPrice: originalPrice.slice(0, 64),
+      startsAt: null,
+      endsAt: null
+    }];
+  });
+}
+
+function mergeOffers(...groups) {
+  const merged = new Map();
+
+  for (const offer of groups.flat()) {
+    if (!offer?.key) continue;
+
+    const existing = merged.get(offer.key);
+    merged.set(offer.key, {
+      ...existing,
+      ...offer,
+      endsAt: offer.endsAt || existing?.endsAt || null,
+      image: offer.image || existing?.image || null,
+      originalPrice: offer.originalPrice || existing?.originalPrice || null
+    });
+  }
+
+  return [...merged.values()];
+}
+
 async function fetchEpicOffers(country) {
   const response = await axios.get(EPIC_ENDPOINT, {
     params: {
@@ -220,18 +323,50 @@ async function fetchEpicOffers(country) {
 }
 
 async function fetchSteamOffers(country) {
-  const response = await axios.get(STEAM_ENDPOINT, {
-    params: {
-      cc: country.toLowerCase(),
-      l: 'english'
-    },
-    timeout: 15000,
-    headers: {
-      'User-Agent': 'JabsterStudios-DiscordBot/1.0'
-    }
-  });
+  const steamCountry = String(country || 'GB').toLowerCase();
+  const headers = {
+    'User-Agent': 'JabsterStudiosBot/1.0 (Discord free game watch)',
+    'Accept-Language': 'en-GB,en;q=0.9'
+  };
 
-  return normalizeSteamOffers(response.data);
+  const [featuredResult, searchResult] = await Promise.allSettled([
+    axios.get(STEAM_ENDPOINT, {
+      params: { cc: steamCountry, l: 'english' },
+      timeout: 15000,
+      headers
+    }),
+    axios.get(STEAM_SEARCH_ENDPOINT, {
+      params: {
+        query: '',
+        start: 0,
+        count: 50,
+        specials: 1,
+        maxprice: 'free',
+        category1: 998,
+        cc: steamCountry,
+        l: 'english',
+        infinite: 1
+      },
+      timeout: 15000,
+      headers
+    })
+  ]);
+
+  const featuredOffers = featuredResult.status === 'fulfilled'
+    ? normalizeSteamOffers(featuredResult.value.data)
+    : [];
+  const searchOffers = searchResult.status === 'fulfilled'
+    ? normalizeSteamSearchOffers(searchResult.value.data)
+    : [];
+
+  if (!featuredOffers.length && !searchOffers.length) {
+    const failure = [featuredResult, searchResult]
+      .find(result => result.status === 'rejected');
+
+    if (failure) throw failure.reason;
+  }
+
+  return mergeOffers(featuredOffers, searchOffers);
 }
 
 function reserveAnnouncement(guildId, offer) {
@@ -303,16 +438,16 @@ async function announceOffer(client, settings, offer) {
   const channel = await client.channels.fetch(settings.channelId).catch(() => null);
 
   if (!channel?.isTextBased()) {
-    return false;
+    return 'channel-unavailable';
   }
 
   const permissions = channel.permissionsFor(channel.guild.members.me);
   if (!permissions?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) {
-    return false;
+    return 'missing-permissions';
   }
 
   if (!reserveAnnouncement(settings.guildId, offer)) {
-    return false;
+    return 'already-announced';
   }
 
   try {
@@ -347,23 +482,36 @@ async function announceOffer(client, settings, offer) {
       })
     });
 
-    return true;
+    return 'sent';
   } catch (err) {
     releaseAnnouncement(settings.guildId, offer.key);
     console.error(`Free game announcement error for ${settings.guildId}:`, err.message);
-    return false;
+    return 'failed';
   }
 }
 
-async function checkFreeGames(client) {
+async function checkFreeGames(client, { guildId = null } = {}) {
   if (checking) {
-    return;
+    return { busy: true, configurations: 0, detected: {}, announced: 0, skipped: 0, failures: [] };
   }
 
   checking = true;
 
+  const summary = {
+    busy: false,
+    configurations: 0,
+    detected: {
+      EPIC: new Set(),
+      STEAM: new Set()
+    },
+    announced: 0,
+    skipped: 0,
+    failures: []
+  };
+
   try {
-    const settingsRows = listEnabledFreeGameSettings();
+    const settingsRows = listEnabledFreeGameSettings(guildId);
+    summary.configurations = settingsRows.length;
     const offersByCountry = new Map();
 
     for (const settings of settingsRows) {
@@ -383,6 +531,7 @@ async function checkFreeGames(client) {
           cached.epic = await fetchEpicOffers(country);
         } catch (err) {
           cached.epic = [];
+          summary.failures.push(`Epic Games (${country}): ${err.message}`);
           console.error(`Epic free-game check failed for ${country}:`, err.message);
         }
       }
@@ -392,6 +541,7 @@ async function checkFreeGames(client) {
           cached.steam = await fetchSteamOffers(country);
         } catch (err) {
           cached.steam = [];
+          summary.failures.push(`Steam (${country}): ${err.message}`);
           console.error(`Steam free-game check failed for ${country}:`, err.message);
         }
       }
@@ -405,9 +555,21 @@ async function checkFreeGames(client) {
       ];
 
       for (const offer of offers) {
-        await announceOffer(client, settings, offer);
+        summary.detected[offer.source]?.add(offer.key);
+        const result = await announceOffer(client, settings, offer);
+
+        if (result === 'sent') summary.announced += 1;
+        else summary.skipped += 1;
       }
     }
+
+    return {
+      ...summary,
+      detected: Object.fromEntries(
+        Object.entries(summary.detected)
+          .map(([source, offers]) => [source, offers.size])
+      )
+    };
   } finally {
     checking = false;
   }
@@ -444,6 +606,7 @@ module.exports = {
   getFreeGameSettings,
   normalizeEpicOffers,
   normalizeSteamOffers,
+  normalizeSteamSearchOffers,
   saveFreeGameSettings,
   start
 };

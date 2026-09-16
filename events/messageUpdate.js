@@ -3,6 +3,10 @@ const {
   logAudit
 } = require('../utils/logger');
 
+const {
+  captureMessageSnapshot
+} = require('../utils/messageSnapshots');
+
 module.exports = {
 
   name: 'messageUpdate',
@@ -32,6 +36,8 @@ module.exports = {
 
         return;
       }
+
+      captureMessageSnapshot(newMessage);
 
       if (
         oldMessage.content ===

@@ -51,8 +51,8 @@ const {
 } = require('../utils/antispam');
 
 const {
-  validateDailyInteractionContent
-} = require('../utils/dailyInteractionSafety');
+  captureMessageSnapshot
+} = require('../utils/messageSnapshots');
 
 const LevelingService =
   require('../utils/LevelingService');
@@ -323,36 +323,14 @@ async function handleDailyInteractionThreadSafety(message, client) {
     [message.guild.id, message.channel.id]
   );
 
-  const configuredChannel = post
-    ? null
-    : get(
-      `SELECT guildId
-       FROM daily_interaction_config
-       WHERE guildId = ?
-       AND channelId = ?
-       AND enabled = 1`,
-      [message.guild.id, message.channel.id]
-    );
+  // Only a thread created for a daily interaction is read-only. The configured
+  // parent channel may also be a normal community channel and must stay usable.
+  if (!post) return false;
 
-  if (!post && !configuredChannel) return false;
-
-  const hasAttachment = Number(message.attachments?.size) > 0;
-  const hasSticker = Number(message.stickers?.size) > 0;
-  const hasCustomEmoji = /<a?:[A-Za-z0-9_]{2,32}:\d+>/u.test(message.content || '');
-  const validation = post
-    ? {
-      valid: false,
-      message: 'Direct discussion messages are disabled. Use Submit Answer on the original daily interaction.'
-    }
-    : hasAttachment || hasSticker || hasCustomEmoji
-      ? {
-        valid: false,
-        message: 'Uploads, stickers, and custom emojis are not allowed in daily interaction discussions.'
-      }
-      : validateDailyInteractionContent({
-        answer: message.content,
-        censorTerms: listCensorTerms(message.guild.id)
-      });
+  const validation = {
+    valid: false,
+    message: 'Direct discussion messages are disabled. Use Submit Answer on the original daily interaction.'
+  };
 
   if (validation.valid) return false;
 
@@ -676,6 +654,8 @@ module.exports = {
 
         return;
       }
+
+      captureMessageSnapshot(message);
 
       if (
         await handleCensor(

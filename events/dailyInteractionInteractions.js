@@ -67,6 +67,12 @@ function getInteractionDateKey(config) {
   ).dateKey;
 }
 
+function hasAnswerButton(message) {
+  return message?.components?.some(row =>
+    row.components?.some(component => component.customId === 'dailyinteraction_answer')
+  );
+}
+
 async function updateParticipantCount(message, count) {
   const original = message.embeds?.[0];
   if (!original) return;
@@ -150,7 +156,9 @@ async function handleJoin(interaction, post) {
 
   return interaction.reply({
     content: joined.changes
-      ? 'You are in. Use **Submit Answer** to share your response.'
+      ? hasAnswerButton(interaction.message)
+        ? 'You are in. Use **Submit Answer** to share your response.'
+        : 'You are in. This activity counts participation only.'
       : 'You have already joined this daily interaction.',
     flags: MessageFlags.Ephemeral
   });

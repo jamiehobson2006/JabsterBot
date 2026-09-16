@@ -40,6 +40,61 @@ function formatDuration(milliseconds) {
   return parts.join(' ') || 'Under 1 minute';
 }
 
+function formatTicketType(type) {
+  return safeString(type)
+    .toLowerCase()
+    .replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function applicationDecisionFields(ticket, form) {
+  const status = String(ticket.applicationStatus || 'PENDING').toUpperCase();
+  const reviewedAt = Number(ticket.applicationReviewedAt || 0);
+
+  return [
+    {
+      name: 'Application Form',
+      value: form?.name || (ticket.applicationFormId ? `Form #${ticket.applicationFormId}` : 'Unknown'),
+      inline: true
+    },
+    {
+      name: 'Application Result',
+      value: status.charAt(0) + status.slice(1).toLowerCase(),
+      inline: true
+    },
+    {
+      name: 'Reviewed By',
+      value: ticket.applicationReviewedBy ? `<@${ticket.applicationReviewedBy}>` : 'Not reviewed',
+      inline: true
+    },
+    {
+      name: 'Reviewed',
+      value: reviewedAt ? `<t:${Math.floor(reviewedAt / 1000)}:F>` : 'Not reviewed',
+      inline: true
+    },
+    {
+      name: 'Decision Reason',
+      value: safeString(ticket.applicationDecisionReason, 'No decision recorded').slice(0, 1024)
+    }
+  ];
+}
+
+function getTranscriptChannelIds(settings, ticket) {
+  if (String(ticket?.type || '').toLowerCase() === 'application') {
+    return [
+      settings?.applicationTranscriptChannelId,
+      settings?.transcriptChannelId
+    ].filter((value, index, values) => value && values.indexOf(value) === index);
+  }
+
+  return settings?.transcriptChannelId
+    ? [settings.transcriptChannelId]
+    : [];
+}
+
+function getTranscriptChannelId(settings, ticket) {
+  return getTranscriptChannelIds(settings, ticket)[0] || null;
+}
+
 async function generateTranscript({
   client,
   channel,
@@ -53,17 +108,23 @@ async function generateTranscript({
 
     const settings =
       get(
-        `SELECT transcriptChannelId
+        `SELECT transcriptChannelId,
+                applicationTranscriptChannelId
          FROM guild_settings
          WHERE guildId = ?`,
         [channel.guild.id]
       );
 
-    const transcriptChannel =
-      settings?.transcriptChannelId
-        ? await client.channels.fetch(settings.transcriptChannelId)
-            .catch(() => null)
-        : null;
+    let transcriptChannel = null;
+
+    for (const channelId of getTranscriptChannelIds(settings, ticket)) {
+      const candidate = await client.channels.fetch(channelId).catch(() => null);
+
+      if (candidate?.isTextBased()) {
+        transcriptChannel = candidate;
+        break;
+      }
+    }
 
     const attachment =
       await createTranscript(channel, {
@@ -96,61 +157,81 @@ async function generateTranscript({
     const closedAt =
       Number(ticket.closedAt || Date.now());
 
+    const applicationForm =
+      String(ticket.type || '').toLowerCase() === 'application' && ticket.applicationFormId
+        ? get(
+          `SELECT name
+           FROM application_forms
+           WHERE guildId = ?
+           AND id = ?`,
+          [channel.guild.id, ticket.applicationFormId]
+        )
+        : null;
+
+    const fields = [
+      {
+        name: 'Ticket',
+        value: `${safeString(channel.name)}\nID: ${ticket.id || ticket.channelId || channel.id}`,
+        inline: true
+      },
+      {
+        name: 'Type',
+        value: formatTicketType(ticket.type),
+        inline: true
+      },
+      {
+        name: 'Status',
+        value: safeString(ticket.status, 'Closed'),
+        inline: true
+      },
+      {
+        name: 'Creator',
+        value: creator ? `${creator.tag}\n<@${creator.id}>` : `Unknown (${ticket.userId})`,
+        inline: true
+      },
+      {
+        name: 'Closed By',
+        value: closedBy ? `${closedBy.tag}\n<@${closedBy.id}>` : 'Unknown',
+        inline: true
+      },
+      {
+        name: 'Claimed By',
+        value: claimer ? `${claimer.tag}\n<@${claimer.id}>` : 'Not claimed',
+        inline: true
+      },
+      {
+        name: 'Created',
+        value: createdAt ? `<t:${Math.floor(createdAt / 1000)}:F>` : 'Unknown',
+        inline: true
+      },
+      {
+        name: 'Closed',
+        value: closedAt ? `<t:${Math.floor(closedAt / 1000)}:F>` : 'Unknown',
+        inline: true
+      },
+      {
+        name: 'Handle Time',
+        value: formatDuration(closedAt - createdAt),
+        inline: true
+      },
+      {
+        name: 'Close Reason',
+        value: safeString(ticket.closeReason, 'No reason recorded').slice(0, 1024)
+      }
+    ];
+
+    if (String(ticket.type || '').toLowerCase() === 'application') {
+      fields.push(...applicationDecisionFields(ticket, applicationForm));
+    }
+
     const archiveEmbed =
       new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle('Ticket Transcript')
-        .setDescription('A ticket transcript has been generated and archived.')
-        .addFields(
-          {
-            name: 'Ticket',
-            value: safeString(channel.name),
-            inline: true
-          },
-          {
-            name: 'Type',
-            value: safeString(ticket.type),
-            inline: true
-          },
-          {
-            name: 'Creator',
-            value: creator?.tag || `Unknown (${ticket.userId})`,
-            inline: true
-          },
-          {
-            name: 'Closed By',
-            value: closedBy.tag,
-            inline: true
-          },
-          {
-            name: 'Claimed By',
-            value: claimer?.tag || 'Not claimed',
-            inline: true
-          },
-          {
-            name: 'Handle Time',
-            value: formatDuration(closedAt - createdAt),
-            inline: true
-          },
-          {
-            name: 'Created',
-            value: createdAt
-              ? `<t:${Math.floor(createdAt / 1000)}:F>`
-              : 'Unknown'
-          },
-          {
-            name: 'Closed',
-            value: closedAt
-              ? `<t:${Math.floor(closedAt / 1000)}:F>`
-              : 'Unknown'
-          },
-          {
-            name: 'Close Reason',
-            value: safeString(ticket.closeReason, 'No reason recorded').slice(0, 1024)
-          }
-        )
+        .setTitle(`Transcript | ${formatTicketType(ticket.type)}`)
+        .setDescription('Protected HTML archive of this completed ticket.')
+        .addFields(fields)
         .setFooter({
-          text: `Ticket ID: ${ticket.channelId || channel.id}`
+          text: `Jabster Studios | ${String(ticket.type || 'ticket').toUpperCase()} archive`
         })
         .setTimestamp();
 
@@ -184,5 +265,8 @@ async function generateTranscript({
 }
 
 module.exports = {
-  generateTranscript
+  applicationDecisionFields,
+  generateTranscript,
+  getTranscriptChannelIds,
+  getTranscriptChannelId
 };

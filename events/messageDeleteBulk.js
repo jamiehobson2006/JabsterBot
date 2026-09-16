@@ -17,6 +17,14 @@ const {
   describeDeletedMessage
 } = require('../utils/deletedMessageSummary');
 
+const {
+  copyMediaFiles
+} = require('../utils/deletedMessageCopy');
+
+const {
+  getMessageSnapshot
+} = require('../utils/messageSnapshots');
+
 function formatDeletedMessage(message) {
   const author = message.author
     ? `${message.author.tag} (${message.author.id})`
@@ -34,6 +42,7 @@ module.exports = {
       }
 
       const deletedMessages = [...messages.values()]
+        .map(message => getMessageSnapshot(message.id) || message)
         .filter(message => !message.author?.bot);
 
       if (!deletedMessages.length) {
@@ -56,6 +65,8 @@ module.exports = {
         .map(message => `- ${message.author?.tag || 'Unknown'}: ${describeDeletedMessage(message)}`)
         .join('\n');
 
+      const copiedMedia = await copyMediaFiles(deletedMessages, { maxFiles: 9 });
+
       await logAudit(
         client,
         channel.guild.id,
@@ -72,7 +83,8 @@ module.exports = {
           files: [
             new AttachmentBuilder(Buffer.from(report, 'utf8'), {
               name: `deleted-messages-${channel.id}-${Date.now()}.txt`
-            })
+            }),
+            ...copiedMedia
           ],
           embed: createAuditEmbed({
             action: 'Messages Bulk Deleted',

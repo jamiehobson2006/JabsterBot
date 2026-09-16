@@ -103,10 +103,20 @@ async function handleFeedbackModal(interaction) {
         feedback: interaction.fields.getTextInputValue('ticket_feedback_text')
       });
 
-    await publishFeedback(interaction.client, record)
-      .catch(err => console.error('Ticket feedback publish error:', err));
+    let published = false;
 
-    return hiddenReply(interaction, 'Thank you for your feedback.');
+    try {
+      published = await publishFeedback(interaction.client, record);
+    } catch (error) {
+      console.error('Ticket feedback publish error:', error);
+    }
+
+    return hiddenReply(
+      interaction,
+      published
+        ? 'Thank you for your feedback. It has been shared with the staff team.'
+        : 'Thank you for your feedback. It was saved and will be posted to the feedback channel automatically.'
+    );
 
   } catch (err) {
     return hiddenReply(

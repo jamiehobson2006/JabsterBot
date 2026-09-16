@@ -141,6 +141,26 @@ test('daily interaction embeds show participation and the community activity', (
   assert.equal(embed.data.fields.find(field => field.name === 'Participants').value, '4');
 });
 
+test('participation-only interactions do not instruct members to submit an answer', () => {
+  const embed = buildInteractionEmbed(
+    {
+      guildId: 'guild-1',
+      color: 0x5865F2,
+      titlePrefix: 'Daily Interaction'
+    },
+    {
+      type: 'QUESTION',
+      title: 'Question of the Day',
+      prompt: 'What game would you recommend?',
+      source: 'built-in'
+    }
+  );
+
+  const howToJoin = embed.data.fields.find(field => field.name === 'How to Join');
+  assert.match(howToJoin.value, /does not accept free-text responses/);
+  assert.doesNotMatch(howToJoin.value, /Submit Answer/);
+});
+
 test('weekday themes persist and can be returned to weighted random selection', () => {
   initDatabase();
 

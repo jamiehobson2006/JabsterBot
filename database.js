@@ -834,6 +834,8 @@ function createGuildSettingsTable() {
 
       transcriptChannelId TEXT,
 
+      applicationTranscriptChannelId TEXT,
+
       ticketFeedbackChannelId TEXT,
 
       staffListChannelId TEXT,
@@ -907,6 +909,7 @@ function createGuildSettingsTable() {
     ['acceptedSuggestionChannelId', 'TEXT'],
     ['deniedSuggestionChannelId', 'TEXT'],
     ['transcriptChannelId', 'TEXT'],
+    ['applicationTranscriptChannelId', 'TEXT'],
     ['ticketFeedbackChannelId', 'TEXT'],
     ['staffListChannelId', 'TEXT'],
     ['staffListRoleId', 'TEXT'],
@@ -1144,6 +1147,30 @@ function createTicketsTable() {
 
   ensureColumn(
     'tickets',
+    'applicationStatus',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'tickets',
+    'applicationReviewedBy',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'tickets',
+    'applicationReviewedAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'tickets',
+    'applicationDecisionReason',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'tickets',
     'closeReason',
     'TEXT'
   );
@@ -1246,6 +1273,42 @@ function createTicketsTable() {
 
     `CREATE INDEX IF NOT EXISTS idx_ticket_feedback_guild
      ON ticket_feedback(guildId, createdAt DESC)`
+  );
+
+  ensureColumn(
+    'ticket_feedback',
+    'publishedAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'ticket_feedback',
+    'publishedMessageId',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'ticket_feedback',
+    'publishAttempts',
+    'INTEGER NOT NULL DEFAULT 0'
+  );
+
+  ensureColumn(
+    'ticket_feedback',
+    'lastPublishAttemptAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'ticket_feedback',
+    'lastPublishError',
+    'TEXT'
+  );
+
+  createIndex(
+    'idx_ticket_feedback_publish_queue',
+    `CREATE INDEX IF NOT EXISTS idx_ticket_feedback_publish_queue
+     ON ticket_feedback(status, publishedMessageId, lastPublishAttemptAt)`
   );
 
   createIndex(
@@ -1880,6 +1943,34 @@ function createAuditTables() {
 
     `CREATE INDEX IF NOT EXISTS idx_audit_logs_type
      ON audit_logs(guildId, type, timestamp)`
+  );
+}
+
+// ==================================================
+// MESSAGE SNAPSHOTS
+// ==================================================
+function createMessageSnapshotTable() {
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS message_snapshots (
+      messageId TEXT PRIMARY KEY,
+      guildId TEXT NOT NULL,
+      channelId TEXT NOT NULL,
+      authorId TEXT NOT NULL,
+      authorTag TEXT,
+      content TEXT,
+      embeds TEXT NOT NULL DEFAULT '[]',
+      attachments TEXT NOT NULL DEFAULT '[]',
+      stickers TEXT NOT NULL DEFAULT '[]',
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL
+    )
+  `);
+
+  createIndex(
+    'idx_message_snapshots_expiry',
+    `CREATE INDEX IF NOT EXISTS idx_message_snapshots_expiry
+     ON message_snapshots(updatedAt)`
   );
 }
 
@@ -3337,6 +3428,8 @@ function initDatabase() {
 
   createAuditTables();
 
+  createMessageSnapshotTable();
+
   createAfkTable();
 
   createCooldownTable();
@@ -3407,6 +3500,14 @@ function startDatabaseCleanup() {
 
         `DELETE FROM cooldowns
          WHERE lastUsed < ?`,
+
+        [sevenDaysAgo]
+      );
+
+      run(
+
+        `DELETE FROM message_snapshots
+         WHERE updatedAt < ?`,
 
         [sevenDaysAgo]
       );

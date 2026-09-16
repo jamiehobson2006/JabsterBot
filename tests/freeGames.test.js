@@ -17,6 +17,7 @@ const {
 const {
   getFreeGameSettings,
   normalizeEpicOffers,
+  normalizeSteamSearchOffers,
   normalizeSteamOffers,
   saveFreeGameSettings
 } = require('../utils/freeGames');
@@ -129,4 +130,28 @@ test('free game watch settings persist with optional role pings', () => {
   assert.equal(settings.epicEnabled, 1);
   assert.equal(settings.steamEnabled, 0);
   assert.equal(settings.steamCountry, 'US');
+});
+
+test('Steam search normalizer detects a paid game temporarily discounted to zero', () => {
+  const offers = normalizeSteamSearchOffers({
+    results_html: `
+      <a href="https://store.steampowered.com/app/447700/Crystal_Crisis/?snr=1_7"
+         data-ds-appid="447700"
+         class="search_result_row ds_collapse_flag">
+        <div class="search_capsule"><img src="https://example.com/crystal.jpg"></div>
+        <div class="search_name"><span class="title">Crystal Crisis</span></div>
+        <div class="search_price_discount_combined" data-price-final="0">
+          <div class="discount_block" data-discount="100">
+            <div class="discount_original_price">15.49 GBP</div>
+            <div class="discount_final_price">0.00 GBP</div>
+          </div>
+        </div>
+      </a>`
+  });
+
+  assert.equal(offers.length, 1);
+  assert.equal(offers[0].key, 'steam:447700');
+  assert.equal(offers[0].title, 'Crystal Crisis');
+  assert.equal(offers[0].originalPrice, '15.49 GBP');
+  assert.match(offers[0].url, /store\.steampowered\.com\/app\/447700/);
 });
