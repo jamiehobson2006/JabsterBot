@@ -55,6 +55,26 @@ function isTrustedDiscordMediaUrl(value) {
   }
 }
 
+function normaliseEmbedTimestamp(value) {
+  if (value === null || value === undefined || value === '') return null;
+
+  if (value instanceof Date) {
+    const timestamp = value.getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === 'string') {
+    const timestamp = Date.parse(value);
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  return null;
+}
+
 function sourceEmbed(embed) {
   const raw = typeof embed?.toJSON === 'function'
     ? embed.toJSON()
@@ -66,7 +86,8 @@ function sourceEmbed(embed) {
   if (raw.title) copied.setTitle(String(raw.title).slice(0, 256));
   if (raw.description) copied.setDescription(String(raw.description).slice(0, 4096));
   if (raw.url) copied.setURL(raw.url);
-  if (raw.timestamp) copied.setTimestamp(raw.timestamp);
+  const timestamp = normaliseEmbedTimestamp(raw.timestamp);
+  if (timestamp !== null) copied.setTimestamp(timestamp);
 
   if (raw.author?.name) {
     copied.setAuthor({
@@ -265,6 +286,7 @@ module.exports = {
   copyMediaFiles,
   mediaPreviewEmbed,
   isTrustedDiscordMediaUrl,
+  normaliseEmbedTimestamp,
   serialiseDeletedMessage,
   snapshotMessage,
   sourceEmbed,

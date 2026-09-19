@@ -52,3 +52,26 @@ test('deleted-message snapshots preserve embeds, files, stickers, and custom emo
   assert.match(copy.content, /<:jabster:123456789012345678>/);
   assert.equal(copy.embeds[0].title, 'A copied embed');
 });
+
+test('deleted-message snapshots safely preserve Discord ISO embed timestamps', () => {
+  const timestamp = '2026-09-19T00:54:49.522000+00:00';
+  const baseMessage = {
+    id: 'message-with-timestamp',
+    guild: { id: 'guild-1' },
+    channel: { id: 'channel-1' },
+    author: { id: 'user-1', tag: 'User#0001' },
+    content: ''
+  };
+
+  const snapshot = serialiseDeletedMessage({
+    ...baseMessage,
+    embeds: [{ title: 'Timestamped embed', timestamp }]
+  });
+  assert.equal(snapshot.embeds[0].timestamp, new Date(timestamp).toISOString());
+
+  const malformed = serialiseDeletedMessage({
+    ...baseMessage,
+    embeds: [{ title: 'Malformed timestamp', timestamp: 'not-a-date' }]
+  });
+  assert.equal(malformed.embeds[0].timestamp, undefined);
+});
