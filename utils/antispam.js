@@ -10,6 +10,7 @@ const {
 } = require('./contentFilterWhitelist');
 
 const runtime = new Map();
+const RUNTIME_TTL_MS = 30 * 60 * 1000;
 
 const BYPASS_TYPES = new Set([
   'ROLE',
@@ -125,7 +126,8 @@ function getRuntimeEntry(guildId, userId) {
 
   const entry = {
     messages: [],
-    duplicates: new Map()
+    duplicates: new Map(),
+    lastSeen: Date.now()
   };
 
   runtime.set(key, entry);
@@ -154,8 +156,16 @@ function evaluateAntiSpam(message) {
   const rateCutoff = now - Number(settings.intervalSeconds) * 1000;
   const duplicateCutoff = now - Number(settings.duplicateWindowSeconds) * 1000;
 
+  entry.lastSeen = now;
+
   entry.messages = pruneTimestamps(entry.messages, rateCutoff);
   entry.messages.push(now);
+
+  for (const [value, timestamps] of entry.duplicates) {
+    const retained = pruneTimestamps(timestamps, duplicateCutoff);
+    if (retained.length) entry.duplicates.set(value, retained);
+    else entry.duplicates.delete(value);
+  }
 
   const content = normalizeMessage(message.content);
 
@@ -202,6 +212,14 @@ function evaluateAntiSpam(message) {
 function clearAntiSpamRuntime(guildId, userId) {
   runtime.delete(`${guildId}:${userId}`);
 }
+
+const runtimeCleanup = setInterval(() => {
+  const cutoff = Date.now() - RUNTIME_TTL_MS;
+  for (const [key, entry] of runtime) {
+    if (Number(entry.lastSeen || 0) < cutoff) runtime.delete(key);
+  }
+}, 5 * 60 * 1000);
+runtimeCleanup.unref?.();
 
 module.exports = {
   BYPASS_TYPES,

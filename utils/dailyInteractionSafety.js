@@ -2,6 +2,8 @@ const {
   findCensoredTerm
 } = require('./censor');
 
+const { findRacistTerm } = require('./racismFilter');
+
 const MAX_RESPONSE_LENGTH = 600;
 const MAX_GAME_RESPONSE_LENGTH = 300;
 const MAX_PROMPT_LENGTH = 600;
@@ -112,6 +114,7 @@ function normaliseForSafety(value) {
 }
 
 function containsBuiltInUnsafeLanguage(value) {
+  if (findRacistTerm(value)) return true;
   const normalized = normaliseForSafety(value);
   const spaced = normalized.replace(/[^a-z]+/g, ' ').trim();
 

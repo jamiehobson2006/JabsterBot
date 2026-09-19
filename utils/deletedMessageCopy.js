@@ -39,6 +39,22 @@ function fileNameFromUrl(url, fallback) {
   }
 }
 
+function isTrustedDiscordMediaUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:') return false;
+    const host = url.hostname.toLowerCase();
+    return host === 'discord.com' ||
+      host.endsWith('.discord.com') ||
+      host === 'discordapp.com' ||
+      host.endsWith('.discordapp.com') ||
+      host === 'discordapp.net' ||
+      host.endsWith('.discordapp.net');
+  } catch {
+    return false;
+  }
+}
+
 function sourceEmbed(embed) {
   const raw = typeof embed?.toJSON === 'function'
     ? embed.toJSON()
@@ -114,6 +130,7 @@ function snapshotMessage(snapshot) {
     id: snapshot.messageId,
     guildId: snapshot.guildId,
     channelId: snapshot.channelId,
+    channel: snapshot.channelId ? { id: snapshot.channelId } : null,
     author: {
       id: snapshot.authorId,
       tag: snapshot.authorTag
@@ -141,7 +158,27 @@ function mediaSources(message) {
     contentType: 'image/png'
   }));
 
-  return [...attachments, ...stickers].filter(media => media.url);
+  const embedMedia = valuesOf(message.embeds).flatMap((embed, index) => {
+    const raw = typeof embed?.toJSON === 'function' ? embed.toJSON() : embed || {};
+    return [
+      { url: raw.image?.url, name: `embed-${index + 1}-image`, fallback: 'embed-image.png' },
+      { url: raw.thumbnail?.url, name: `embed-${index + 1}-thumbnail`, fallback: 'embed-thumbnail.png' },
+      { url: raw.author?.icon_url || raw.author?.iconURL, name: `embed-${index + 1}-author`, fallback: 'embed-author.png' },
+      { url: raw.footer?.icon_url || raw.footer?.iconURL, name: `embed-${index + 1}-footer`, fallback: 'embed-footer.png' }
+    ].map(item => ({ ...item, size: null, contentType: null }));
+  });
+
+  const emojiMedia = [...String(message.content || '').matchAll(/<a?:[a-zA-Z0-9_]+:(\d+)>/g)]
+    .map((match, index) => ({
+      url: `https://cdn.discordapp.com/emojis/${match[1]}.${match[0].startsWith('<a:') ? 'gif' : 'png'}?size=128&quality=lossless`,
+      name: `emoji-${index + 1}-${match[1]}`,
+      fallback: `emoji-${match[1]}.png`,
+      size: null,
+      contentType: match[0].startsWith('<a:') ? 'image/gif' : 'image/png'
+    }));
+
+  return [...attachments, ...stickers, ...embedMedia, ...emojiMedia]
+    .filter(media => media.url);
 }
 
 function mediaPreviewEmbed(message) {
@@ -172,6 +209,7 @@ async function copyMediaFiles(messages, { maxFiles = 10 } = {}) {
 
   for (const item of media) {
     if (item.size && item.size > MAX_LOG_FILE_BYTES) continue;
+    if (!isTrustedDiscordMediaUrl(item.url)) continue;
 
     try {
       const response = await fetch(item.url, {
@@ -226,6 +264,7 @@ module.exports = {
   buildDeletedMessageCopy,
   copyMediaFiles,
   mediaPreviewEmbed,
+  isTrustedDiscordMediaUrl,
   serialiseDeletedMessage,
   snapshotMessage,
   sourceEmbed,

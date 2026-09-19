@@ -80,16 +80,20 @@ async function checkTicketSlas(client, now = Date.now()) {
 
   let sent = 0;
   for (const ticket of tickets) {
-    const age = Math.max(0, now - Number(ticket.createdAt || now));
-    const firstResponseLimit = Math.max(1, Number(ticket.firstResponseMinutes) || 60) * MINUTE;
-    const resolutionLimit = Math.max(1, Number(ticket.resolutionMinutes) || 1440) * MINUTE;
+    try {
+      const age = Math.max(0, now - Number(ticket.createdAt || now));
+      const firstResponseLimit = Math.max(1, Number(ticket.firstResponseMinutes) || 60) * MINUTE;
+      const resolutionLimit = Math.max(1, Number(ticket.resolutionMinutes) || 1440) * MINUTE;
 
-    if (!ticket.firstStaffResponseAt && age >= firstResponseLimit) {
-      if (await sendAlert(client, ticket, 'FIRST_RESPONSE', age)) sent += 1;
-    }
+      if (!ticket.firstStaffResponseAt && age >= firstResponseLimit) {
+        if (await sendAlert(client, ticket, 'FIRST_RESPONSE', age)) sent += 1;
+      }
 
-    if (age >= resolutionLimit) {
-      if (await sendAlert(client, ticket, 'RESOLUTION', age)) sent += 1;
+      if (age >= resolutionLimit) {
+        if (await sendAlert(client, ticket, 'RESOLUTION', age)) sent += 1;
+      }
+    } catch (error) {
+      console.error(`Ticket SLA check failed for ${ticket.channelId}:`, error);
     }
   }
 

@@ -22,6 +22,10 @@ const {
   logAudit
 } = require('../utils/logger');
 
+const {
+  recoverStaleSuggestionReviews
+} = require('../utils/suggestions/recovery');
+
 function canReviewSuggestions(interaction) {
 
   return interaction.memberPermissions?.has(
@@ -156,6 +160,42 @@ async function countVotes(
   };
 }
 
+async function findDecisionCopy(channel, suggestion, status) {
+  if (
+    suggestion.decisionChannelId === channel.id &&
+    suggestion.decisionMessageId
+  ) {
+    const saved = await channel.messages.fetch(suggestion.decisionMessageId).catch(() => null);
+    if (saved) return saved;
+  }
+
+  const marker = `suggestion-decision:${suggestion.guildId}:${suggestion.id}:${status}`;
+  let before;
+
+  for (let page = 0; page < 10; page += 1) {
+    const messages = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    if (!messages?.size) break;
+
+    const match = messages.find(message =>
+      String(message.content || '').includes(marker) ||
+      message.embeds?.some(embed => {
+        const title = String(embed.title || '').toUpperCase();
+        const hasId = embed.fields?.some(field =>
+          String(field.name || '').toLowerCase() === 'suggestion id' &&
+          String(field.value || '').includes(`#${suggestion.id}`)
+        );
+        return title.includes(status) && hasId;
+      })
+    );
+    if (match) return match;
+
+    before = messages.last()?.id;
+    if (!before || messages.size < 100) break;
+  }
+
+  return null;
+}
+
 function buildDecisionEmbed({
   message,
   suggestion,
@@ -206,6 +246,11 @@ function buildDecisionEmbed({
     .setFields(keptFields)
     .addFields(
       {
+        name: 'Suggestion ID',
+        value: `#${suggestion.id}`,
+        inline: true
+      },
+      {
         name: 'Status',
         value:
           accepted
@@ -248,6 +293,8 @@ async function handleDecisionButton(
       flags: MessageFlags.Ephemeral
     });
   }
+
+  recoverStaleSuggestionReviews({ messageId: interaction.message.id });
 
   const suggestion =
     get(
@@ -339,12 +386,13 @@ async function handleDecisionModal(
     );
 
   const suggestion =
+    (recoverStaleSuggestionReviews({ messageId }),
     get(
       `SELECT *
        FROM suggestions
        WHERE messageId = ?`,
       [messageId]
-    );
+    ));
 
   if (!suggestion) {
     return interaction.editReply({
@@ -382,21 +430,30 @@ async function handleDecisionModal(
       suggestionMessage
     );
 
-  run(
+  const claim = run(
     `UPDATE suggestions
-     SET status = ?,
+     SET status = 'REVIEWING',
          moderatorId = ?,
          reason = ?,
-         decisionAt = ?
-     WHERE messageId = ?`,
+         reviewStartedAt = ?,
+         decisionAt = NULL,
+         decisionDeliveryError = NULL
+     WHERE messageId = ?
+     AND status = 'PENDING'`,
     [
-      status,
       interaction.user.id,
       reason,
       Date.now(),
       messageId
     ]
   );
+
+  if (!claim.changes) {
+    const current = get(`SELECT status FROM suggestions WHERE messageId = ?`, [messageId]);
+    return interaction.editReply({
+      content: `This suggestion is already ${String(current?.status || 'being reviewed').toLowerCase()}.`
+    });
+  }
 
   const decisionEmbed =
     buildDecisionEmbed({
@@ -408,13 +465,6 @@ async function handleDecisionModal(
       upvotes: votes.upvotes,
       downvotes: votes.downvotes
     });
-
-  if (suggestionMessage) {
-    await suggestionMessage.edit({
-      embeds: [decisionEmbed],
-      components: []
-    }).catch(() => null);
-  }
 
   const destinationId =
     status === 'ACCEPTED'
@@ -442,9 +492,27 @@ async function handleDecisionModal(
       });
     }
 
-    await destination.send({
-      embeds: [copiedEmbed]
-    }).catch(() => null);
+    let decisionCopy = await findDecisionCopy(destination, suggestion, status);
+    if (!decisionCopy) {
+      decisionCopy = await destination.send({
+        content: `-# suggestion-decision:${suggestion.guildId}:${suggestion.id}:${status}`,
+        embeds: [copiedEmbed],
+        allowedMentions: { parse: [] }
+      });
+    }
+    run(
+      `UPDATE suggestions
+       SET decisionMessageId = ?, decisionChannelId = ?
+       WHERE id = ? AND status = 'REVIEWING'`,
+      [decisionCopy.id, destination.id, suggestion.id]
+    );
+  }
+
+  if (suggestionMessage) {
+    await suggestionMessage.edit({
+      embeds: [decisionEmbed],
+      components: []
+    });
   }
 
   await logAudit(
@@ -479,6 +547,21 @@ async function handleDecisionModal(
     }
   ).catch(err => console.error('Suggestion decision log error:', err));
 
+  const finalized = run(
+    `UPDATE suggestions
+     SET status = ?,
+         decisionAt = ?,
+         reviewStartedAt = NULL,
+         decisionDeliveryError = NULL
+     WHERE messageId = ?
+     AND status = 'REVIEWING'
+     AND moderatorId = ?`,
+    [status, Date.now(), messageId, interaction.user.id]
+  );
+  if (!finalized.changes) {
+    throw new Error('The suggestion review state changed before it could be finalized.');
+  }
+
   return interaction.editReply({
     content:
       `Suggestion #${suggestion.id} marked as ${status.toLowerCase()}.`
@@ -508,6 +591,26 @@ module.exports = {
         'Suggestion Interaction Error:',
         err
       );
+
+      if (
+        interaction.isModalSubmit?.() &&
+        interaction.customId.startsWith('suggest_decision_')
+      ) {
+        const messageId = interaction.customId.split('_').slice(3).join('_');
+        run(
+          `UPDATE suggestions
+           SET status = 'PENDING',
+               moderatorId = NULL,
+               reason = NULL,
+               decisionAt = NULL,
+               reviewStartedAt = NULL,
+               decisionDeliveryError = ?
+           WHERE messageId = ?
+           AND status = 'REVIEWING'
+           AND moderatorId = ?`,
+          [String(err.message || err).slice(0, 1000), messageId, interaction.user.id]
+        );
+      }
 
       if (
         interaction.deferred ||

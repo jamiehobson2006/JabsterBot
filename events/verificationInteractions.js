@@ -38,6 +38,8 @@ module.exports = {
       return;
     }
 
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
     const settings =
       get(
         `SELECT *
@@ -51,9 +53,8 @@ module.exports = {
       settings.messageId !== interaction.message.id
     ) {
 
-      return interaction.reply({
+      return interaction.editReply({
         content: 'This verification panel is no longer active.',
-        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -68,9 +69,8 @@ module.exports = {
 
     if (accountAgeDays < minimumAge) {
 
-      return interaction.reply({
+      return interaction.editReply({
         content: `Your Discord account must be at least ${minimumAge} day(s) old to verify.`,
-        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -79,9 +79,8 @@ module.exports = {
 
     if (!canManageRole(interaction.guild, verifiedRole)) {
 
-      return interaction.reply({
+      return interaction.editReply({
         content: 'Verification is unavailable because the verified role is missing or above my role.',
-        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -90,9 +89,8 @@ module.exports = {
 
     if (member.roles.cache.has(verifiedRole.id)) {
 
-      return interaction.reply({
+      return interaction.editReply({
         content: 'You are already verified.',
-        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -118,9 +116,8 @@ module.exports = {
         );
       }
 
-      return interaction.reply({
+      return interaction.editReply({
         content: `You are verified and now have ${verifiedRole}.`,
-        flags: MessageFlags.Ephemeral,
         allowedMentions: { parse: [] }
       });
 
@@ -128,9 +125,8 @@ module.exports = {
 
       console.error('Verification role update error:', err);
 
-      return interaction.reply({
+      return interaction.editReply({
         content: 'I could not update your roles. Please contact a staff member.',
-        flags: MessageFlags.Ephemeral
       });
     }
   }

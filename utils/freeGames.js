@@ -399,6 +399,19 @@ function saveAnnouncementMessage(guildId, offerKey, messageId) {
   );
 }
 
+async function findAnnouncementByMarker(channel, marker) {
+  let before;
+  for (let page = 0; page < 10; page += 1) {
+    const messages = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    if (!messages?.size) break;
+    const match = messages.find(message => String(message.content || '').includes(marker));
+    if (match) return match;
+    before = messages.last()?.id;
+    if (!before || messages.size < 100) break;
+  }
+  return null;
+}
+
 function buildOfferEmbed(offer) {
   const isEpic = offer.source === 'EPIC';
   const embed = new EmbedBuilder()
@@ -446,13 +459,39 @@ async function announceOffer(client, settings, offer) {
     return 'missing-permissions';
   }
 
-  if (!reserveAnnouncement(settings.guildId, offer)) {
-    return 'already-announced';
+  const marker = `free-game:${settings.guildId}:${offer.key}`;
+  const existingReservation = get(
+    `SELECT * FROM free_game_announcements WHERE guildId = ? AND offerKey = ?`,
+    [settings.guildId, offer.key]
+  );
+
+  if (existingReservation?.messageId) return 'already-announced';
+
+  if (existingReservation) {
+    const existingMessage = await findAnnouncementByMarker(channel, marker);
+    if (existingMessage) {
+      saveAnnouncementMessage(settings.guildId, offer.key, existingMessage.id);
+      return 'already-announced';
+    }
+
+    if (Date.now() - Number(existingReservation.announcedAt || 0) < 10 * 60 * 1000) {
+      return 'announcement-pending';
+    }
+
+    releaseAnnouncement(settings.guildId, offer.key);
   }
 
+  if (!reserveAnnouncement(settings.guildId, offer)) {
+    return 'announcement-pending';
+  }
+
+  let message = null;
   try {
-    const message = await channel.send({
-      content: settings.pingRoleId ? `<@&${settings.pingRoleId}>` : undefined,
+    message = await channel.send({
+      content: [
+        settings.pingRoleId ? `<@&${settings.pingRoleId}>` : null,
+        `-# ${marker}`
+      ].filter(Boolean).join('\n'),
       embeds: [buildOfferEmbed(offer)],
       components: buildOfferComponents(offer),
       allowedMentions: settings.pingRoleId
@@ -484,7 +523,9 @@ async function announceOffer(client, settings, offer) {
 
     return 'sent';
   } catch (err) {
-    releaseAnnouncement(settings.guildId, offer.key);
+    if (!message) {
+      releaseAnnouncement(settings.guildId, offer.key);
+    }
     console.error(`Free game announcement error for ${settings.guildId}:`, err.message);
     return 'failed';
   }
@@ -607,6 +648,7 @@ module.exports = {
   normalizeEpicOffers,
   normalizeSteamOffers,
   normalizeSteamSearchOffers,
+  findAnnouncementByMarker,
   saveFreeGameSettings,
   start
 };

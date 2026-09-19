@@ -255,16 +255,27 @@ function recordVote({
 }
 
 async function getPollMessage(client, poll) {
-  const channel =
-    await client.channels.fetch(poll.channelId)
-      .catch(() => null);
+  let channel;
 
-  if (!channel?.isTextBased()) {
-    return null;
+  try {
+    channel = await client.channels.fetch(poll.channelId);
+  } catch (error) {
+    if (error?.code === 10003) return { missing: true, message: null };
+    throw error;
   }
 
-  return channel.messages.fetch(poll.messageId)
-    .catch(() => null);
+  if (!channel?.isTextBased()) {
+    throw new Error('Poll channel is unavailable.');
+  }
+
+  try {
+    const message = await channel.messages.fetch(poll.messageId);
+    if (!message) throw new Error('Poll message fetch returned no message.');
+    return { missing: false, message };
+  } catch (error) {
+    if (error?.code === 10008) return { missing: true, message: null };
+    throw error;
+  }
 }
 
 async function refreshPollMessage(client, messageId, ended = false) {
@@ -282,11 +293,13 @@ async function refreshPollMessage(client, messageId, ended = false) {
     return null;
   }
 
-  const message =
+  const result =
     await getPollMessage(client, poll);
 
+  const message = result.message;
+
   if (!message) {
-    if (ended || !poll.active) {
+    if (result.missing && (ended || !poll.active)) {
       run(
         `UPDATE polls
          SET endedMessageUpdatedAt = ?

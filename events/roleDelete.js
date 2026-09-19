@@ -12,6 +12,8 @@ const {
   formatExecutor
 } = require('../utils/auditLookup');
 
+const { cleanupDeletedRole } = require('../utils/configCleanup');
+
 module.exports = {
 
   name: 'roleDelete',
@@ -19,6 +21,8 @@ module.exports = {
   async execute(role, client) {
 
     try {
+
+      cleanupDeletedRole(role);
 
       const audit =
         await findRecentAuditLog(

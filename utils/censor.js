@@ -8,6 +8,8 @@ const {
   parseIdList
 } = require('./contentFilterWhitelist');
 
+const { findRacistTerm } = require('./racismFilter');
+
 function normalizeCensorTerm(value) {
   return String(value || '')
     .normalize('NFKC')
@@ -24,6 +26,11 @@ function findCensoredTerm(content, terms) {
   if (!content || !Array.isArray(terms)) {
     return null;
   }
+
+  const racistTerm = findRacistTerm(content, new Set(terms.map(term =>
+    normalizeCensorTerm(term.normalizedWord || term.word || term)
+  )));
+  if (racistTerm) return racistTerm;
 
   for (const term of terms) {
     const normalized = normalizeCensorTerm(term.normalizedWord || term.word || term);
@@ -46,6 +53,7 @@ function findCensoredTerm(content, terms) {
 function getCensorSettings(guildId) {
   return get(
     `SELECT censorEnabled,
+            censorAntiRacismEnabled,
             censorRoleId,
             censorBypassRoleIds,
             censorBypassChannelIds,
@@ -53,6 +61,15 @@ function getCensorSettings(guildId) {
      FROM guild_settings
      WHERE guildId = ?`,
     [guildId]
+  );
+}
+
+function setAntiRacismEnabled(guildId, enabled) {
+  run(
+    `INSERT INTO guild_settings (guildId, censorAntiRacismEnabled)
+     VALUES (?, ?)
+     ON CONFLICT(guildId) DO UPDATE SET censorAntiRacismEnabled = excluded.censorAntiRacismEnabled`,
+    [guildId, enabled ? 1 : 0]
   );
 }
 
@@ -123,5 +140,6 @@ module.exports = {
   getCensorSettings,
   listCensorTerms,
   normalizeCensorTerm,
-  removeCensorTerm
+  removeCensorTerm,
+  setAntiRacismEnabled
 };

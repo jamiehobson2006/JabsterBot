@@ -115,8 +115,12 @@ module.exports = {
         );
       }
 
-      const isFake =
+      const isSuspicious =
         suspiciousFlags.length > 0;
+
+      // Suspicion is shown to staff, but heuristics are not proof and do not
+      // remove invite credit automatically.
+      const isFake = false;
 
       // ==========================================
       // 💾 SAVE INVITE
@@ -298,7 +302,7 @@ module.exports = {
 
           .setColor(
 
-            isFake
+            isSuspicious
 
               ? 0xED4245
 
@@ -329,7 +333,7 @@ module.exports = {
 
           .setTitle(
 
-            isFake
+            isSuspicious
 
               ? '⚠️ Suspicious Member Joined'
 
@@ -441,7 +445,7 @@ module.exports = {
 
             text:
 
-              isFake
+              isSuspicious
 
                 ? `⚠️ ${suspiciousFlags.join(' • ')}`
 
@@ -453,7 +457,7 @@ module.exports = {
       // ==========================================
       // 🚨 ALT WARNING
       // ==========================================
-      if (isFake) {
+      if (isSuspicious) {
 
         embed.setDescription(
 

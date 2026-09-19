@@ -28,6 +28,8 @@ const {
 const ticketTypes =
   require('./ticketTypes');
 
+const ticketCreationLocks = new Set();
+
 // ==================================================
 // 🧠 SAFE STRING
 // ==================================================
@@ -68,7 +70,7 @@ function cleanChannelName(
 // ==================================================
 // 🎫 CREATE TICKET
 // ==================================================
-async function createTicket({
+async function createTicketUnlocked({
 
   interaction,
 
@@ -141,36 +143,6 @@ async function createTicket({
   }
 
   // ==========================================
-  // 🚫 DUPLICATE CHECK
-  // ==========================================
-  const existing =
-    get(
-
-      `SELECT *
-       FROM tickets
-       WHERE guildId = ?
-       AND userId = ?
-       AND type = ?
-       AND status = 'OPEN'`,
-
-      [
-
-        interaction.guild.id,
-
-        interaction.user.id,
-
-        safeType
-      ]
-    );
-
-  if (existing) {
-
-    throw new Error(
-      'You already have an open ticket.'
-    );
-  }
-
-  // ==========================================
   // 📂 CATEGORY
   // ==========================================
   const category =
@@ -195,6 +167,24 @@ async function createTicket({
       settings.roleId
     ) ||
     null;
+
+  if (!category || category.type !== ChannelType.GuildCategory) {
+    throw new Error('This ticket type has no valid category. Ask an administrator to run /ticketsetup again.');
+  }
+
+  if (!staffRole || staffRole.id === interaction.guild.roles.everyone.id || staffRole.managed) {
+    throw new Error('This ticket type has no valid staff role. Ask an administrator to run /ticketsetup again.');
+  }
+
+  const categoryPermissions = category.permissionsFor(interaction.guild.members.me);
+  if (!categoryPermissions?.has([
+    PermissionFlagsBits.ViewChannel,
+    PermissionFlagsBits.SendMessages,
+    PermissionFlagsBits.ManageChannels,
+    PermissionFlagsBits.EmbedLinks
+  ])) {
+    throw new Error('I am missing the required permissions in the configured ticket category.');
+  }
 
   // ==========================================
   // 🏷 CHANNEL NAME
@@ -312,7 +302,7 @@ async function createTicket({
         ChannelType.GuildText,
 
       parent:
-        category?.id || null,
+        category.id,
 
       permissionOverwrites:
         overwrites,
@@ -333,6 +323,8 @@ async function createTicket({
 
         `Ticket created by ${interaction.user.tag}`
     });
+
+  try {
 
   // ==========================================
   // 🔘 BUTTONS
@@ -483,8 +475,7 @@ async function createTicket({
   // ==========================================
   // 📨 SEND TICKET MESSAGE
   // ==========================================
-  const ticketEmbeds =
-    [embed];
+  const answerEmbeds = [];
 
   if (application) {
 
@@ -499,18 +490,17 @@ async function createTicket({
         'Application'
     });
 
-    let answerEmbed =
-      embed;
+    let answerEmbed = null;
 
     for (const [index, item] of applicationAnswers.entries()) {
 
-      if (index > 0 && index % 4 === 0) {
+      if (index % 4 === 0) {
         answerEmbed =
           new EmbedBuilder()
             .setColor(0x5865F2)
             .setTitle(`${config.emoji} ${config.name} (continued)`);
 
-        ticketEmbeds.push(answerEmbed);
+        answerEmbeds.push(answerEmbed);
       }
 
       const question =
@@ -519,7 +509,7 @@ async function createTicket({
 
       const answer =
         String(item.answer || 'No answer provided')
-          .slice(0, 1000);
+          .slice(0, 250);
 
       answerEmbed.addFields({
 
@@ -543,10 +533,16 @@ async function createTicket({
 
           : `${interaction.user}`,
 
-      embeds: ticketEmbeds,
+      embeds: [embed],
 
       components: [buttons]
     });
+
+  for (let index = 0; index < answerEmbeds.length; index += 2) {
+    await channel.send({
+      embeds: answerEmbeds.slice(index, index + 2)
+    });
+  }
 
   // ==========================================
   // 💾 SAVE DATABASE
@@ -659,6 +655,38 @@ async function createTicket({
 
     ticketId
   };
+  } catch (error) {
+    const savedTicket = get(
+      `SELECT id FROM tickets WHERE channelId = ?`,
+      [channel.id]
+    );
+
+    if (!savedTicket) {
+      await channel.delete('Ticket creation failed before it could be saved')
+        .catch(() => null);
+    }
+
+    throw error;
+  }
+}
+
+async function createTicket(options) {
+  const interaction = options?.interaction;
+  const key = interaction?.guild?.id && interaction?.user?.id
+    ? `${interaction.guild.id}:${interaction.user.id}:${safeString(options.type)}`
+    : null;
+
+  if (key && ticketCreationLocks.has(key)) {
+    throw new Error('That ticket is already being created.');
+  }
+
+  if (key) ticketCreationLocks.add(key);
+
+  try {
+    return await createTicketUnlocked(options);
+  } finally {
+    if (key) ticketCreationLocks.delete(key);
+  }
 }
 
 module.exports = {

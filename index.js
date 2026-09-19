@@ -58,6 +58,12 @@ const {
 const StaffListService =
   require('./services/StaffListService');
 
+const StaffRotaService =
+  require('./services/StaffRotaService');
+
+const LevelingService =
+  require('./utils/LevelingService');
+
 const {
   startClosedTicketCleanup
 } = require('./utils/tickets/closedTicketCleanup');
@@ -84,6 +90,18 @@ const {
 const {
   startFeedbackPublisher
 } = require('./utils/ticketFeedback');
+
+const {
+  recoverStaleSuggestionReviews
+} = require('./utils/suggestions/recovery');
+
+const {
+  recoverStaleApplicationReviews
+} = require('./utils/tickets/applicationReview');
+
+const {
+  recoverStaleDailyFactReviews
+} = require('./events/dailyFactInteractions');
 
 if (!process.env.TOKEN) {
 
@@ -118,7 +136,9 @@ const client =
 
       GatewayIntentBits.GuildPresences,
 
-      GatewayIntentBits.GuildInvites
+      GatewayIntentBits.GuildInvites,
+      GatewayIntentBits.GuildExpressions,
+      GatewayIntentBits.DirectMessages
     ],
 
     partials: [
@@ -217,7 +237,7 @@ function getJsFiles(
       err
     );
 
-    return [];
+    throw err;
   }
 }
 
@@ -234,12 +254,7 @@ function loadCommands() {
       commandsPath
     )
   ) {
-
-    console.warn(
-      '⚠️ Commands folder missing'
-    );
-
-    return;
+    throw new Error('Commands folder is missing; startup aborted.');
   }
 
   const folders =
@@ -372,10 +387,7 @@ function loadCommands() {
   if (
     failed > 0
   ) {
-
-    console.log(
-      `⚠️ Failed ${failed} command(s)`
-    );
+    throw new Error(`Failed to load ${failed} command(s); startup aborted.`);
   }
 }
 
@@ -392,12 +404,7 @@ function loadEvents() {
       eventsPath
     )
   ) {
-
-    console.warn(
-      '⚠️ Events folder missing'
-    );
-
-    return;
+    throw new Error('Events folder is missing; startup aborted.');
   }
 
   const files =
@@ -449,18 +456,19 @@ function loadEvents() {
         continue;
       }
 
+      const invoke = (...args) => {
+        Promise.resolve(event.execute(...args, client)).catch(err => {
+          console.error(`Event error (${event.name} from ${file}):`, err);
+        });
+      };
+
       if (event.once) {
 
         client.once(
 
           event.name,
 
-          (...args) =>
-
-            event.execute(
-              ...args,
-              client
-            )
+          invoke
         );
 
       } else {
@@ -469,12 +477,7 @@ function loadEvents() {
 
           event.name,
 
-          (...args) =>
-
-            event.execute(
-              ...args,
-              client
-            )
+          invoke
         );
       }
 
@@ -504,10 +507,7 @@ function loadEvents() {
   if (
     failed > 0
   ) {
-
-    console.log(
-      `⚠️ Failed ${failed} event(s)`
-    );
+    throw new Error(`Failed to load ${failed} event(s); startup aborted.`);
   }
 }
 
@@ -557,6 +557,16 @@ client.once(
             3000
           )
       );
+
+      const recoveredSuggestions = recoverStaleSuggestionReviews();
+      const recoveredApplications = recoverStaleApplicationReviews();
+      const recoveredFacts = recoverStaleDailyFactReviews();
+      if (recoveredSuggestions || recoveredApplications || recoveredFacts) {
+        console.log(
+          `Recovered interrupted reviews: ${recoveredSuggestions} suggestion(s), ` +
+          `${recoveredApplications} application(s), ${recoveredFacts} daily fact(s)`
+        );
+      }
 
       console.log(
         '📨 Loading invite cache...'
@@ -680,8 +690,12 @@ StaffListService.start(
   client
 );
 
+StaffRotaService.start(client);
+
+LevelingService.start(client);
+
 console.log(
-  '✅ Staff list service started'
+  '✅ Staff list and rota services started'
 );
 
 startClosedTicketCleanup(
@@ -761,10 +775,13 @@ process.on(
   }
 );
 
-loadCommands();
+async function main() {
+  loadCommands();
+  loadEvents();
+  await client.login(process.env.TOKEN);
+}
 
-loadEvents();
-
-client.login(
-  process.env.TOKEN
-);
+main().catch(err => {
+  console.error('Startup failed:', err);
+  shutdown('startup failure', 1);
+});

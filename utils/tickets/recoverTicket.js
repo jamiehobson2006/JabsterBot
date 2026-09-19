@@ -10,6 +10,10 @@ function isOpenStatus(status) {
   return String(status || '').toUpperCase() === 'OPEN';
 }
 
+function isClosableStatus(status) {
+  return ['OPEN', 'CLOSING'].includes(String(status || '').toUpperCase());
+}
+
 function collectionValues(collection) {
   if (Array.isArray(collection)) return collection;
   if (typeof collection?.values === 'function') return [...collection.values()];
@@ -138,7 +142,7 @@ async function findOrRecoverOpenTicket({
   );
 
   if (existing) {
-    return isOpenStatus(existing.status) ? existing : null;
+    return isClosableStatus(existing.status) ? existing : null;
   }
 
   const topicMetadata = getTicketTopicMetadata(channel.topic);
@@ -209,5 +213,6 @@ module.exports = {
   getTicketType,
   findStarterMessage,
   isOpenStatus,
+  isClosableStatus,
   isTicketStarterMessage
 };

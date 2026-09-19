@@ -13,6 +13,18 @@ const {
   run
 } = require('../../database');
 
+const {
+  findCensoredTerm,
+  listCensorTerms
+} = require('../../utils/censor');
+
+const { findRacistTerm } = require('../../utils/racismFilter');
+
+const {
+  detectPhishing,
+  guildPhishingLists
+} = require('../../utils/phishingProtection');
+
 module.exports = {
   cooldown: 5000,
 
@@ -29,6 +41,8 @@ module.exports = {
       ),
 
   async execute(interaction) {
+    let suggestionId = null;
+
     try {
       const text =
         interaction.options
@@ -52,6 +66,21 @@ module.exports = {
         return interaction.editReply({
           content:
             'Suggestions cannot contain mass mentions.'
+        });
+      }
+
+      if (
+        findRacistTerm(text) ||
+        findCensoredTerm(text, listCensorTerms(interaction.guild.id))
+      ) {
+        return interaction.editReply({
+          content: 'That suggestion contains blocked language.'
+        });
+      }
+
+      if (detectPhishing(text, guildPhishingLists(interaction.guild.id))) {
+        return interaction.editReply({
+          content: 'That suggestion contains a suspicious link.'
         });
       }
 
@@ -151,7 +180,7 @@ module.exports = {
           ]
         );
 
-      const suggestionId =
+      suggestionId =
         result.lastInsertRowid;
 
       const embed =
@@ -214,9 +243,6 @@ module.exports = {
           components: [row]
         });
 
-      await message.react('✅');
-      await message.react('❌');
-
       run(
         `UPDATE suggestions
          SET messageId = ?
@@ -225,6 +251,13 @@ module.exports = {
           message.id,
           suggestionId
         ]
+      );
+
+      await message.react('✅').catch(err =>
+        console.warn(`Suggestion ${suggestionId} upvote reaction failed:`, err.message)
+      );
+      await message.react('❌').catch(err =>
+        console.warn(`Suggestion ${suggestionId} downvote reaction failed:`, err.message)
       );
 
       return interaction.editReply({
@@ -261,6 +294,13 @@ module.exports = {
         'Suggest Error:',
         err
       );
+
+      if (suggestionId) {
+        run(
+          `DELETE FROM suggestions WHERE id = ? AND messageId IS NULL`,
+          [suggestionId]
+        );
+      }
 
       return interaction.editReply({
         content:

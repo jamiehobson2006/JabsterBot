@@ -21,7 +21,8 @@ const {
   getCensorBypassRoles,
   getCensorSettings,
   listCensorTerms,
-  removeCensorTerm
+  removeCensorTerm,
+  setAntiRacismEnabled
 } = require('../../utils/censor');
 
 const textChannelTypes = [
@@ -119,6 +120,13 @@ module.exports = {
       .setName('status')
       .setDescription('View censoring status'))
     .addSubcommand(subcommand => subcommand
+      .setName('antiracism')
+      .setDescription('Enable or disable the built-in racial slur filter for all member messages')
+      .addBooleanOption(option => option
+        .setName('enabled')
+        .setDescription('Check new and edited messages, including custom censor exemptions')
+        .setRequired(true)))
+    .addSubcommand(subcommand => subcommand
       .setName('bypass-role-add')
       .setDescription('Allow a role to bypass censoring')
       .addRoleOption(option => option
@@ -187,6 +195,16 @@ module.exports = {
 
     const accessError = requireCensorAccess(interaction, settings);
     if (accessError) return interaction.editReply({ content: accessError });
+
+    if (subcommand === 'antiracism') {
+      const enabled = interaction.options.getBoolean('enabled', true);
+      setAntiRacismEnabled(interaction.guild.id, enabled);
+      return interaction.editReply({
+        content: enabled
+          ? 'Anti-racism filtering is enabled for new and edited member messages in all server channels and threads. It checks built-in slurs and common disguises, regardless of custom censor exemptions. This setting survives restarts. I need Manage Messages to delete matches.'
+          : 'The built-in anti-racism filter is disabled. Your custom censor list is unchanged.'
+      });
+    }
 
     if (subcommand === 'setrole') {
       const role = interaction.options.getRole('role', true);
@@ -351,17 +369,18 @@ module.exports = {
 
     return interaction.editReply({
       embeds: [new EmbedBuilder()
-        .setColor(settings?.censorEnabled ? 0x57F287 : 0xED4245)
+        .setColor(settings?.censorEnabled || settings?.censorAntiRacismEnabled ? 0x57F287 : 0xED4245)
         .setTitle('Censor Status')
         .addFields(
-          { name: 'Status', value: settings?.censorEnabled ? 'Active' : 'Inactive', inline: true },
+          { name: 'Custom Censor', value: settings?.censorEnabled ? 'Active' : 'Inactive', inline: true },
+          { name: 'Anti-Racism', value: settings?.censorAntiRacismEnabled ? 'Active (no custom exemptions)' : 'Inactive', inline: true },
           { name: 'Manager Role', value: settings?.censorRoleId ? `<@&${settings.censorRoleId}>` : 'Manage Server permission', inline: true },
           { name: 'Terms', value: String(terms.length), inline: true },
           { name: 'Role Bypasses', value: String(roleIds.length), inline: true },
           { name: 'Channel Bypasses', value: String(channelIds.length), inline: true },
           { name: 'Category Bypasses', value: String(categoryIds.length), inline: true }
         )
-        .setFooter({ text: 'Censoring automatically activates when moderation logging is configured.' })]
+        .setFooter({ text: 'Bypass lists apply to custom terms. Anti-racism is configured separately with /censor antiracism.' })]
     });
   }
 };

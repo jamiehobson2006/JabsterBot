@@ -449,7 +449,10 @@ class DailyFactService {
           ]
         );
 
-        throw err;
+        console.error(
+          `Daily Fact delivery failed for guild ${config.guildId}:`,
+          err
+        );
       }
     }
   }

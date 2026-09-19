@@ -85,7 +85,7 @@ test('giveaway locks are not released while ending is still in progress', () => 
   assert.equal(stale.endingAt, now);
 });
 
-test('a stale lock with saved winners is marked complete without another announcement', () => {
+test('a stale lock with saved winners is reclaimed so delivery can be completed', () => {
   initDatabase();
 
   const now = 1_010_000;
@@ -102,16 +102,19 @@ test('a stale lock with saved winners is marked complete without another announc
     [now - 100]
   );
 
-  assert.deepEqual(claimDueGiveaways(now), []);
+  const claimed = claimDueGiveaways(now);
+
+  assert.equal(claimed.length, 1);
+  assert.equal(claimed[0].messageId, 'winner-lock');
 
   const giveaway = get(
     'SELECT ended, ending, endingAt FROM giveaways WHERE messageId = ?',
     ['winner-lock']
   );
 
-  assert.equal(giveaway.ended, 1);
-  assert.equal(giveaway.ending, 0);
-  assert.equal(giveaway.endingAt, null);
+  assert.equal(giveaway.ended, 0);
+  assert.equal(giveaway.ending, 1);
+  assert.equal(giveaway.endingAt, now);
 });
 
 test('an active future giveaway is unchanged by a restart-time due scan', () => {

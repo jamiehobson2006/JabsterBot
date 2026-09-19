@@ -17,11 +17,73 @@ const {
   parseIdList
 } = require('./levelingConfig');
 
+const {
+  automaticRoleSafetyError
+} = require('./roleSafety');
+
 function getXpRange(config) {
   const min = Math.max(1, Number(config.xpMin) || 15);
   const max = Math.max(min, Number(config.xpMax) || 25);
 
   return { min, max };
+}
+
+function queueLevelRewards(guildId, userId, level) {
+  run(
+    `INSERT OR IGNORE INTO leveling_reward_grants (
+       guildId, userId, roleId, level, status
+     )
+     SELECT guildId, ?, roleId, level, 'PENDING'
+     FROM leveling_rewards
+     WHERE guildId = ? AND level <= ?`,
+    [userId, guildId, level]
+  );
+}
+
+async function applyPendingRewards(guild, member) {
+  const pending = all(
+    `SELECT * FROM leveling_reward_grants
+     WHERE guildId = ? AND userId = ? AND status = 'PENDING'
+     ORDER BY level`,
+    [guild.id, member.id]
+  );
+
+  for (const grant of pending) {
+    const role = guild.roles.cache.get(grant.roleId);
+
+    const safetyError = automaticRoleSafetyError(guild, role);
+    if (safetyError) {
+      run(
+        `UPDATE leveling_reward_grants
+         SET status = 'CANCELLED', attempts = attempts + 1, lastError = ?
+         WHERE guildId = ? AND userId = ? AND roleId = ?`,
+        [safetyError, guild.id, member.id, grant.roleId]
+      );
+      continue;
+    }
+
+    try {
+      if (!member.roles.cache.has(role.id)) {
+        await member.roles.add(role, `Level reward for reaching level ${grant.level}`);
+      }
+
+      run(
+        `UPDATE leveling_reward_grants
+         SET status = 'GRANTED', grantedAt = ?, lastError = NULL
+         WHERE guildId = ? AND userId = ? AND roleId = ?`,
+        [Date.now(), guild.id, member.id, role.id]
+      );
+    } catch (error) {
+      run(
+        `UPDATE leveling_reward_grants
+         SET attempts = attempts + 1,
+             status = CASE WHEN attempts + 1 >= 5 THEN 'FAILED' ELSE status END,
+             lastError = ?
+         WHERE guildId = ? AND userId = ? AND roleId = ?`,
+        [String(error.message || error).slice(0, 500), guild.id, member.id, grant.roleId]
+      );
+    }
+  }
 }
 
 function replaceVariables(template, userId, level, xp, messages) {
@@ -92,6 +154,35 @@ async function sendLevelUpMessage(message, member, config, level, xp, messages) 
 }
 
 class LevelingService {
+  static interval = null;
+
+  static async processPending(client) {
+    const pending = all(
+      `SELECT DISTINCT guildId, userId
+       FROM leveling_reward_grants
+       WHERE status = 'PENDING'`
+    );
+
+    for (const row of pending) {
+      const guild = client.guilds.cache.get(row.guildId);
+      if (!guild) continue;
+      const member = await guild.members.fetch(row.userId).catch(() => null);
+      if (member) await applyPendingRewards(guild, member);
+    }
+  }
+
+  static start(client) {
+    if (LevelingService.interval) return LevelingService.interval;
+    LevelingService.processPending(client)
+      .catch(error => console.error('Level reward recovery failed:', error));
+    LevelingService.interval = setInterval(() => {
+      LevelingService.processPending(client)
+        .catch(error => console.error('Level reward recovery failed:', error));
+    }, 5 * 60 * 1000);
+    LevelingService.interval.unref?.();
+    return LevelingService.interval;
+  }
+
   static async handleMessage(message) {
     if (!message.guild || message.author?.bot || !message.member) {
       return { awarded: false, reason: 'INVALID_MESSAGE' };
@@ -151,29 +242,34 @@ class LevelingService {
       [newXp, newLevel, newMessageCount, now, guildId, userId]
     );
 
-    if (newLevel <= Number(user.level || 0)) {
+    if (newLevel > Number(user.level || 0)) {
+      queueLevelRewards(guildId, userId, newLevel);
+    }
+
+    const hasPendingRewards = Boolean(get(
+      `SELECT 1 FROM leveling_reward_grants
+       WHERE guildId = ? AND userId = ? AND status = 'PENDING' LIMIT 1`,
+      [guildId, userId]
+    ));
+
+    if (newLevel <= Number(user.level || 0) && !hasPendingRewards) {
       return { awarded: true, xpGain, level: newLevel, leveledUp: false };
     }
 
     const member = await message.guild.members.fetch(userId).catch(() => null);
     if (!member) {
-      return { awarded: true, xpGain, level: newLevel, leveledUp: true };
+      return {
+        awarded: true,
+        xpGain,
+        level: newLevel,
+        leveledUp: newLevel > Number(user.level || 0)
+      };
     }
 
-    const rewards = all(
-      `SELECT *
-       FROM leveling_rewards
-       WHERE guildId = ? AND level > ? AND level <= ?
-       ORDER BY level ASC`,
-      [guildId, Number(user.level || 0), newLevel]
-    );
+    await applyPendingRewards(message.guild, member);
 
-    for (const reward of rewards) {
-      const role = message.guild.roles.cache.get(reward.roleId);
-
-      if (role && !member.roles.cache.has(role.id)) {
-        await member.roles.add(role, `Level reward for reaching level ${newLevel}`).catch(() => null);
-      }
+    if (newLevel <= Number(user.level || 0)) {
+      return { awarded: true, xpGain, level: newLevel, leveledUp: false };
     }
 
     await sendLevelUpMessage(message, member, config, newLevel, newXp, newMessageCount)

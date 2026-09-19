@@ -10,7 +10,8 @@ const {
 
 const {
   get,
-  all
+  all,
+  run
 } = require('../../database');
 
 const {
@@ -134,12 +135,36 @@ module.exports = {
       // ==========================================
       // 🎉 END GIVEAWAY
       // ==========================================
-      await endGiveaway(
+      run(
+        `UPDATE giveaways
+         SET endsAt = MIN(endsAt, ?), ending = 1, endingAt = ?, nextEndAttemptAt = NULL
+         WHERE messageId = ? AND guildId = ? AND ended = 0`,
+        [Date.now(), Date.now(), messageId, interaction.guild.id]
+      );
+
+      const completed = await endGiveaway(
 
         interaction.client,
 
-        giveaway
+        {
+          ...giveaway,
+          endsAt: Date.now(),
+          ending: 1
+        }
       );
+
+      const finalState = get(
+        `SELECT ended, lastEndError FROM giveaways WHERE messageId = ? AND guildId = ?`,
+        [messageId, interaction.guild.id]
+      );
+
+      if (!completed && !finalState?.ended) {
+        return interaction.editReply({
+          content:
+            'The giveaway could not be fully ended yet. Its result was not marked complete and the bot will retry automatically.' +
+            (finalState?.lastEndError ? `\nError: ${finalState.lastEndError}` : '')
+        });
+      }
 
       // ==========================================
       // 🎨 EMBED
@@ -185,7 +210,7 @@ module.exports = {
               name: '🏆 Winners',
 
               value:
-                `${giveaway.winnerCount}`,
+                `${giveaway.winners || 1}`,
 
               inline: true
             },

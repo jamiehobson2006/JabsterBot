@@ -12,6 +12,8 @@ const {
   formatExecutor
 } = require('../utils/auditLookup');
 
+const { cleanupDeletedChannel } = require('../utils/configCleanup');
+
 function formatChannel(channel) {
 
   return `${channel.name || 'Unknown'}\n${channel.id}`;
@@ -28,6 +30,8 @@ module.exports = {
       if (!channel.guild || channel.isThread?.()) {
         return;
       }
+
+      cleanupDeletedChannel(channel);
 
       const audit =
         await findRecentAuditLog(

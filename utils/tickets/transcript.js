@@ -1,14 +1,45 @@
 const {
+  AttachmentBuilder,
   EmbedBuilder
 } = require('discord.js');
 
 const {
-  createTranscript
-} = require('discord-html-transcripts');
+  buildTranscriptDocument
+} = require('./transcriptDocument');
+
+const { sendTranscriptMessage } = require('./transcriptDelivery');
 
 const {
-  get
+  get,
+  run
 } = require('../../database');
+
+async function findExistingTranscript(channel, ticket, marker) {
+  if (!channel?.messages?.fetch) return null;
+
+  if (ticket.transcriptMessageId && ticket.transcriptArchiveChannelId === channel.id) {
+    const saved = await channel.messages.fetch(ticket.transcriptMessageId).catch(() => null);
+    if (saved) return saved;
+  }
+
+  let before;
+  for (let page = 0; page < 10; page += 1) {
+    const messages = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    if (!messages?.size) break;
+    const match = messages.find(message =>
+      String(message.content || '').includes(marker) ||
+      message.embeds?.some(embed => embed.fields?.some(field =>
+        String(field.name || '') === 'Ticket' &&
+        String(field.value || '').includes(`ID: ${ticket.id || ticket.channelId}`)
+      ))
+    );
+    if (match) return match;
+    before = messages.last()?.id;
+    if (!before || messages.size < 100) break;
+  }
+
+  return null;
+}
 
 function safeString(value, fallback = 'Unknown') {
   if (typeof value !== 'string') {
@@ -126,21 +157,6 @@ async function generateTranscript({
       }
     }
 
-    const attachment =
-      await createTranscript(channel, {
-        limit: -1,
-        returnType: 'attachment',
-        filename: `ticket-${channel.name}.html`,
-        saveImages: true,
-        poweredBy: false,
-        footerText: `Ticket Transcript - ${channel.guild.name}`,
-        hydrated: true
-      });
-
-    if (!attachment) {
-      return null;
-    }
-
     const creator =
       await client.users.fetch(ticket.userId)
         .catch(() => null);
@@ -151,6 +167,15 @@ async function generateTranscript({
             .catch(() => null)
         : null;
 
+    const response = String(ticket.type || '').toLowerCase() === 'application'
+      ? get(
+        `SELECT answersJson FROM application_responses
+         WHERE guildId = ? AND channelId = ? AND userId = ?
+         ORDER BY submittedAt DESC LIMIT 1`,
+        [channel.guild.id, channel.id, ticket.userId]
+      )
+      : null;
+    const answers = response ? JSON.parse(response.answersJson) : [];
     const createdAt =
       Number(ticket.createdAt || 0);
 
@@ -167,6 +192,14 @@ async function generateTranscript({
           [channel.guild.id, ticket.applicationFormId]
         )
         : null;
+
+    const document = await buildTranscriptDocument({
+      channel, ticket, closedBy, applicationForm,
+      answers: Array.isArray(answers) ? answers : []
+    });
+    const attachment = new AttachmentBuilder(Buffer.from(document.html, 'utf8'), {
+      name: `ticket-${channel.id}.html`
+    });
 
     const fields = [
       {
@@ -217,6 +250,10 @@ async function generateTranscript({
       {
         name: 'Close Reason',
         value: safeString(ticket.closeReason, 'No reason recorded').slice(0, 1024)
+      },
+      {
+        name: 'Archive Contents',
+        value: `${document.messageCount} messages | ${document.assets.saved} embedded media files${document.assets.linked ? ` | ${document.assets.linked} media links only` : ''}`
       }
     ];
 
@@ -228,7 +265,7 @@ async function generateTranscript({
       new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle(`Transcript | ${formatTicketType(ticket.type)}`)
-        .setDescription('Protected HTML archive of this completed ticket.')
+        .setDescription('HTML archive with ticket details, messages, embeds, and available media.')
         .addFields(fields)
         .setFooter({
           text: `Jabster Studios | ${String(ticket.type || 'ticket').toUpperCase()} archive`
@@ -240,10 +277,26 @@ async function generateTranscript({
 
     if (transcriptChannel?.isTextBased()) {
       try {
-        await transcriptChannel.send({
-          embeds: [archiveEmbed],
-          files: [attachment]
-        });
+        const savedTicket = get(`SELECT * FROM tickets WHERE channelId = ?`, [channel.id]) || ticket;
+        const marker = `ticket-transcript:${channel.guild.id}:${ticket.id || channel.id}`;
+        let archiveMessage = await findExistingTranscript(transcriptChannel, savedTicket, marker);
+
+        if (!archiveMessage) {
+          archiveMessage = await sendTranscriptMessage(transcriptChannel, {
+            content: `-# ${marker}`,
+            embeds: [archiveEmbed],
+            files: [attachment]
+          });
+        }
+
+        run(
+          `UPDATE tickets
+           SET transcriptMessageId = ?,
+               transcriptArchiveChannelId = ?,
+               transcriptSentAt = COALESCE(transcriptSentAt, ?)
+           WHERE channelId = ?`,
+          [archiveMessage.id, transcriptChannel.id, Date.now(), channel.id]
+        );
 
         archived =
           true;
@@ -268,5 +321,6 @@ module.exports = {
   applicationDecisionFields,
   generateTranscript,
   getTranscriptChannelIds,
-  getTranscriptChannelId
+  getTranscriptChannelId,
+  findExistingTranscript
 };

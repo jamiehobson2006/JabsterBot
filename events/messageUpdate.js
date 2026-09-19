@@ -4,8 +4,18 @@ const {
 } = require('../utils/logger');
 
 const {
-  captureMessageSnapshot
+  captureMessageSnapshot,
+  getMessageSnapshot
 } = require('../utils/messageSnapshots');
+
+const { handleCensor } = require('../utils/censorMessages');
+
+const { handlePhishing } = require('../utils/phishingProtection');
+
+const {
+  handleDailyInteractionThreadSafety,
+  handleLinkBlock
+} = require('./messageCreate');
 
 module.exports = {
 
@@ -14,6 +24,8 @@ module.exports = {
   async execute(oldMessage, newMessage, client) {
 
     try {
+
+      const storedOldMessage = getMessageSnapshot(newMessage.id);
 
       if (oldMessage.partial) {
 
@@ -30,8 +42,29 @@ module.exports = {
       }
 
       if (
-        !oldMessage.guild ||
-        oldMessage.author?.bot
+        !newMessage.guild ||
+        !newMessage.author
+      ) {
+
+        return;
+      }
+
+      if (newMessage.author.bot) {
+        captureMessageSnapshot(newMessage);
+        return;
+      }
+
+      if (await handleDailyInteractionThreadSafety(newMessage, client)) return;
+
+      if (await handlePhishing(newMessage, client)) return;
+
+      if (await handleCensor(newMessage, client)) return;
+
+      if (await handleLinkBlock(newMessage, client)) return;
+
+      if (
+        (storedOldMessage?.content ?? oldMessage.content) ===
+        newMessage.content
       ) {
 
         return;
@@ -39,32 +72,24 @@ module.exports = {
 
       captureMessageSnapshot(newMessage);
 
-      if (
-        oldMessage.content ===
-        newMessage.content
-      ) {
-
-        return;
-      }
-
       await logAudit(
 
         client,
 
-        oldMessage.guild.id,
+        newMessage.guild.id,
 
         {
           action: 'MESSAGE_EDITED',
-          targetId: oldMessage.author?.id,
+          targetId: newMessage.author.id,
           type: 'MESSAGES',
           metadata: {
-            channelId: oldMessage.channel?.id,
-            messageId: oldMessage.id,
-            before: oldMessage.content || null,
+            channelId: newMessage.channel?.id,
+            messageId: newMessage.id,
+            before: storedOldMessage?.content || oldMessage.content || null,
             after: newMessage.content || null
           },
           embed: createMessageEditEmbed(
-            oldMessage,
+            storedOldMessage || oldMessage,
             newMessage
           )
         }

@@ -142,7 +142,8 @@ module.exports = {
       if (
         inviterId &&
         inviteData.confidence === 'EXACT' &&
-        inviteData.source === 'INVITE'
+        inviteData.source === 'INVITE' &&
+        !wasFake
       ) {
 
         run(

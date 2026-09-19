@@ -32,7 +32,7 @@ function cleanAnswer(answer) {
     .replace(/@everyone|@here/g, '[mention removed]')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 1000);
+    .slice(0, 250);
 }
 
 function getDraftId(customId, prefix) {
@@ -159,7 +159,7 @@ async function showApplicationModal(interaction, draftId) {
       .setLabel(modalQuestionLabel())
       .setPlaceholder(question.required ? 'Write your answer here' : 'Optional answer')
       .setStyle(TextInputStyle.Paragraph)
-      .setMaxLength(1000)
+      .setMaxLength(250)
       .setRequired(Boolean(question.required));
 
     modal.addComponents(new ActionRowBuilder().addComponents(input));
@@ -172,6 +172,8 @@ async function handleApplicationSelect(interaction) {
   if (!interaction.guild) {
     return replyPrivate(interaction, 'Applications must be started from the server ticket panel.');
   }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const formId = Number(interaction.values?.[0]);
   const form = getFormById(interaction.guild.id, formId);
@@ -331,6 +333,7 @@ module.exports = {
   name: 'interactionCreate',
 
   buildApplicationPreview,
+  cleanAnswer,
   modalQuestionLabel,
 
   async execute(interaction) {

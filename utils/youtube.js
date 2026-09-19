@@ -1,5 +1,7 @@
 const axios = require('axios');
 
+const youtubeApi = axios.create({ timeout: 10000 });
+
 const API_KEY = process.env.YOUTUBE_API_KEY;
 
 function isYouTubeConfigured() {
@@ -25,7 +27,7 @@ async function getChannel(query) {
   try {
 
     const response =
-      await axios.get(
+      await youtubeApi.get(
         'https://www.googleapis.com/youtube/v3/search',
         {
           params: {
@@ -74,8 +76,9 @@ async function getChannel(query) {
 // Get Latest Upload
 // ========================================
 
-async function getLatestUpload(
-  channelId
+async function getRecentUploads(
+  channelId,
+  limit = 10
 ) {
 
   if (!isYouTubeConfigured()) {
@@ -84,57 +87,59 @@ async function getLatestUpload(
 
   try {
 
-    const response =
-      await axios.get(
-        'https://www.googleapis.com/youtube/v3/search',
+    const channelResponse =
+      await youtubeApi.get(
+        'https://www.googleapis.com/youtube/v3/channels',
         {
           params: {
-            part: 'snippet',
-            channelId,
-            order: 'date',
-            maxResults: 1,
-            type: 'video',
+            part: 'contentDetails',
+            id: channelId,
             key: API_KEY
           }
         }
       );
 
-    const video =
-      response.data.items?.[0];
+    const uploadsPlaylistId =
+      channelResponse.data.items?.[0]
+        ?.contentDetails?.relatedPlaylists?.uploads;
 
-    if (!video) {
-      return null;
-    }
+    if (!uploadsPlaylistId) return null;
 
-    return {
+    const response = await youtubeApi.get(
+      'https://www.googleapis.com/youtube/v3/playlistItems',
+      {
+        params: {
+          part: 'snippet,contentDetails',
+          playlistId: uploadsPlaylistId,
+          maxResults: Math.min(Math.max(Number(limit) || 10, 1), 50),
+          key: API_KEY
+        }
+      }
+    );
 
-      videoId:
-        video.id.videoId,
-
-      title:
-        video.snippet.title,
-
-      description:
-        video.snippet.description,
-
-      publishedAt:
-        video.snippet.publishedAt,
-
-      thumbnail:
-        video.snippet.thumbnails?.high?.url ||
-
-        video.snippet.thumbnails?.default?.url
-    };
+    return (response.data.items || [])
+      .map(video => ({
+        videoId: video.contentDetails?.videoId || video.snippet?.resourceId?.videoId,
+        title: video.snippet.title,
+        description: video.snippet.description,
+        publishedAt: video.snippet.publishedAt,
+        thumbnail: video.snippet.thumbnails?.high?.url || video.snippet.thumbnails?.default?.url
+      }))
+      .filter(video => video.videoId);
 
   } catch (err) {
 
     console.error(
-      'YouTube getLatestUpload Error:',
+      'YouTube getRecentUploads Error:',
       err.response?.data || err.message
     );
 
-    return null;
+    return [];
   }
+}
+
+async function getLatestUpload(channelId) {
+  return (await getRecentUploads(channelId, 1))[0] || null;
 }
 
 // ========================================
@@ -152,7 +157,7 @@ async function getVideoDetails(
   try {
 
     const response =
-      await axios.get(
+      await youtubeApi.get(
         'https://www.googleapis.com/youtube/v3/videos',
         {
           params: {
@@ -247,7 +252,7 @@ async function getUploadType(
   try {
 
     const response =
-      await axios.get(
+      await youtubeApi.get(
         'https://www.googleapis.com/youtube/v3/videos',
         {
           params: {
@@ -322,6 +327,8 @@ module.exports = {
   getChannel,
 
   getLatestUpload,
+
+  getRecentUploads,
 
   getVideoDetails,
 

@@ -9,6 +9,7 @@ const {
 } = require('discord.js');
 
 const {
+  db,
   get,
   run
 } = require('../database');
@@ -41,6 +42,34 @@ function submissionIdFromCustomId(customId) {
   return Number(
     customId.split('_').at(-1)
   );
+}
+
+const REVIEW_TIMEOUT_MS = 10 * 60 * 1000;
+
+function recoverStaleDailyFactReviews(now = Date.now()) {
+  return run(
+    `UPDATE dailyfact_submissions
+     SET status = 'PENDING', reviewerId = NULL, decisionAt = NULL
+     WHERE status = 'REVIEWING' AND decisionAt <= ?`,
+    [now - REVIEW_TIMEOUT_MS]
+  ).changes;
+}
+
+function claimSubmission(submissionId, reviewerId) {
+  return run(
+    `UPDATE dailyfact_submissions
+     SET status = 'REVIEWING', reviewerId = ?, decisionAt = ?
+     WHERE id = ? AND status = 'PENDING'`,
+    [reviewerId, Date.now(), submissionId]
+  ).changes === 1;
+}
+
+async function replyAlreadyReviewed(interaction, submissionId) {
+  const current = get(`SELECT status FROM dailyfact_submissions WHERE id = ?`, [submissionId]);
+  return interaction.followUp({
+    content: `This submission is already ${String(current?.status || 'being reviewed').toLowerCase()}.`,
+    flags: MessageFlags.Ephemeral
+  });
 }
 
 async function sendSubmissionDm(
@@ -180,7 +209,7 @@ async function markDuplicate({
          reviewerId = ?,
          decisionAt = ?,
          duplicateOf = ?
-     WHERE id = ?`,
+     WHERE id = ? AND status = 'REVIEWING' AND reviewerId = ?`,
 
     [
       'DUPLICATE',
@@ -191,7 +220,8 @@ async function markDuplicate({
         : duplicate.source === 'community'
           ? `approved:${duplicate.id}`
           : `coded:${duplicate.category}`,
-      submission.id
+      submission.id,
+      interaction.user.id
     ]
   );
 
@@ -232,6 +262,10 @@ async function approveSubmission({
   fact = submission.fact
 }) {
 
+  if (!claimSubmission(submission.id, interaction.user.id)) {
+    return replyAlreadyReviewed(interaction, submission.id);
+  }
+
   const duplicate =
     findDuplicateFact(
       fact,
@@ -250,36 +284,26 @@ async function approveSubmission({
     });
   }
 
-  run(
+  const approve = db.transaction(() => {
+    const approvedAt = Date.now();
+    const updated = run(
+      `UPDATE dailyfact_submissions
+       SET fact = ?, normalizedFact = ?, status = 'APPROVED', approvedAt = ?, decisionAt = ?
+       WHERE id = ? AND status = 'REVIEWING' AND reviewerId = ?`,
+      [fact, normalizeFact(fact), approvedAt, approvedAt, submission.id, interaction.user.id]
+    );
+    if (!updated.changes) throw new Error('The submission review claim was lost.');
 
-    `UPDATE dailyfact_submissions
-     SET fact = ?,
-         normalizedFact = ?,
-         status = ?,
-         reviewerId = ?,
-         approvedAt = ?,
-         decisionAt = ?
-     WHERE id = ?`,
-
-    [
+    saveApprovedFact({
+      submissionId: submission.id,
+      userId: submission.userId,
+      reviewerId: interaction.user.id,
       fact,
-      normalizeFact(fact),
-      'APPROVED',
-      interaction.user.id,
-      Date.now(),
-      Date.now(),
-      submission.id
-    ]
-  );
-
-  saveApprovedFact({
-    submissionId: submission.id,
-    userId: submission.userId,
-    reviewerId: interaction.user.id,
-    fact,
-    category: submission.category || 'random',
-    approvedAt: Date.now()
+      category: submission.category || 'random',
+      approvedAt
+    });
   });
+  approve();
 
   await sendSubmissionDm(
     interaction.client,
@@ -315,19 +339,24 @@ async function denySubmission(
   submission
 ) {
 
+  if (!claimSubmission(submission.id, interaction.user.id)) {
+    return replyAlreadyReviewed(interaction, submission.id);
+  }
+
   run(
 
     `UPDATE dailyfact_submissions
      SET status = ?,
          reviewerId = ?,
          decisionAt = ?
-     WHERE id = ?`,
+     WHERE id = ? AND status = 'REVIEWING' AND reviewerId = ?`,
 
     [
       'DENIED',
       interaction.user.id,
       Date.now(),
-      submission.id
+      submission.id,
+      interaction.user.id
     ]
   );
 
@@ -365,6 +394,8 @@ module.exports = {
   async execute(interaction) {
 
     try {
+
+      recoverStaleDailyFactReviews();
 
       if (
         interaction.isButton() &&
@@ -527,6 +558,16 @@ module.exports = {
         err
       );
 
+      const submissionId = submissionIdFromCustomId(interaction.customId || '');
+      if (Number.isSafeInteger(submissionId)) {
+        run(
+          `UPDATE dailyfact_submissions
+           SET status = 'PENDING', reviewerId = NULL, decisionAt = NULL
+           WHERE id = ? AND status = 'REVIEWING' AND reviewerId = ?`,
+          [submissionId, interaction.user?.id]
+        );
+      }
+
       if (
         interaction.deferred ||
         interaction.replied
@@ -545,5 +586,7 @@ module.exports = {
         flags: MessageFlags.Ephemeral
       }).catch(() => null);
     }
-  }
+  },
+
+  recoverStaleDailyFactReviews
 };

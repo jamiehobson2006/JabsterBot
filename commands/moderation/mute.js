@@ -612,7 +612,10 @@ module.exports = {
            expiresAt
          )
 
-         VALUES (?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(guildId, userId) DO UPDATE SET
+           caseId = excluded.caseId,
+           expiresAt = excluded.expiresAt`,
 
         [
 

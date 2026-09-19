@@ -49,6 +49,18 @@ test('daily interaction safety checks every word in the submitted response', () 
   }).valid, false);
 });
 
+test('daily interactions block concatenated racial slurs without configured censor terms', () => {
+  for (const answer of [
+    'igniggerniggerniggernigger',
+    'A normal start. Then prefixn1gg3rsuffix.',
+    'eagle n.i.g.g.e.r',
+    'wetbackwetback'
+  ]) {
+    assert.equal(validateDailyInteractionContent({ answer, censorTerms: [] }).valid, false, answer);
+    assert.equal(validateDailyInteractionPrompt({ prompt: answer }).valid, false, answer);
+  }
+});
+
 test('daily interaction responses must follow the prompt format', () => {
   const wouldYouRather = {
     type: 'WOULD_YOU_RATHER',

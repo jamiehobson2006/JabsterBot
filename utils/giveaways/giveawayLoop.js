@@ -15,25 +15,6 @@ let giveawayLoop = null;
 function recoverGiveawayLocks(now = Date.now()) {
   const staleBefore = now - LOCK_TIMEOUT_MS;
 
-  // A previous process may have saved winners immediately before stopping.
-  // Mark only stale locks as ended so active winner selection is never interrupted.
-  run(
-    `UPDATE giveaways
-     SET ended = 1,
-         ending = 0,
-         endingAt = NULL
-     WHERE ended = 0
-     AND ending = 1
-     AND (endingAt IS NULL OR endingAt <= ?)
-     AND EXISTS (
-       SELECT 1
-       FROM giveaway_winners
-       WHERE giveaway_winners.messageId = giveaways.messageId
-       AND COALESCE(giveaway_winners.rerolled, 0) = 0
-     )`,
-    [staleBefore]
-  );
-
   run(
     `UPDATE giveaways
      SET ending = 0,
@@ -44,23 +25,6 @@ function recoverGiveawayLocks(now = Date.now()) {
     [staleBefore]
   );
 
-  // Recover completed legacy/manual giveaways that have winners but no lock.
-  run(
-    `UPDATE giveaways
-     SET ended = 1,
-         ending = 0,
-         endingAt = NULL
-     WHERE ended = 0
-     AND ending = 0
-     AND endsAt <= ?
-     AND EXISTS (
-       SELECT 1
-       FROM giveaway_winners
-       WHERE giveaway_winners.messageId = giveaways.messageId
-       AND COALESCE(giveaway_winners.rerolled, 0) = 0
-     )`,
-    [now]
-  );
 }
 
 function claimDueGiveaways(now = Date.now()) {
@@ -72,8 +36,9 @@ function claimDueGiveaways(now = Date.now()) {
      WHERE ended = 0
      AND paused = 0
      AND COALESCE(ending, 0) = 0
+     AND (nextEndAttemptAt IS NULL OR nextEndAttemptAt <= ?)
      AND endsAt <= ?`,
-    [now]
+    [now, now]
   );
 
   const claimed = [];

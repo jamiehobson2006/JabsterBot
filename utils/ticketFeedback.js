@@ -14,6 +14,8 @@ const {
   run
 } = require('../database');
 
+const { sendTranscriptMessage } = require('./tickets/transcriptDelivery');
+
 const PUBLISH_RETRY_MS =
   15 * 60 * 1000;
 
@@ -32,11 +34,18 @@ function createFeedbackRecord({
   closedBy,
   closeReason
 }) {
+  const existing = get(
+    `SELECT * FROM ticket_feedback WHERE channelId = ?`,
+    [ticket.channelId]
+  );
+
+  if (existing) return existing;
+
   const id =
     crypto.randomUUID();
 
   run(
-    `INSERT INTO ticket_feedback (
+    `INSERT OR IGNORE INTO ticket_feedback (
        id,
        guildId,
        ticketId,
@@ -62,7 +71,10 @@ function createFeedbackRecord({
     ]
   );
 
-  return getFeedback(id);
+  return get(
+    `SELECT * FROM ticket_feedback WHERE channelId = ?`,
+    [ticket.channelId]
+  );
 }
 
 function getFeedback(id) {
@@ -130,7 +142,7 @@ async function sendFeedbackPrompt({
   }
 
   try {
-    await user.send(payload);
+    await sendTranscriptMessage(user, payload);
 
     run(
       `UPDATE ticket_feedback

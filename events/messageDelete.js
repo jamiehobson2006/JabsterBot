@@ -46,7 +46,7 @@ module.exports = {
       const loggedMessage = snapshot || message;
       const guild = message.guild || await client.guilds.fetch(loggedMessage.guildId).catch(() => null);
 
-      if (!guild || loggedMessage.author?.bot) {
+      if (!guild) {
         return;
       }
 
@@ -55,7 +55,8 @@ module.exports = {
       const audit = await findRecentAuditLog(
         guild,
         AuditLogEvent.MessageDelete,
-        loggedMessage.author?.id
+        loggedMessage.author?.id,
+        { channelId: loggedMessage.channelId || loggedMessage.channel?.id }
       );
 
       await logAudit(
@@ -67,7 +68,7 @@ module.exports = {
           executorId: audit?.executor?.id,
           type: 'MESSAGES',
           metadata: {
-            channelId: loggedMessage.channel?.id,
+            channelId: loggedMessage.channelId || loggedMessage.channel?.id,
             messageId: message.id,
             content: loggedMessage.content || null,
             embedSummary: describeDeletedMessage(loggedMessage),
@@ -80,8 +81,8 @@ module.exports = {
             executor: audit
               ? formatExecutor(audit)
               : 'Author or unknown',
-            channel: loggedMessage.channel?.id
-              ? `<#${loggedMessage.channel.id}>`
+            channel: (loggedMessage.channelId || loggedMessage.channel?.id)
+              ? `<#${loggedMessage.channelId || loggedMessage.channel.id}>`
               : 'Unknown',
             reason: audit?.reason || undefined,
             extra: `${describeDeletedMessage(loggedMessage)}${visualCopy ? '\n\nA visual copy of the deleted message is posted below.' : ''}`,

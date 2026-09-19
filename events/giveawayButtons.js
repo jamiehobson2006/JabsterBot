@@ -21,7 +21,11 @@ function replyHidden(
   interaction,
   content
 ) {
-  return interaction.reply({
+  const method = interaction.deferred || interaction.replied
+    ? 'editReply'
+    : 'reply';
+
+  return interaction[method]({
     content,
     flags: MessageFlags.Ephemeral
   });
@@ -107,6 +111,8 @@ module.exports = {
         return;
       }
 
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
       const cooldownKey =
         `${interaction.message.id}:${interaction.user.id}:${interaction.customId}`;
 
@@ -147,7 +153,11 @@ module.exports = {
         );
       }
 
-      if (giveaway.ended) {
+      if (
+        giveaway.ended ||
+        giveaway.ending ||
+        Date.now() >= Number(giveaway.endsAt)
+      ) {
         return replyHidden(
           interaction,
           'This giveaway has ended.'

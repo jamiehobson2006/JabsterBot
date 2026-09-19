@@ -18,7 +18,8 @@
     "discord-html-transcripts": "^3.2.0",
     "discord.js": "^14.27.0",
     "dotenv": "^17.4.2",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "parse5": "^7.3.0"
   },
   "overrides": {
     "discord-html-transcripts": {

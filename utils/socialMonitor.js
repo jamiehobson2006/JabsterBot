@@ -12,7 +12,7 @@ const {
 } = require('../database');
 
 const {
-  getLatestUpload,
+  getRecentUploads,
   getVideoDetails,
   getUploadType
 } = require('./youtube');
@@ -704,12 +704,6 @@ if (
           );
 
 if (isQuietHours(social)) {
-  run(
-    `UPDATE social_channels
-     SET lastTwitchStreamId = ?
-     WHERE guildId = ? AND platform = ? AND creatorId = ? AND contentType = ?`,
-    [stream.id, social.guildId, social.platform, social.creatorId, social.contentType]
-  );
   continue;
 }
 
@@ -793,14 +787,19 @@ async function checkYouTube(client) {
      WHERE platform = 'youtube'`
   );
 
+  const uploadsByCreator = new Map();
+  const typeByVideo = new Map();
+  const detailsByVideo = new Map();
+
   for (const social of socials) {
 
     try {
 
-      const latestUpload =
-        await getLatestUpload(
-          social.creatorId
-        );
+      if (!uploadsByCreator.has(social.creatorId)) {
+        uploadsByCreator.set(social.creatorId, getRecentUploads(social.creatorId, 10));
+      }
+      const recentUploads = await uploadsByCreator.get(social.creatorId);
+      const latestUpload = recentUploads[0];
 
       if (!latestUpload) {
         continue;
@@ -849,18 +848,21 @@ async function checkYouTube(client) {
       // DUPLICATE PROTECTION
       // ====================================
 
-      if (
-        social.lastItemId ===
-        latestUpload.videoId
-      ) {
+      const lastIndex = recentUploads.findIndex(upload => upload.videoId === social.lastItemId);
+      const pendingUploads = (
+        lastIndex >= 0
+          ? recentUploads.slice(0, lastIndex)
+          : recentUploads
+      ).reverse();
 
-        continue;
+      if (!pendingUploads.length) continue;
+
+      for (const latestUpload of pendingUploads) {
+
+      if (!typeByVideo.has(latestUpload.videoId)) {
+        typeByVideo.set(latestUpload.videoId, getUploadType(latestUpload.videoId));
       }
-
-      const uploadType =
-        await getUploadType(
-          latestUpload.videoId
-        );
+      const uploadType = await typeByVideo.get(latestUpload.videoId);
 
       let matches = false;
 
@@ -918,10 +920,10 @@ async function checkYouTube(client) {
         continue;
       }
 
-      const details =
-        await getVideoDetails(
-          latestUpload.videoId
-        );
+      if (!detailsByVideo.has(latestUpload.videoId)) {
+        detailsByVideo.set(latestUpload.videoId, getVideoDetails(latestUpload.videoId));
+      }
+      const details = await detailsByVideo.get(latestUpload.videoId);
 
       const channel =
         await client.channels.fetch(
@@ -929,7 +931,7 @@ async function checkYouTube(client) {
         ).catch(() => null);
 
       if (!channel) {
-        continue;
+        break;
       }
 
       let title =
@@ -1081,13 +1083,7 @@ const row =
     );
 
 if (isQuietHours(social)) {
-  run(
-    `UPDATE social_channels
-     SET lastItemId = ?
-     WHERE guildId = ? AND platform = ? AND creatorId = ? AND contentType = ?`,
-    [latestUpload.videoId, social.guildId, social.platform, social.creatorId, social.contentType]
-  );
-  continue;
+  break;
 }
 
 const message =
@@ -1179,6 +1175,8 @@ run(
         `📢 Posted upload from ${social.creatorName}`
       );
 
+      }
+
     } catch (err) {
 
       console.error(
@@ -1194,12 +1192,22 @@ async function runMonitor(client) {
 
   monitorRun = (async () => {
     try {
-      // These share state, so run them in order rather than allowing a stream
-      // to be marked ended while its live-state update is still in flight.
-      await checkEndedStreams(client);
-      await checkEndedTwitchStreams(client);
-      await checkYouTube(client);
-      await checkTwitch(client);
+      const results = await Promise.allSettled([
+        (async () => {
+          await checkEndedStreams(client);
+          await checkYouTube(client);
+        })(),
+        (async () => {
+          await checkEndedTwitchStreams(client);
+          await checkTwitch(client);
+        })()
+      ]);
+
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          console.error('Social monitor platform cycle failed:', result.reason);
+        }
+      }
     } finally {
       monitorRun = null;
     }

@@ -3,6 +3,7 @@ const {
 } = require('discord.js');
 
 const {
+  get,
   run
 } = require('../../database');
 
@@ -37,6 +38,38 @@ function decisionLabel(decision) {
 
 function decisionColor(decision) {
   return decision === 'ACCEPTED' ? 0x57F287 : 0xED4245;
+}
+
+const REVIEW_TIMEOUT_MS = 10 * 60 * 1000;
+
+function recoverStaleApplicationReviews(now = Date.now()) {
+  const cutoff = now - REVIEW_TIMEOUT_MS;
+
+  run(
+    `UPDATE tickets
+     SET applicationStatus = CASE
+           WHEN UPPER(applicationStatus) = 'REVIEWING_ACCEPTED' THEN 'ACCEPTED'
+           ELSE 'DENIED'
+         END
+     WHERE UPPER(applicationStatus) IN ('REVIEWING_ACCEPTED', 'REVIEWING_DENIED')
+       AND applicationReviewedAt <= ?
+       AND (applicationDecisionMessageId IS NOT NULL OR applicationApplicantNotifiedAt IS NOT NULL)`,
+    [cutoff]
+  );
+
+  return run(
+    `UPDATE tickets
+     SET applicationStatus = 'PENDING',
+         applicationReviewedBy = NULL,
+         applicationReviewedAt = NULL,
+         applicationDecisionReason = NULL
+     WHERE UPPER(status) = 'OPEN'
+       AND UPPER(applicationStatus) IN ('REVIEWING_ACCEPTED', 'REVIEWING_DENIED')
+       AND applicationReviewedAt <= ?
+       AND applicationDecisionMessageId IS NULL
+       AND applicationApplicantNotifiedAt IS NULL`,
+    [cutoff]
+  ).changes;
 }
 
 async function notifyApplicant(interaction, ticket, decision, reason) {
@@ -99,6 +132,7 @@ async function reviewApplication({
   }
 
   const reviewedAt = Date.now();
+  const reviewingStatus = `REVIEWING_${normalizedDecision}`;
   const updated = run(
     `UPDATE tickets
      SET applicationStatus = ?,
@@ -109,7 +143,7 @@ async function reviewApplication({
      AND UPPER(status) = 'OPEN'
      AND COALESCE(UPPER(applicationStatus), 'PENDING') = 'PENDING'`,
     [
-      normalizedDecision,
+      reviewingStatus,
       interaction.user.id,
       reviewedAt,
       cleanedReason,
@@ -134,16 +168,35 @@ async function reviewApplication({
     .setFooter({ text: 'The ticket will now be closed and archived.' })
     .setTimestamp(reviewedAt);
 
-  await interaction.channel.send({ embeds: [decisionEmbed] });
+  try {
+    let decisionMessage = ticket.applicationDecisionMessageId
+      ? await interaction.channel.messages.fetch(ticket.applicationDecisionMessageId).catch(() => null)
+      : null;
 
-  const applicantNotified = await notifyApplicant(
-    interaction,
-    ticket,
-    normalizedDecision,
-    cleanedReason
-  );
+    if (decisionMessage) {
+      await decisionMessage.edit({ embeds: [decisionEmbed] });
+    } else {
+      decisionMessage = await interaction.channel.send({ embeds: [decisionEmbed] });
+      run(
+        `UPDATE tickets SET applicationDecisionMessageId = ? WHERE channelId = ?`,
+        [decisionMessage.id, interaction.channel.id]
+      );
+    }
 
-  await logAudit(interaction.client, interaction.guild.id, {
+    const applicantNotified = Boolean(ticket.applicationApplicantNotifiedAt) || await notifyApplicant(
+      interaction,
+      ticket,
+      normalizedDecision,
+      cleanedReason
+    );
+    if (applicantNotified && !ticket.applicationApplicantNotifiedAt) {
+      run(
+        `UPDATE tickets SET applicationApplicantNotifiedAt = ? WHERE channelId = ?`,
+        [Date.now(), interaction.channel.id]
+      );
+    }
+
+    await logAudit(interaction.client, interaction.guild.id, {
     action: `APPLICATION_${normalizedDecision}`,
     targetId: ticket.userId,
     executorId: interaction.user.id,
@@ -164,21 +217,58 @@ async function reviewApplication({
       extra: `Ticket: #${ticket.id || 'unknown'}\nResult: ${label}`,
       color: decisionColor(normalizedDecision)
     })
-  }).catch(error => console.error('Application review log error:', error));
+    }).catch(error => console.error('Application review log error:', error));
 
-  const closeResult = await closeTicket({
-    interaction,
-    reason: `Application ${normalizedDecision.toLowerCase()}: ${cleanedReason}`
-  });
+    const finalized = run(
+      `UPDATE tickets
+       SET applicationStatus = ?
+       WHERE channelId = ? AND applicationStatus = ?`,
+      [normalizedDecision, interaction.channel.id, reviewingStatus]
+    );
+    if (!finalized.changes) {
+      throw new Error('The application review state changed before it could be finalized.');
+    }
 
-  return {
-    ...closeResult,
-    applicantNotified,
-    decision: normalizedDecision
-  };
+    const closeResult = await closeTicket({
+      interaction,
+      reason: `Application ${normalizedDecision.toLowerCase()}: ${cleanedReason}`
+    });
+
+    return {
+      ...closeResult,
+      applicantNotified,
+      decision: normalizedDecision
+    };
+  } catch (error) {
+    const current = get(`SELECT * FROM tickets WHERE channelId = ?`, [interaction.channel.id]);
+    const sideEffectDelivered = Boolean(
+      current?.applicationDecisionMessageId || current?.applicationApplicantNotifiedAt
+    );
+
+    if (String(current?.applicationStatus || '').toUpperCase() === reviewingStatus) {
+      if (sideEffectDelivered) {
+        run(
+          `UPDATE tickets SET applicationStatus = ? WHERE channelId = ? AND applicationStatus = ?`,
+          [normalizedDecision, interaction.channel.id, reviewingStatus]
+        );
+      } else {
+        run(
+          `UPDATE tickets
+           SET applicationStatus = 'PENDING',
+               applicationReviewedBy = NULL,
+               applicationReviewedAt = NULL,
+               applicationDecisionReason = NULL
+           WHERE channelId = ? AND applicationStatus = ?`,
+          [interaction.channel.id, reviewingStatus]
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 module.exports = {
   cleanDecisionReason,
+  recoverStaleApplicationReviews,
   reviewApplication
 };

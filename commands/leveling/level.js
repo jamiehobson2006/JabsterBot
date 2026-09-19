@@ -11,7 +11,9 @@ const {
 
 const {
   calculateLevel,
-  getTotalXPForLevel
+  getTotalXPForLevel,
+  MAX_LEVEL,
+  MAX_TOTAL_XP
 } = require('../../utils/leveling');
 
 module.exports = {
@@ -59,6 +61,8 @@ module.exports = {
 
             .setMinValue(0)
 
+            .setMaxValue(MAX_LEVEL)
+
             .setRequired(true)
         )
     )
@@ -91,6 +95,8 @@ module.exports = {
             .setDescription('Levels')
 
             .setMinValue(1)
+
+            .setMaxValue(MAX_LEVEL)
 
             .setRequired(true)
         )
@@ -125,6 +131,8 @@ module.exports = {
 
             .setMinValue(1)
 
+            .setMaxValue(MAX_LEVEL)
+
             .setRequired(true)
         )
     )
@@ -157,6 +165,8 @@ module.exports = {
             .setDescription('XP')
 
             .setMinValue(0)
+
+            .setMaxValue(MAX_TOTAL_XP)
 
             .setRequired(true)
         )
@@ -191,6 +201,8 @@ module.exports = {
 
             .setMinValue(1)
 
+            .setMaxValue(MAX_TOTAL_XP)
+
             .setRequired(true)
         )
     )
@@ -223,6 +235,8 @@ module.exports = {
             .setDescription('XP')
 
             .setMinValue(1)
+
+            .setMaxValue(MAX_TOTAL_XP)
 
             .setRequired(true)
         )
@@ -347,12 +361,14 @@ module.exports = {
           'amount'
         );
 
-      newXP =
-        getTotalXPForLevel(
+      const targetLevel = Number(data.level || 0) + amount;
+      if (targetLevel > MAX_LEVEL) {
+        return interaction.editReply({
+          content: `Levels cannot exceed ${MAX_LEVEL.toLocaleString()}.`
+        });
+      }
 
-          data.level +
-          amount
-        );
+      newXP = getTotalXPForLevel(targetLevel);
     }
 
     if (
@@ -397,11 +413,13 @@ module.exports = {
       'give-xp'
     ) {
 
-      newXP +=
+      newXP += interaction.options.getInteger('amount');
 
-        interaction.options.getInteger(
-          'amount'
-        );
+      if (newXP > MAX_TOTAL_XP) {
+        return interaction.editReply({
+          content: `XP cannot exceed ${MAX_TOTAL_XP.toLocaleString()}.`
+        });
+      }
     }
 
     if (

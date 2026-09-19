@@ -8,14 +8,9 @@ const {
   logAudit
 } = require('../utils/logger');
 
-const {
-  findCensoredTerm,
-  getCensorBypassCategories,
-  getCensorBypassChannels,
-  getCensorBypassRoles,
-  getCensorSettings,
-  listCensorTerms
-} = require('../utils/censor');
+const { handleCensor } = require('../utils/censorMessages');
+
+const { handlePhishing } = require('../utils/phishingProtection');
 
 const {
   hasWhitelistedRole,
@@ -224,88 +219,6 @@ async function handleLinkBlock(
           : 'Bot',
         channel: `<#${message.channel.id}>`,
         extra: `Blocked link: ${blockedLink}`,
-        color: 0xED4245
-      })
-    }
-  );
-
-  return true;
-}
-
-async function handleCensor(
-  message,
-  client
-) {
-
-  const settings =
-    getCensorSettings(message.guild.id);
-
-  if (Number(settings?.censorEnabled || 0) !== 1) {
-
-    return false;
-  }
-
-  if (
-    hasWhitelistedRole(message.member, getCensorBypassRoles(settings)) ||
-    isWhitelistedChannel(
-      message,
-      getCensorBypassChannels(settings),
-      getCensorBypassCategories(settings)
-    )
-  ) {
-    return false;
-  }
-
-  const term =
-    findCensoredTerm(
-      message.content,
-      listCensorTerms(message.guild.id)
-    );
-
-  if (!term) {
-
-    return false;
-  }
-
-  suppressMessageDelete(message.id);
-
-  try {
-
-    await message.delete();
-
-  } catch (err) {
-
-    unsuppressMessageDelete(message.id);
-
-    console.error('Censor delete failed:', err.message);
-
-    return false;
-  }
-
-  await logAudit(
-    client,
-    message.guild.id,
-    {
-      action: 'MESSAGE_CENSORED',
-      targetId: message.author.id,
-      executorId: client.user?.id,
-      type: 'MESSAGES',
-      metadata: {
-        channelId: message.channel.id,
-        messageId: message.id,
-        term,
-        content: message.content || null
-      },
-      embed: createAuditEmbed({
-        action: 'Message Censored',
-        target: `${message.author.tag}\n<@${message.author.id}>`,
-        executor: client.user
-          ? `${client.user.tag}\n<@${client.user.id}>`
-          : 'Bot',
-        channel: `<#${message.channel.id}>`,
-        extra:
-          `Matched term: \`${term}\`\n` +
-          `Content: ${message.content || '*No text content*'}`,
         color: 0xED4245
       })
     }
@@ -594,6 +507,10 @@ function getWeekStart(date) {
 
 module.exports = {
 
+  handleDailyInteractionThreadSafety,
+
+  handleLinkBlock,
+
   name: 'messageCreate',
 
   async execute(message, client) {
@@ -604,10 +521,15 @@ module.exports = {
       // 🚫 IGNORE BOTS / DMS
       // ==========================================
       if (
-        !message.guild ||
-        message.author.bot
+        !message.guild
       ) {
 
+        return;
+      }
+
+      captureMessageSnapshot(message);
+
+      if (message.author.bot) {
         return;
       }
 
@@ -655,7 +577,9 @@ module.exports = {
         return;
       }
 
-      captureMessageSnapshot(message);
+      if (await handlePhishing(message, client)) {
+        return;
+      }
 
       if (
         await handleCensor(

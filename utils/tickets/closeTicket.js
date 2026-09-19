@@ -3,6 +3,8 @@ const {
 } = require('discord.js');
 
 const {
+  db,
+  get,
   run
 } = require('../../database');
 
@@ -133,69 +135,53 @@ async function closeTicket({
     throw new Error('You cannot close tickets.');
   }
 
-  const closedAt =
-    Date.now();
+  const transitionedAt = Date.now();
+  const transitioned = String(ticket.status || '').toUpperCase() === 'OPEN';
 
-  const result =
-    run(
+  if (transitioned) {
+    const result = run(
       `UPDATE tickets
-       SET status = 'CLOSED',
+       SET status = 'CLOSING',
            closedBy = ?,
            closedAt = ?,
-           closeReason = ?
-       WHERE channelId = ?
-       AND UPPER(status) = 'OPEN'`,
-      [
-        interaction.user.id,
-        closedAt,
-        closeReason,
-        interaction.channel.id
-      ]
+           closeReason = ?,
+           closeAttempts = COALESCE(closeAttempts, 0) + 1,
+           closeLastError = NULL
+       WHERE channelId = ? AND UPPER(status) = 'OPEN'`,
+      [interaction.user.id, transitionedAt, closeReason, interaction.channel.id]
     );
 
-  if (!result.changes) {
-    throw new Error('This ticket is already closed.');
+    if (!result.changes) {
+      throw new Error('This ticket is already being closed. Please try again.');
+    }
+  } else {
+    run(
+      `UPDATE tickets
+       SET closeAttempts = COALESCE(closeAttempts, 0) + 1,
+           closeLastError = NULL
+       WHERE channelId = ? AND UPPER(status) = 'CLOSING'`,
+      [interaction.channel.id]
+    );
   }
 
-  run(
-    `DELETE FROM ticket_staff
-     WHERE channelId = ?`,
+  const closingTicket = get(
+    `SELECT * FROM tickets WHERE channelId = ?`,
     [interaction.channel.id]
   );
-
-  run(
-    `DELETE FROM ticket_guests
-     WHERE channelId = ?`,
-    [interaction.channel.id]
-  );
-
-  const handleTime =
-    Math.max(closedAt - Number(ticket.createdAt || 0), 0);
-
-  try {
-    addClose(interaction.guild.id, interaction.user.id);
-    addHandleTime(interaction.guild.id, interaction.user.id, handleTime);
-  } catch (err) {
-    console.error('Ticket stats error:', err);
-  }
-
-  const closedTicket = {
-    ...ticket,
-    status: 'CLOSED',
-    closedBy: interaction.user.id,
-    closedAt,
-    closeReason
-  };
+  const effectiveReason = closingTicket.closeReason || closeReason;
+  const closedAt = Number(closingTicket.closedAt || transitionedAt);
+  const closerId = closingTicket.closedBy || interaction.user.id;
+  const handleTime = Math.max(closedAt - Number(closingTicket.createdAt || 0), 0);
 
   const closeEmbed =
     new EmbedBuilder()
       .setColor(0xED4245)
       .setTitle('Ticket Closed')
-      .setDescription(`This ticket was closed by ${interaction.user}.`)
+      .setDescription(`This ticket is being closed by <@${closerId}>.`)
       .addFields(
         {
           name: 'Ticket Type',
-          value: ticket.type,
+          value: closingTicket.type,
           inline: true
         },
         {
@@ -205,98 +191,111 @@ async function closeTicket({
         },
         {
           name: 'Close Reason',
-          value: closeReason
+          value: effectiveReason
         }
       )
       .setFooter({
-        text: 'Channel will be deleted shortly'
+        text: 'Preparing transcript and feedback delivery'
       })
       .setTimestamp(closedAt);
 
-  await disableTicketButtons(interaction.channel, interaction.client)
-    .catch(err => console.error('Ticket button disable error:', err));
+  try {
+    if (!closingTicket.closeNoticeSentAt) {
+      await interaction.channel.send({ embeds: [closeEmbed] });
 
-  await interaction.channel.send({
-    embeds: [closeEmbed]
-  });
+      await logAudit(
+        interaction.client,
+        interaction.guild.id,
+        {
+          action: 'TICKET_CLOSED',
+          targetId: closingTicket.userId,
+          executorId: closerId,
+          type: 'TICKETS',
+          metadata: {
+            ticketId: closingTicket.id,
+            channelId: interaction.channel.id,
+            type: closingTicket.type,
+            reason: effectiveReason,
+            handleTime
+          },
+          embed: createAuditEmbed({
+            action: 'Ticket Closed',
+            target: `<@${closingTicket.userId}>`,
+            executor: `<@${closerId}>`,
+            channel: `${interaction.channel}`,
+            reason: effectiveReason,
+            extra: `Type: ${closingTicket.type}\nHandle time: ${formatDuration(handleTime)}`,
+            color: 0xED4245
+          })
+        }
+      ).catch(err => console.error('Ticket close log error:', err));
 
-  await logAudit(
-    interaction.client,
-    interaction.guild.id,
-    {
-      action: 'TICKET_CLOSED',
-      targetId: ticket.userId,
-      executorId: interaction.user.id,
-      type: 'TICKETS',
-      metadata: {
-        ticketId: ticket.id,
-        channelId: interaction.channel.id,
-        type: ticket.type,
-        reason: closeReason,
-        handleTime
-      },
-      embed: createAuditEmbed({
-        action: 'Ticket Closed',
-        target: `<@${ticket.userId}>`,
-        executor: `${interaction.user.tag}\n<@${interaction.user.id}>`,
-        channel: `${interaction.channel}`,
-        reason: closeReason,
-        extra:
-          `Type: ${ticket.type}\n` +
-          `Handle time: ${formatDuration(handleTime)}`,
-        color: 0xED4245
-      })
+      run(
+        `UPDATE tickets SET closeNoticeSentAt = ? WHERE channelId = ?`,
+        [Date.now(), interaction.channel.id]
+      );
     }
-  ).catch(err => console.error('Ticket close log error:', err));
 
-  const feedback =
-    createFeedbackRecord({
-      ticket: closedTicket,
-      closedBy: interaction.user,
-      closeReason
+    const feedback = createFeedbackRecord({
+      ticket: closingTicket,
+      closedBy: { id: closerId },
+      closeReason: effectiveReason
     });
 
-  const transcript =
-    await generateTranscript({
+    const transcript = await generateTranscript({
       client: interaction.client,
       channel: interaction.channel,
-      ticket: closedTicket,
+      ticket: closingTicket,
       closedBy: interaction.user
     });
 
-  const feedbackSent =
-    await sendFeedbackPrompt({
+    const feedbackSent = Boolean(feedback.dmSent) || await sendFeedbackPrompt({
       client: interaction.client,
       feedback,
       transcriptAttachment: transcript?.attachment || null
     });
 
-  if (!transcript?.attachment) {
-    await interaction.channel.send({
-      content:
-        'The ticket was closed, but its transcript could not be generated. The channel was kept for safety.'
-    }).catch(() => null);
+    if (!transcript?.attachment || (!transcript.archived && !feedbackSent)) {
+      throw new Error(
+        'Transcript delivery is still pending. The channel was kept; use Close again to retry.'
+      );
+    }
 
-    return {
-      success: true,
-      channelDeleted: false,
-      feedbackSent,
-      handleTime
-    };
-  }
+    const deleteAfter = Date.now() + 5000;
+    const finalize = db.transaction(() => {
+      const current = get(
+        `SELECT * FROM tickets WHERE channelId = ?`,
+        [interaction.channel.id]
+      );
 
-  const deleteAfter =
-    Date.now() + 5000;
+      if (!current || String(current.status).toUpperCase() !== 'CLOSING') {
+        throw new Error('This ticket is no longer awaiting closure.');
+      }
 
-  run(
-    `UPDATE tickets
-     SET deleteAfter = ?
-     WHERE channelId = ?
-     AND UPPER(status) = 'CLOSED'`,
-    [deleteAfter, interaction.channel.id]
-  );
+      if (!current.closeStatsRecordedAt) {
+        addClose(interaction.guild.id, closerId);
+        addHandleTime(interaction.guild.id, closerId, handleTime);
+      }
 
-  setTimeout(
+      run(`DELETE FROM ticket_staff WHERE channelId = ?`, [interaction.channel.id]);
+      run(`DELETE FROM ticket_guests WHERE channelId = ?`, [interaction.channel.id]);
+      run(
+        `UPDATE tickets
+         SET status = 'CLOSED',
+             closeStatsRecordedAt = COALESCE(closeStatsRecordedAt, ?),
+             closeLastError = NULL,
+             deleteAfter = ?
+         WHERE channelId = ? AND UPPER(status) = 'CLOSING'`,
+        [Date.now(), deleteAfter, interaction.channel.id]
+      );
+    });
+
+    finalize();
+
+    await disableTicketButtons(interaction.channel, interaction.client)
+      .catch(err => console.error('Ticket button disable error:', err));
+
+    setTimeout(
     () => {
 
       deleteClosedTicketChannel(
@@ -307,12 +306,21 @@ async function closeTicket({
     5000
   );
 
-  return {
-    success: true,
-    channelDeleted: true,
-    feedbackSent,
-    handleTime
-  };
+    return {
+      success: true,
+      channelDeleted: true,
+      feedbackSent,
+      handleTime
+    };
+  } catch (error) {
+    run(
+      `UPDATE tickets
+       SET closeLastError = ?
+       WHERE channelId = ? AND UPPER(status) = 'CLOSING'`,
+      [String(error.message || error).slice(0, 1000), interaction.channel.id]
+    );
+    throw error;
+  }
 }
 
 module.exports = {

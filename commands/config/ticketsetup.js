@@ -11,6 +11,7 @@ const {
 } = require('discord.js');
 
 const {
+  get,
   run
 } = require('../../database');
 
@@ -162,6 +163,41 @@ module.exports = {
       const enabled =
         enabledOption ?? true;
 
+      const existing = get(
+        `SELECT categoryId, roleId FROM ticket_settings
+         WHERE guildId = ? AND type = ?`,
+        [interaction.guild.id, type]
+      );
+
+      const effectiveCategory = category || (
+        existing?.categoryId
+          ? interaction.guild.channels.cache.get(existing.categoryId)
+          : null
+      );
+      const effectiveRole = role || (
+        existing?.roleId
+          ? interaction.guild.roles.cache.get(existing.roleId)
+          : null
+      );
+
+      if (enabled && (!effectiveCategory || !effectiveRole)) {
+        return interaction.editReply({
+          content: 'A valid category and staff role are both required before this ticket type can be enabled.'
+        });
+      }
+
+      if (enabled && effectiveCategory.type !== ChannelType.GuildCategory) {
+        return interaction.editReply({
+          content: 'The configured ticket destination is no longer a category. Choose a new category.'
+        });
+      }
+
+      if (effectiveRole?.id === interaction.guild.roles.everyone.id || effectiveRole?.managed) {
+        return interaction.editReply({
+          content: 'Choose a normal staff role other than @everyone or an integration-managed role.'
+        });
+      }
+
       const botMember =
         interaction.guild.members.me;
 
@@ -169,8 +205,8 @@ module.exports = {
       // 🛡 CATEGORY VALIDATION
       // ==========================================
       const perms =
-        category
-          ? category.permissionsFor(
+        effectiveCategory
+          ? effectiveCategory.permissionsFor(
               botMember
             )
           : null;
@@ -179,7 +215,7 @@ module.exports = {
 
       if (
 
-        category &&
+        enabled && effectiveCategory &&
         !perms?.has(
           PermissionsBitField.Flags.ViewChannel
         )
@@ -192,7 +228,7 @@ module.exports = {
 
       if (
 
-        category &&
+        enabled && effectiveCategory &&
         !perms?.has(
           PermissionsBitField.Flags.SendMessages
         )
@@ -205,7 +241,7 @@ module.exports = {
 
       if (
 
-        category &&
+        enabled && effectiveCategory &&
         !perms?.has(
           PermissionsBitField.Flags.ManageChannels
         )
@@ -233,8 +269,8 @@ module.exports = {
       // ==========================================
       if (
 
-        role &&
-        role.position >=
+        enabled && effectiveRole &&
+        effectiveRole.position >=
         botMember.roles.highest.position
       ) {
 
@@ -291,9 +327,9 @@ module.exports = {
 
           enabled ? 1 : 0,
 
-          category?.id || null,
+          effectiveCategory?.id || null,
 
-          role?.id || null
+          effectiveRole?.id || null
         ]
       );
 
@@ -353,8 +389,8 @@ module.exports = {
               name: '📂 Category',
 
               value:
-                category
-                  ? `${category}`
+                effectiveCategory
+                  ? `${effectiveCategory}`
                   : 'No category set',
 
               inline: true
@@ -365,8 +401,8 @@ module.exports = {
               name: '👮 Staff Role',
 
               value:
-                role
-                  ? `${role}`
+                effectiveRole
+                  ? `${effectiveRole}`
                   : 'No staff role set',
 
               inline: true

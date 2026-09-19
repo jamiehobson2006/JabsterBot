@@ -7,8 +7,21 @@ const {
 const DELETE_INTERVAL_MS =
   15 * 1000;
 
+const CLOSING_TIMEOUT_MS = 10 * 60 * 1000;
+
 let cleanupInterval =
   null;
+
+function recoverStaleClosingTickets(now = Date.now()) {
+  return run(
+    `UPDATE tickets
+     SET status = 'OPEN',
+         closeLastError = COALESCE(closeLastError, 'Recovered after an interrupted close')
+     WHERE UPPER(status) = 'CLOSING'
+       AND (closedAt IS NULL OR closedAt <= ?)`,
+    [now - CLOSING_TIMEOUT_MS]
+  ).changes;
+}
 
 async function deleteClosedTicketChannel(
   client,
@@ -69,6 +82,8 @@ async function processClosedTicketDeletions(
   now = Date.now()
 ) {
 
+  recoverStaleClosingTickets(now);
+
   const tickets =
     all(
       `SELECT channelId
@@ -117,7 +132,9 @@ function startClosedTicketCleanup(client) {
 
 module.exports = {
   DELETE_INTERVAL_MS,
+  CLOSING_TIMEOUT_MS,
   deleteClosedTicketChannel,
   processClosedTicketDeletions,
+  recoverStaleClosingTickets,
   startClosedTicketCleanup
 };

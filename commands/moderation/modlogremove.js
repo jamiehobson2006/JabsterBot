@@ -16,6 +16,8 @@
 
 const {
 
+  db,
+
   run,
 
   get
@@ -396,135 +398,71 @@ module.exports = {
               });
             }
 
-            // ====================================
-            // 💾 BACKUP CASE
-            // ====================================
-            run(
+            const removeCase = db.transaction(() => {
+              const currentCase = get(
+                `SELECT * FROM cases WHERE guildId = ? AND id = ?`,
+                [interaction.guild.id, caseId]
+              );
 
-              `INSERT INTO deleted_cases
+              if (!currentCase) {
+                throw new Error('This case has already been removed.');
+              }
 
-               (
-                 guildId,
-                 originalCaseId,
-                 deletedBy,
-                 deletedAt,
-                 deleteReason,
-                 caseData
-               )
-
-               VALUES (?, ?, ?, ?, ?, ?)`,
-
-              [
-
-                interaction.guild.id,
-
-                caseId,
-
-                interaction.user.id,
-
-                Date.now(),
-
-                deleteReason,
-
-                JSON.stringify(caseData)
-              ]
-            );
-
-            // ====================================
-            // 🗑 DELETE CASE
-            // ====================================
-            run(
-
-              `DELETE FROM cases
-
-               WHERE guildId = ?
-               AND id = ?`,
-
-              [
-
-                interaction.guild.id,
-
-                caseId
-              ]
-            );
-
-            // ====================================
-            // ⚠️ REMOVE WARN ENTRY
-            // ====================================
-            if (
-
-              caseData.action?.toUpperCase() ===
-
-              'WARN'
-            ) {
+              const deletedAt = Date.now();
 
               run(
-
-                `DELETE FROM warns
-
-                 WHERE id = (
-
-                   SELECT id
-                   FROM warns
-
-                   WHERE guildId = ?
-                   AND userId = ?
-
-                   ORDER BY id DESC
-
-                   LIMIT 1
-                 )`,
-
+                `INSERT INTO deleted_cases (
+                   guildId, originalCaseId, deletedBy, deletedAt, deleteReason, caseData
+                 ) VALUES (?, ?, ?, ?, ?, ?)`,
                 [
-
                   interaction.guild.id,
-
-                  caseData.userId
+                  caseId,
+                  interaction.user.id,
+                  deletedAt,
+                  deleteReason,
+                  JSON.stringify(currentCase)
                 ]
               );
-            }
 
-            // ====================================
-            // 📜 AUDIT LOG
-            // ====================================
-            run(
+              run(
+                `DELETE FROM cases WHERE guildId = ? AND id = ?`,
+                [interaction.guild.id, caseId]
+              );
 
-              `INSERT INTO audit_logs
+              if (String(currentCase.action || '').toUpperCase() === 'WARN') {
+                run(
+                  `UPDATE warns
+                   SET count = MAX(count - 1, 0)
+                   WHERE guildId = ? AND userId = ?`,
+                  [interaction.guild.id, currentCase.userId]
+                );
+                run(
+                  `DELETE FROM warns
+                   WHERE guildId = ? AND userId = ? AND count <= 0`,
+                  [interaction.guild.id, currentCase.userId]
+                );
+              }
 
-               (
-                 guildId,
-                 action,
-                 targetId,
-                 executorId,
-                 metadata,
-                 timestamp
-               )
+              run(
+                `INSERT INTO audit_logs (
+                   guildId, action, targetId, executorId, metadata, timestamp
+                 ) VALUES (?, ?, ?, ?, ?, ?)`,
+                [
+                  interaction.guild.id,
+                  'DELETE_CASE',
+                  currentCase.userId,
+                  interaction.user.id,
+                  JSON.stringify({
+                    caseId,
+                    originalAction: currentCase.action,
+                    deleteReason
+                  }),
+                  deletedAt
+                ]
+              );
+            });
 
-               VALUES (?, ?, ?, ?, ?, ?)`,
-
-              [
-
-                interaction.guild.id,
-
-                'DELETE_CASE',
-
-                caseData.userId,
-
-                interaction.user.id,
-
-                JSON.stringify({
-
-                  caseId,
-
-                  originalAction:
-                    caseData.action,
-
-                  deleteReason
-                }),
-
-                Date.now()
-              ]
-            );
+            removeCase();
 
             // ====================================
             // ✅ SUCCESS

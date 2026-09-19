@@ -42,8 +42,7 @@ module.exports = {
       }
 
       const deletedMessages = [...messages.values()]
-        .map(message => getMessageSnapshot(message.id) || message)
-        .filter(message => !message.author?.bot);
+        .map(message => getMessageSnapshot(message.id) || message);
 
       if (!deletedMessages.length) {
         return;
@@ -51,7 +50,9 @@ module.exports = {
 
       const audit = await findRecentAuditLog(
         channel.guild,
-        AuditLogEvent.MessageBulkDelete
+        AuditLogEvent.MessageBulkDelete,
+        null,
+        { channelId: channel.id, count: messages.size }
       );
 
       const report = [

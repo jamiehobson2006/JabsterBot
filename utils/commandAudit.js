@@ -25,10 +25,13 @@ const MUTATING_COMMANDS = new Set([
   'lock',
   'modlogremove',
   'mute',
+  'modmail',
+  'phishing',
   'poll',
   'pollmanage',
   'purge',
   'role',
+  'selfrole',
   'reactionrole',
   'setinvitechannel',
   'inviteadmin',
@@ -38,6 +41,7 @@ const MUTATING_COMMANDS = new Set([
   'socialadd',
   'socialremove',
   'stafflist',
+  'staffrota',
   'suggestchannel',
   'suggestionmanager',
   'verification',
@@ -66,11 +70,11 @@ const READ_ONLY_SUBCOMMANDS = new Set([
   'info',
   'list',
   'mutedchannels',
-  'reset',
   'settings',
   'stats',
   'status',
   'view',
+  'contact',
   'whitelist-list'
 ]);
 
@@ -88,6 +92,10 @@ function shouldLogCommand(command, interaction) {
 
   if (!MUTATING_COMMANDS.has(interaction.commandName)) {
     return false;
+  }
+
+  if (interaction.commandName === 'selfrole') {
+    return ['allow', 'disallow'].includes(getSubcommand(interaction));
   }
 
   return !READ_ONLY_SUBCOMMANDS.has(getSubcommand(interaction));

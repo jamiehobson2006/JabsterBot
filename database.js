@@ -149,7 +149,15 @@ function checkDatabaseIntegrity() {
         'SQLite still reports integrity issues:',
         retryMessages.slice(0, 5).join(' | ')
       );
+
+      throw new Error(
+        `SQLite integrity check failed after REINDEX: ${retryMessages.slice(0, 5).join(' | ')}`
+      );
     }
+
+    throw new Error(
+      `SQLite integrity check failed: ${messages.slice(0, 5).join(' | ')}`
+    );
 
   } catch (err) {
 
@@ -157,14 +165,19 @@ function checkDatabaseIntegrity() {
       isIndexCorruption(err)
     ) {
 
-      repairCorruptIndexes();
-      return;
+      if (repairCorruptIndexes()) {
+        const retryRows = db.pragma('integrity_check');
+        const retryMessages = retryRows.map(row => Object.values(row)[0]);
+        if (retryMessages.length === 1 && retryMessages[0] === 'ok') return;
+      }
     }
 
     console.error(
       'SQLite integrity check failed:',
       err.message
     );
+
+    throw err;
   }
 }
 
@@ -511,6 +524,8 @@ function ensureColumn(
 
       err.message
     );
+
+    throw err;
   }
 }
 
@@ -534,6 +549,8 @@ function createIndex(
 
       err.message
     );
+
+    throw err;
   }
 }
 
@@ -816,6 +833,83 @@ function createMutesTable() {
   `);
 }
 
+function createModerationSupportTables() {
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS active_timeouts (
+      guildId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      caseId INTEGER,
+      expiresAt INTEGER NOT NULL,
+      PRIMARY KEY (guildId, userId)
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS deleted_cases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guildId TEXT NOT NULL,
+      originalCaseId INTEGER NOT NULL,
+      deletedBy TEXT NOT NULL,
+      deletedAt INTEGER NOT NULL,
+      deleteReason TEXT NOT NULL,
+      caseData TEXT NOT NULL
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS self_roles (
+      guildId TEXT NOT NULL,
+      roleId TEXT NOT NULL,
+      addedBy TEXT,
+      createdAt INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (guildId, roleId)
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS role_actions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guildId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      moderatorId TEXT NOT NULL,
+      roleId TEXT NOT NULL,
+      action TEXT NOT NULL,
+      timestamp INTEGER NOT NULL
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS afk_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guildId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      reason TEXT,
+      timestamp INTEGER NOT NULL
+    )
+  `);
+
+  createIndex(
+    'idx_deleted_cases_guild_case',
+    `CREATE INDEX IF NOT EXISTS idx_deleted_cases_guild_case
+     ON deleted_cases(guildId, originalCaseId)`
+  );
+  createIndex(
+    'idx_active_timeouts_expiry',
+    `CREATE INDEX IF NOT EXISTS idx_active_timeouts_expiry
+     ON active_timeouts(expiresAt)`
+  );
+  createIndex(
+    'idx_role_actions_guild_user',
+    `CREATE INDEX IF NOT EXISTS idx_role_actions_guild_user
+     ON role_actions(guildId, userId, timestamp)`
+  );
+  createIndex(
+    'idx_afk_history_guild_user',
+    `CREATE INDEX IF NOT EXISTS idx_afk_history_guild_user
+     ON afk_history(guildId, userId, timestamp)`
+  );
+}
+
 function createGuildSettingsTable() {
 
   rawRun(`
@@ -892,6 +986,8 @@ function createGuildSettingsTable() {
 
       censorEnabled INTEGER DEFAULT 0,
 
+      censorAntiRacismEnabled INTEGER NOT NULL DEFAULT 0,
+
       censorRoleId TEXT,
 
       censorBypassRoleIds TEXT,
@@ -942,6 +1038,7 @@ function createGuildSettingsTable() {
     ['linkBypassChannelIds', 'TEXT'],
     ['linkBypassCategoryIds', 'TEXT'],
     ['censorEnabled', 'INTEGER DEFAULT 0'],
+    ['censorAntiRacismEnabled', 'INTEGER NOT NULL DEFAULT 0'],
     ['censorRoleId', 'TEXT'],
     ['censorBypassRoleIds', 'TEXT'],
     ['censorBypassChannelIds', 'TEXT'],
@@ -1171,6 +1268,18 @@ function createTicketsTable() {
 
   ensureColumn(
     'tickets',
+    'applicationDecisionMessageId',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'tickets',
+    'applicationApplicantNotifiedAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'tickets',
     'closeReason',
     'TEXT'
   );
@@ -1178,6 +1287,48 @@ function createTicketsTable() {
   ensureColumn(
     'tickets',
     'deleteAfter',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'tickets',
+    'closeNoticeSentAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'tickets',
+    'closeAttempts',
+    'INTEGER NOT NULL DEFAULT 0'
+  );
+
+  ensureColumn(
+    'tickets',
+    'closeLastError',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'tickets',
+    'closeStatsRecordedAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'tickets',
+    'transcriptMessageId',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'tickets',
+    'transcriptArchiveChannelId',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'tickets',
+    'transcriptSentAt',
     'INTEGER'
   );
 
@@ -1434,6 +1585,30 @@ function createSuggestionTables() {
     'suggestions',
     'decisionAt',
     'INTEGER'
+  );
+
+  ensureColumn(
+    'suggestions',
+    'decisionDeliveryError',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'suggestions',
+    'reviewStartedAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'suggestions',
+    'decisionMessageId',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'suggestions',
+    'decisionChannelId',
+    'TEXT'
   );
 
   createIndex(
@@ -2567,6 +2742,37 @@ rawRun(`
   )
 `);
 
+rawRun(`
+  CREATE TABLE IF NOT EXISTS leveling_reward_grants (
+    guildId TEXT NOT NULL,
+    userId TEXT NOT NULL,
+    roleId TEXT NOT NULL,
+    level INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    lastError TEXT,
+    grantedAt INTEGER,
+    PRIMARY KEY (guildId, userId, roleId)
+  )
+`);
+
+rawRun(`
+  INSERT OR IGNORE INTO leveling_reward_grants (
+    guildId, userId, roleId, level, status
+  )
+  SELECT users.guildId, users.userId, rewards.roleId, rewards.level, 'PENDING'
+  FROM leveling_users AS users
+  INNER JOIN leveling_rewards AS rewards
+    ON rewards.guildId = users.guildId
+   AND rewards.level <= users.level
+`);
+
+createIndex(
+  'idx_leveling_reward_grants_pending',
+  `CREATE INDEX IF NOT EXISTS idx_leveling_reward_grants_pending
+   ON leveling_reward_grants(status, guildId, userId)`
+);
+
 }
 
 function createPollTables() {
@@ -2674,6 +2880,18 @@ function createInviteTables() {
     'invite_cache',
     'updatedAt',
     'INTEGER DEFAULT 0'
+  );
+
+  ensureColumn(
+    'invite_cache',
+    'maxUses',
+    'INTEGER DEFAULT 0'
+  );
+
+  ensureColumn(
+    'invite_cache',
+    'deletedAt',
+    'INTEGER'
   );
 
   rawRun(`
@@ -2805,6 +3023,45 @@ function createInviteTables() {
   );
 }
 
+function reconcileInviteStatsFromEvents() {
+  rawRun(`
+    UPDATE invite_stats AS stats
+    SET invites = (
+          SELECT COUNT(*) FROM invite_events AS event
+          WHERE event.guildId = stats.guildId
+            AND event.inviterId = stats.userId
+            AND event.eventType = 'JOIN'
+            AND event.confidence = 'EXACT'
+            AND event.source = 'INVITE'
+        ),
+        fake = (
+          SELECT COUNT(*) FROM invite_events AS event
+          WHERE event.guildId = stats.guildId
+            AND event.inviterId = stats.userId
+            AND event.eventType = 'JOIN'
+            AND event.confidence = 'EXACT'
+            AND event.source = 'INVITE'
+            AND event.fake = 1
+        ),
+        leaves = (
+          SELECT COUNT(*) FROM invite_events AS event
+          WHERE event.guildId = stats.guildId
+            AND event.inviterId = stats.userId
+            AND event.eventType = 'LEAVE'
+            AND event.confidence = 'EXACT'
+            AND event.source = 'INVITE'
+            AND event.fake = 0
+        )
+    WHERE EXISTS (
+      SELECT 1 FROM invite_events AS event
+      WHERE event.guildId = stats.guildId
+        AND event.inviterId = stats.userId
+        AND event.confidence = 'EXACT'
+        AND event.source = 'INVITE'
+    )
+  `);
+}
+
 function createGiveawayTables() {
 
   rawRun(`
@@ -2856,6 +3113,42 @@ function createGiveawayTables() {
   ensureColumn(
     'giveaways',
     'endingAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'giveaways',
+    'messageUpdatedAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'giveaways',
+    'announcementMessageId',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'giveaways',
+    'announcementSentAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'giveaways',
+    'endAttempts',
+    'INTEGER NOT NULL DEFAULT 0'
+  );
+
+  ensureColumn(
+    'giveaways',
+    'lastEndError',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'giveaways',
+    'nextEndAttemptAt',
     'INTEGER'
   );
 
@@ -3377,6 +3670,144 @@ function createApplicationTables() {
   );
 }
 
+function createExpansionFeatureTables() {
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS phishing_settings (
+      guildId TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      alertChannelId TEXT,
+      updatedBy TEXT,
+      updatedAt INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS phishing_allowlist (
+      guildId TEXT NOT NULL,
+      domain TEXT NOT NULL,
+      addedBy TEXT,
+      addedAt INTEGER NOT NULL,
+      PRIMARY KEY (guildId, domain)
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS phishing_blocklist (
+      guildId TEXT NOT NULL,
+      domain TEXT NOT NULL,
+      addedBy TEXT,
+      addedAt INTEGER NOT NULL,
+      PRIMARY KEY (guildId, domain)
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS modmail_settings (
+      guildId TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      categoryId TEXT,
+      staffRoleId TEXT,
+      logChannelId TEXT,
+      updatedBy TEXT,
+      updatedAt INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS modmail_threads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guildId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      channelId TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'OPEN',
+      createdAt INTEGER NOT NULL,
+      closedAt INTEGER,
+      closedBy TEXT,
+      closeReason TEXT
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS modmail_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      threadId INTEGER NOT NULL,
+      direction TEXT NOT NULL,
+      authorId TEXT NOT NULL,
+      content TEXT,
+      attachments TEXT,
+      createdAt INTEGER NOT NULL
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS modmail_pending (
+      userId TEXT PRIMARY KEY,
+      content TEXT,
+      attachments TEXT,
+      createdAt INTEGER NOT NULL
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS modmail_preferences (
+      userId TEXT PRIMARY KEY,
+      guildId TEXT NOT NULL,
+      updatedAt INTEGER NOT NULL
+    )
+  `);
+
+  createIndex(
+    'idx_modmail_open_user',
+    `CREATE INDEX IF NOT EXISTS idx_modmail_open_user
+     ON modmail_threads(userId, status, guildId)`
+  );
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS staff_rota_settings (
+      guildId TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      channelId TEXT,
+      staffRoleId TEXT,
+      messageId TEXT,
+      updatedBy TEXT,
+      updatedAt INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS staff_shifts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guildId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      dayOfWeek INTEGER NOT NULL,
+      startMinute INTEGER NOT NULL,
+      endMinute INTEGER NOT NULL,
+      timezone TEXT NOT NULL,
+      escalationOrder INTEGER NOT NULL DEFAULT 100,
+      active INTEGER NOT NULL DEFAULT 1,
+      createdBy TEXT,
+      createdAt INTEGER NOT NULL
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS staff_availability (
+      guildId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'AVAILABLE',
+      note TEXT,
+      updatedAt INTEGER NOT NULL,
+      PRIMARY KEY (guildId, userId)
+    )
+  `);
+
+  createIndex(
+    'idx_staff_shifts_schedule',
+    `CREATE INDEX IF NOT EXISTS idx_staff_shifts_schedule
+     ON staff_shifts(guildId, dayOfWeek, active, escalationOrder)`
+  );
+}
+
 let databaseInitialized =
   false;
 
@@ -3392,11 +3823,15 @@ function initDatabase() {
 
   checkDatabaseIntegrity();
 
+  const initializeSchema = db.transaction(() => {
+
   createCasesTable();
 
   createWarnsTable();
 
   createMutesTable();
+
+  createModerationSupportTables();
 
   createGuildSettingsTable();
 
@@ -3446,6 +3881,8 @@ function initDatabase() {
 
 createInviteTables();
 
+reconcileInviteStatsFromEvents();
+
 createGiveawayTables();
 
 createDailyFactTable();
@@ -3457,6 +3894,12 @@ createDailyFactFactsTable();
 createDailyFactDeliveryHistoryTable();
 
 createApplicationTables();
+
+createExpansionFeatureTables();
+
+  });
+
+  initializeSchema();
 
 databaseInitialized =
   true;
@@ -3473,9 +3916,7 @@ function startDatabaseCleanup() {
     return cleanupInterval;
   }
 
-  cleanupInterval =
-    setInterval(() => {
-
+  function cleanupExpiredRows() {
     try {
 
       const ninetyDaysAgo =
@@ -3491,10 +3932,12 @@ function startDatabaseCleanup() {
         [ninetyDaysAgo]
       );
 
-      const sevenDaysAgo =
-        Date.now() -
-
-        (7 * 24 * 60 * 60 * 1000);
+      const configuredSnapshotDays = Number(process.env.MESSAGE_SNAPSHOT_RETENTION_DAYS || 7);
+      const snapshotDays = Number.isFinite(configuredSnapshotDays)
+        ? Math.min(Math.max(Math.floor(configuredSnapshotDays), 1), 30)
+        : 7;
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      const snapshotCutoff = Date.now() - (snapshotDays * 24 * 60 * 60 * 1000);
 
       run(
 
@@ -3509,7 +3952,7 @@ function startDatabaseCleanup() {
         `DELETE FROM message_snapshots
          WHERE updatedAt < ?`,
 
-        [sevenDaysAgo]
+        [snapshotCutoff]
       );
 
       run(
@@ -3547,6 +3990,14 @@ function startDatabaseCleanup() {
         err
       );
     }
+
+  }
+
+  cleanupExpiredRows();
+
+  cleanupInterval =
+    setInterval(() => {
+      cleanupExpiredRows();
 
   }, 60 * 60 * 1000);
 

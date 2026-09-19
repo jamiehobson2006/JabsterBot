@@ -43,7 +43,7 @@ const permissionDefaults = {
   unmute: PermissionFlagsBits.ModerateMembers,
   warn: PermissionFlagsBits.ModerateMembers,
   warnings: PermissionFlagsBits.ModerateMembers,
-  clearwarns: PermissionFlagsBits.ModerateMembers,
+  clearwarns: PermissionFlagsBits.ManageGuild,
   case: PermissionFlagsBits.ManageGuild,
   cases: PermissionFlagsBits.ManageGuild,
   history: PermissionFlagsBits.ManageGuild,
@@ -56,7 +56,6 @@ const permissionDefaults = {
   lock: PermissionFlagsBits.ManageChannels,
   unlock: PermissionFlagsBits.ManageChannels,
   poll: PermissionFlagsBits.ManageMessages,
-  pollmanage: PermissionFlagsBits.ManageMessages,
   setmodlogs: PermissionFlagsBits.ManageGuild,
   suggestchannel: PermissionFlagsBits.ManageGuild,
   loggingmanager: PermissionFlagsBits.Administrator,
@@ -88,14 +87,12 @@ const permissionDefaults = {
   ginfo: PermissionFlagsBits.ManageGuild,
   gblacklist: PermissionFlagsBits.ManageGuild,
   gunblacklist: PermissionFlagsBits.ManageGuild,
-  invites: PermissionFlagsBits.ManageGuild,
   inviteadmin: PermissionFlagsBits.ManageGuild,
-  invitetop: PermissionFlagsBits.ManageGuild,
   setinvitechannel: PermissionFlagsBits.ManageGuild,
   dailyfact: PermissionFlagsBits.ManageGuild,
   dailyinteraction: PermissionFlagsBits.ManageGuild,
   leveling: PermissionFlagsBits.ManageGuild,
-  levelreward: PermissionFlagsBits.ManageGuild,
+  levelreward: PermissionFlagsBits.ManageRoles,
   socialadd: PermissionFlagsBits.ManageGuild,
   socialremove: PermissionFlagsBits.ManageGuild,
   commandcontrol: PermissionFlagsBits.ManageGuild,
@@ -256,7 +253,9 @@ async function deploy() {
   console.log(`Failed commands: ${failedCommands.length}`);
 
   if (failedCommands.length) {
-    console.log(`Failed: ${failedCommands.join(', ')}`);
+    throw new Error(
+      `Deployment aborted because command loading failed: ${failedCommands.join(', ')}`
+    );
   }
 
   const rest =
@@ -277,17 +276,14 @@ async function deploy() {
 
     console.log(`Clearing guild commands for ${guildId}`);
 
-    await rest.put(
-
-      Routes.applicationGuildCommands(
-        CLIENT_ID,
-        guildId
-      ),
-
-      {
-        body: []
-      }
-    );
+    try {
+      await rest.put(
+        Routes.applicationGuildCommands(CLIENT_ID, guildId),
+        { body: [] }
+      );
+    } catch (error) {
+      console.warn(`Could not clear guild commands for ${guildId}: ${error.message}`);
+    }
   }
 
   console.log(`Deploying ${commands.length} global commands`);

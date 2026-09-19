@@ -4,7 +4,6 @@ const {
 } = require('discord.js');
 
 const {
-  all,
   run
 } = require('../../database');
 
@@ -44,16 +43,16 @@ async function grantChannelAccess(channel, userId, reason) {
 }
 
 function canManageTicket(interaction, ticket) {
-  if (ticket.restricted) {
-    return false;
-  }
-
   if (
     interaction.memberPermissions.has(
       PermissionFlagsBits.Administrator
     )
   ) {
     return true;
+  }
+
+  if (ticket.restricted) {
+    return false;
   }
 
   const staffRoleId =
@@ -138,47 +137,41 @@ module.exports = {
         });
       }
 
-      const staffRoleId =
-        getStaffRole(
-          interaction.guild.id,
-          ticket.type,
-          ticket.channelId
-        );
+      const keepIds = new Set([
+        interaction.guild.roles.everyone.id,
+        ticketOwner.id,
+        interaction.client.user.id
+      ]);
+      const reason = `Ticket made private by ${interaction.user.tag}`;
 
-      if (staffRoleId) {
-        await interaction.channel.permissionOverwrites.edit(
-          staffRoleId,
-          { ViewChannel: false },
-          `Ticket made private by ${interaction.user.tag}`
-        );
+      for (const overwrite of interaction.channel.permissionOverwrites.cache.values()) {
+        if (!keepIds.has(overwrite.id)) {
+          await interaction.channel.permissionOverwrites.delete(overwrite.id, reason);
+        }
       }
 
-      const grantedUsers =
-        all(
-          `SELECT userId
-           FROM ticket_staff
-           WHERE channelId = ?
-           UNION
-           SELECT userId
-           FROM ticket_guests
-           WHERE channelId = ?`,
-          [
-            ticket.channelId,
-            ticket.channelId
-          ]
-        );
-
-      for (const user of grantedUsers) {
-        await interaction.channel.permissionOverwrites.delete(
-          user.userId,
-          `Ticket made private by ${interaction.user.tag}`
-        ).catch(() => null);
-      }
+      await interaction.channel.permissionOverwrites.edit(
+        interaction.guild.roles.everyone.id,
+        { ViewChannel: false },
+        reason
+      );
 
       await grantChannelAccess(
         interaction.channel,
         ticketOwner.id,
-        `Ticket made private by ${interaction.user.tag}`
+        reason
+      );
+
+      await interaction.channel.permissionOverwrites.edit(
+        interaction.client.user.id,
+        {
+          ViewChannel: true,
+          SendMessages: true,
+          ManageChannels: true,
+          ManageMessages: true,
+          ReadMessageHistory: true
+        },
+        reason
       );
 
       run(

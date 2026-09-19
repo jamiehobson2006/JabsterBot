@@ -133,10 +133,7 @@ async function fetchPostMessage(interaction, post) {
 
 async function handleJoin(interaction, post) {
   if (!isDailyInteractionOpen(post)) {
-    return interaction.reply({
-      content: 'This daily interaction has closed.',
-      flags: MessageFlags.Ephemeral
-    });
+    return interaction.editReply({ content: 'This daily interaction has closed.' });
   }
 
   const joined = addParticipant(post, interaction.user.id);
@@ -154,13 +151,12 @@ async function handleJoin(interaction, post) {
       .catch(err => console.error('Daily interaction participant count update error:', err.message));
   }
 
-  return interaction.reply({
+  return interaction.editReply({
     content: joined.changes
       ? hasAnswerButton(interaction.message)
         ? 'You are in. Use **Submit Answer** to share your response.'
         : 'You are in. This activity counts participation only.'
       : 'You have already joined this daily interaction.',
-    flags: MessageFlags.Ephemeral
   });
 }
 
@@ -328,6 +324,7 @@ module.exports = {
       }
 
       if (interaction.customId === 'dailyinteraction_join') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         return handleJoin(interaction, post);
       }
 

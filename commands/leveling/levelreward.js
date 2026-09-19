@@ -10,6 +10,14 @@ const {
   all
 } = require('../../database');
 
+const {
+  automaticRoleSafetyError
+} = require('../../utils/roleSafety');
+
+const {
+  MAX_LEVEL
+} = require('../../utils/leveling');
+
 module.exports = {
 
   cooldown: 3000,
@@ -23,7 +31,7 @@ module.exports = {
     )
 
     .setDefaultMemberPermissions(
-      PermissionFlagsBits.ManageGuild
+      PermissionFlagsBits.ManageRoles
     )
 
     .addSubcommand(subcommand =>
@@ -46,6 +54,8 @@ module.exports = {
             )
 
             .setMinValue(1)
+
+            .setMaxValue(MAX_LEVEL)
 
             .setRequired(true)
         )
@@ -82,6 +92,10 @@ module.exports = {
               'Reward level'
             )
 
+            .setMinValue(1)
+
+            .setMaxValue(MAX_LEVEL)
+
             .setRequired(true)
         )
     )
@@ -98,6 +112,12 @@ module.exports = {
     ),
 
   async execute(interaction) {
+
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageRoles)) {
+      return interaction.editReply({
+        content: 'You need Manage Roles permission.'
+      });
+    }
 
     const guildId =
       interaction.guild.id;
@@ -119,6 +139,18 @@ module.exports = {
           'role'
         );
 
+      const roleError = automaticRoleSafetyError(interaction.guild, role);
+      if (roleError) {
+        return interaction.editReply({ content: roleError });
+      }
+
+      const isOwner = interaction.user.id === interaction.guild.ownerId;
+      if (!isOwner && role.position >= interaction.member.roles.highest.position) {
+        return interaction.editReply({
+          content: 'The reward role must be below your highest role.'
+        });
+      }
+
       run(
 
         `INSERT OR REPLACE INTO leveling_rewards (
@@ -137,6 +169,12 @@ module.exports = {
           level,
           role.id
         ]
+      );
+
+      run(
+        `DELETE FROM leveling_reward_grants
+         WHERE guildId = ? AND level = ? AND status = 'PENDING'`,
+        [guildId, level]
       );
 
       return interaction.editReply({
@@ -187,6 +225,12 @@ module.exports = {
           guildId,
           level
         ]
+      );
+
+      run(
+        `DELETE FROM leveling_reward_grants
+         WHERE guildId = ? AND level = ? AND status = 'PENDING'`,
+        [guildId, level]
       );
 
       return interaction.editReply({

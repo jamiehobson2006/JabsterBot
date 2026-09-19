@@ -29,7 +29,6 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('pollmanage')
     .setDescription('Edit, close, or export a poll you manage')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addSubcommand(subcommand => subcommand
       .setName('close')
       .setDescription('End a poll immediately')

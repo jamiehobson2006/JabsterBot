@@ -62,7 +62,11 @@ module.exports = {
          FROM ticket_settings
 
          WHERE guildId = ?
-         AND enabled = 1`,
+         AND enabled = 1
+         AND categoryId IS NOT NULL
+         AND categoryId <> ''
+         AND roleId IS NOT NULL
+         AND roleId <> ''`,
 
         [
 
