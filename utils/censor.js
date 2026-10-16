@@ -7,7 +7,6 @@ const {
 const {
   parseIdList
 } = require('./contentFilterWhitelist');
-
 const { findRacistTerm } = require('./racismFilter');
 
 function normalizeCensorTerm(value) {
@@ -22,19 +21,77 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function findCensoredTerm(content, terms) {
-  if (!content || !Array.isArray(terms)) {
-    return null;
-  }
+const LEET_MAP = Object.freeze({
+  '0': 'o',
+  '1': 'i',
+  '2': 'z',
+  '3': 'e',
+  '4': 'a',
+  '5': 's',
+  '6': 'g',
+  '7': 't',
+  '8': 'b',
+  '9': 'g',
+  '@': 'a',
+  '$': 's'
+});
 
-  const racistTerm = findRacistTerm(content, new Set(terms.map(term =>
-    normalizeCensorTerm(term.normalizedWord || term.word || term)
-  )));
-  if (racistTerm) return racistTerm;
+function normalizeObfuscation(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f\u200B-\u200D\u2060\uFEFF]/g, '')
+    .toLowerCase()
+    .split('')
+    .map(character => LEET_MAP[character] || character)
+    .join('');
+}
+
+function collapseObfuscation(value) {
+  return normalizeObfuscation(value).replace(/[^a-z0-9]+/g, '');
+}
+
+function flexibleExpression(term) {
+  const characters = [...collapseObfuscation(term)];
+  if (!characters.length) return null;
+  const body = characters.map(escapeRegExp).join('[^a-z0-9]*');
+  return new RegExp(`(?:^|[^a-z0-9])(${body})(?=$|[^a-z0-9])`, 'iu');
+}
+
+function findCensoredTerm(content, terms, matchMode = 'STRICT') {
+  if (!content || !Array.isArray(terms)) return null;
+
+  const normalizedContent = String(content).normalize('NFKC');
+  const mode = String(matchMode || 'STRICT').toUpperCase();
+  const configuredRacialTerms = new Set(
+    terms.map(term => normalizeCensorTerm(term.normalizedWord || term.word || term))
+  );
+  const racialMatch = findRacistTerm(normalizedContent, configuredRacialTerms);
+
+  if (racialMatch) {
+    const configured = terms.find(term =>
+      normalizeCensorTerm(term.normalizedWord || term.word || term) === racialMatch
+    );
+    return configured?.word || racialMatch;
+  }
 
   for (const term of terms) {
     const normalized = normalizeCensorTerm(term.normalizedWord || term.word || term);
     if (!normalized) continue;
+
+    if (mode === 'AGGRESSIVE') {
+      const collapsedTerm = collapseObfuscation(normalized);
+      if (collapsedTerm && collapseObfuscation(normalizedContent).includes(collapsedTerm)) {
+        return term.word || normalized;
+      }
+      continue;
+    }
+
+    if (mode === 'FLEXIBLE') {
+      if (flexibleExpression(normalized)?.test(normalizeObfuscation(normalizedContent))) {
+        return term.word || normalized;
+      }
+      continue;
+    }
 
     const phrase = escapeRegExp(normalized).replace(/ /g, '\\s+');
     const expression = new RegExp(
@@ -42,7 +99,7 @@ function findCensoredTerm(content, terms) {
       'iu'
     );
 
-    if (expression.test(content.normalize('NFKC'))) {
+    if (expression.test(normalizedContent)) {
       return term.word || normalized;
     }
   }
@@ -54,6 +111,8 @@ function getCensorSettings(guildId) {
   return get(
     `SELECT censorEnabled,
             censorAntiRacismEnabled,
+            censorMatchMode,
+            censorAction,
             censorRoleId,
             censorBypassRoleIds,
             censorBypassChannelIds,
@@ -71,6 +130,26 @@ function setAntiRacismEnabled(guildId, enabled) {
      ON CONFLICT(guildId) DO UPDATE SET censorAntiRacismEnabled = excluded.censorAntiRacismEnabled`,
     [guildId, enabled ? 1 : 0]
   );
+}
+
+function setCensorPolicy(guildId, matchMode, action) {
+  const safeMode = ['STRICT', 'FLEXIBLE', 'AGGRESSIVE'].includes(String(matchMode).toUpperCase())
+    ? String(matchMode).toUpperCase()
+    : 'STRICT';
+  const safeAction = ['DELETE', 'DELETE_WARN', 'TIMEOUT'].includes(String(action).toUpperCase())
+    ? String(action).toUpperCase()
+    : 'DELETE';
+
+  run(
+    `INSERT INTO guild_settings (guildId, censorMatchMode, censorAction)
+     VALUES (?, ?, ?)
+     ON CONFLICT(guildId) DO UPDATE SET
+       censorMatchMode = excluded.censorMatchMode,
+       censorAction = excluded.censorAction`,
+    [guildId, safeMode, safeAction]
+  );
+
+  return { matchMode: safeMode, action: safeAction };
 }
 
 function getCensorBypassRoles(settings) {
@@ -105,17 +184,12 @@ function addCensorTerm({ guildId, word, addedBy }) {
 
   run(
     `INSERT INTO censor_words (
-       guildId,
-       normalizedWord,
-       word,
-       addedBy,
-       addedAt
-     )
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(guildId, normalizedWord)
-     DO UPDATE SET word = excluded.word,
-                   addedBy = excluded.addedBy,
-                   addedAt = excluded.addedAt`,
+       guildId, normalizedWord, word, addedBy, addedAt
+     ) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(guildId, normalizedWord) DO UPDATE SET
+       word = excluded.word,
+       addedBy = excluded.addedBy,
+       addedAt = excluded.addedAt`,
     [guildId, normalizedWord, cleaned, addedBy, Date.now()]
   );
 
@@ -125,14 +199,14 @@ function addCensorTerm({ guildId, word, addedBy }) {
 function removeCensorTerm(guildId, word) {
   return run(
     `DELETE FROM censor_words
-     WHERE guildId = ?
-     AND normalizedWord = ?`,
+     WHERE guildId = ? AND normalizedWord = ?`,
     [guildId, normalizeCensorTerm(word)]
   ).changes;
 }
 
 module.exports = {
   addCensorTerm,
+  collapseObfuscation,
   findCensoredTerm,
   getCensorBypassCategories,
   getCensorBypassChannels,
@@ -141,5 +215,6 @@ module.exports = {
   listCensorTerms,
   normalizeCensorTerm,
   removeCensorTerm,
-  setAntiRacismEnabled
+  setAntiRacismEnabled,
+  setCensorPolicy
 };

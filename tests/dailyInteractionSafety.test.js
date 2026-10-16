@@ -1,5 +1,13 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
+
+const tempDir = fs.mkdtempSync(
+  path.join(os.tmpdir(), 'jabster-studios-daily-safety-')
+);
+process.env.DATABASE_PATH = path.join(tempDir, 'database.db');
 
 const {
   validateDailyInteractionContent,
@@ -12,6 +20,8 @@ test('daily interaction answers reject links, mentions, hidden text, and configu
   const post = { type: 'QUESTION', prompt: 'Share a positive moment.' };
 
   assert.equal(validateDailyInteractionContent({ answer: 'Visit https://example.com' }).valid, false);
+  assert.equal(validateDailyInteractionContent({ answer: 'Visit example.com' }).valid, false);
+  assert.equal(validateDailyInteractionContent({ answer: 'Visit example [dot] com' }).valid, false);
   assert.equal(validateDailyInteractionContent({ answer: 'Hello @everyone' }).valid, false);
   assert.equal(validateDailyInteractionContent({ answer: 'he\u200Bllo' }).valid, false);
   assert.equal(validateDailyInteractionContent({ answer: 'he\u2066llo' }).valid, false);
@@ -91,8 +101,15 @@ test('word-chain answers must be one word beginning with the required letter', (
   };
 
   assert.equal(validateDailyInteractionAnswer({ post, answer: 'eagle' }).valid, true);
+  assert.equal(validateDailyInteractionAnswer({ post, answer: 'evaporate' }).valid, true);
   assert.equal(validateDailyInteractionAnswer({ post, answer: 'apple' }).valid, false);
   assert.equal(validateDailyInteractionAnswer({ post, answer: 'eagle flight' }).valid, false);
+  assert.equal(validateDailyInteractionAnswer({ post, answer: 'eeeeee' }).valid, false);
+});
+
+test('daily interaction answers are limited to 250 characters', () => {
+  assert.equal(validateDailyInteractionContent({ answer: 'a'.repeat(250) }).valid, true);
+  assert.equal(validateDailyInteractionContent({ answer: 'a'.repeat(251) }).valid, false);
 });
 
 test('daily interaction discussion content has the same safety checks without game-format rules', () => {

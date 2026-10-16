@@ -18,10 +18,13 @@ const {
 } = require('../../utils/memberExperience');
 
 const {
-  canManageReactionRole,
   parseReactionEmoji,
   reactionEmojiKey
 } = require('../../utils/reactionRoles');
+
+const {
+  automaticRoleSafetyError
+} = require('../../utils/roleSafety');
 
 const textChannelTypes = [
   ChannelType.GuildText,
@@ -90,18 +93,7 @@ async function getPanelMessage({
 }
 
 function invalidRoleMessage(guild, role) {
-
-  if (role.id === guild.id) {
-
-    return 'The @everyone role cannot be a reaction role.';
-  }
-
-  if (!canManageReactionRole(guild, role)) {
-
-    return 'Choose a normal role below my highest role.';
-  }
-
-  return null;
+  return automaticRoleSafetyError(guild, role);
 }
 
 module.exports = {

@@ -13,7 +13,14 @@ const {
   logAudit
 } = require('./logger');
 
+const {
+  deliverOnce,
+  enqueueDelivery,
+  sendQueuedMessage
+} = require('./deliveryOutbox');
+
 const ticketTypes = require('./tickets/ticketTypes');
+const { startManagedLoop } = require('./serviceRunner');
 
 function getTicketTarget(guildId, type) {
   return get(
@@ -96,20 +103,13 @@ function targetDescription(ticket, target, targetMinutes) {
 }
 
 async function sendTargetAlert(client, row, target, targetMinutes) {
-  const inserted = run(
-    `INSERT OR IGNORE INTO ticket_target_alerts (
-       ticketId,
-       target,
-       alertedAt
-     )
-     VALUES (?, ?, ?)`,
-    [row.id, target, Date.now()]
+  const existing = get(
+    'SELECT 1 FROM ticket_target_alerts WHERE ticketId = ? AND target = ?',
+    [row.id, target]
   );
+  if (existing) return false;
 
-  if (!inserted.changes) {
-    return false;
-  }
-
+  const deliveryKey = `ticket-target:${row.id}:${target}`;
   const channel = await client.channels.fetch(row.alertChannelId)
     .catch(() => null);
 
@@ -159,15 +159,33 @@ async function sendTargetAlert(client, row, target, targetMinutes) {
     )
     .setTimestamp();
 
-  if (channel?.isTextBased()) {
-    await channel.send({
-      content,
-      embeds: [embed],
-      allowedMentions: row.alertRoleId
-        ? { roles: [row.alertRoleId], parse: [] }
-        : { parse: [] }
-    }).catch(err => console.error('Ticket target alert send error:', err));
+  if (!channel?.isTextBased()) {
+    throw new Error('Ticket target alert channel is unavailable or is not text based.');
   }
+
+  const payload = {
+    content,
+    embeds: [embed],
+    allowedMentions: row.alertRoleId
+      ? { roles: [row.alertRoleId], parse: [] }
+      : { parse: [] }
+  };
+  enqueueDelivery({
+    deliveryKey,
+    type: 'TICKET_TARGET',
+    guildId: row.guildId,
+    channelId: row.alertChannelId,
+    payload: { ticketId: row.id, target, targetMinutes, message: payload }
+  });
+  const delivery = await deliverOnce(deliveryKey,
+    claimed => sendQueuedMessage(channel, claimed, payload));
+  if (delivery?.status !== 'SENT') return false;
+
+  run(
+    `INSERT OR IGNORE INTO ticket_target_alerts (ticketId, target, alertedAt)
+     VALUES (?, ?, ?)`,
+    [row.id, target, Date.now()]
+  );
 
   await logAudit(client, row.guildId, {
     action: `TICKET_${target}_TARGET_MISSED`,
@@ -235,17 +253,8 @@ async function checkTicketTargets(client) {
 }
 
 function startTicketTargetLoop(client) {
-  checkTicketTargets(client)
-    .catch(err => console.error('Ticket target check error:', err));
-
-  const interval = setInterval(
-    () => checkTicketTargets(client)
-      .catch(err => console.error('Ticket target check error:', err)),
-    60 * 1000
-  );
-
-  interval.unref?.();
-  return interval;
+  return startManagedLoop('ticket-targets', () => checkTicketTargets(client), 60_000,
+    { timeoutMs: 60_000 });
 }
 
 module.exports = {

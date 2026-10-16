@@ -17,26 +17,14 @@ const {
   validHttpsUrl
 } = require('../../utils/memberExperience');
 
+const {
+  automaticRoleSafetyError
+} = require('../../utils/roleSafety');
+
 const textChannelTypes = [
   ChannelType.GuildText,
   ChannelType.GuildAnnouncement
 ];
-
-function canManageRole(guild, role) {
-
-  const botMember =
-    guild.members.me;
-
-  return Boolean(
-    role &&
-    !role.managed &&
-    botMember &&
-    botMember.permissions.has(
-      PermissionFlagsBits.ManageRoles
-    ) &&
-    role.position < botMember.roles.highest.position
-  );
-}
 
 async function disablePreviousPanel(
   client,
@@ -289,17 +277,22 @@ module.exports = {
       });
     }
 
-    if (!canManageRole(interaction.guild, verifiedRole)) {
+    const verifiedRoleError =
+      automaticRoleSafetyError(interaction.guild, verifiedRole);
 
+    if (verifiedRoleError) {
       return interaction.editReply({
-        content: 'The verified role must be a normal role below my highest role.'
+        content: `The verified role is unsafe: ${verifiedRoleError}`
       });
     }
 
-    if (unverifiedRole && !canManageRole(interaction.guild, unverifiedRole)) {
+    const unverifiedRoleError = unverifiedRole
+      ? automaticRoleSafetyError(interaction.guild, unverifiedRole)
+      : null;
 
+    if (unverifiedRoleError) {
       return interaction.editReply({
-        content: 'The unverified role must be a normal role below my highest role.'
+        content: `The unverified role is unsafe: ${unverifiedRoleError}`
       });
     }
 

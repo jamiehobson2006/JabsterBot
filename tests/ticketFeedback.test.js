@@ -205,6 +205,9 @@ test('submitted feedback retries until it is posted once in the feedback channel
      WHERE id = ?`,
     [record.id]
   );
+  run('UPDATE delivery_outbox SET nextAttemptAt = 0 WHERE deliveryKey = ?', [
+    `ticket-feedback:${record.id}`
+  ]);
 
   const retry = await publishPendingFeedback(client);
   const published = getFeedback(record.id);

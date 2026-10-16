@@ -24,6 +24,10 @@ const {
 
 } = require('../../utils/logger');
 
+const {
+  performModerationAction
+} = require('../../utils/moderationActions');
+
 module.exports = {
 
   cooldown: 3000,
@@ -180,15 +184,19 @@ module.exports = {
             '❌ That user is not banned.'
         });
       }
-
-      // ========================
-      // 🔓 UNBAN
-      // ========================
-      await interaction.guild.members.unban(
-
-        userId,
-
-        `${reason} | By ${interaction.user.tag}`
+      const { caseId } = await performModerationAction(
+        {
+          guildId: interaction.guild.id,
+          userId,
+          moderatorId: interaction.user.id,
+          action: 'UNBAN',
+          reason,
+          channelId: interaction.channelId
+        },
+        () => interaction.guild.members.unban(
+          userId,
+          `${reason} | By ${interaction.user.tag}`
+        )
       );
 
       // ========================
@@ -371,44 +379,6 @@ module.exports = {
           err
         );
       }
-
-      // ========================
-      // 💾 SAVE CASE
-      // ========================
-      const result =
-        run(
-
-          `INSERT INTO cases
-
-           (
-             guildId,
-             userId,
-             moderatorId,
-             action,
-             reason,
-             createdAt
-           )
-
-           VALUES (?, ?, ?, ?, ?, ?)`,
-
-          [
-
-            interaction.guild.id,
-
-            userId,
-
-            interaction.user.id,
-
-            'UNBAN',
-
-            reason,
-
-            Date.now()
-          ]
-        );
-
-      const caseId =
-        result?.lastInsertRowid || 'N/A';
 
       // ========================
       // 📜 AUDIT LOG

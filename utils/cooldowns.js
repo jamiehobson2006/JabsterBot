@@ -1,6 +1,7 @@
 const {
   get,
-  run
+  run,
+  transaction
 } = require('../database');
 
 // ==================================================
@@ -132,7 +133,7 @@ setInterval(() => {
     );
   }
 
-}, SWEEP_INTERVAL);
+}, SWEEP_INTERVAL).unref?.();
 
 // ==================================================
 // 🧠 GET COOLDOWN
@@ -353,44 +354,44 @@ async function setCooldown(
 // ⚡ USE COOLDOWN
 // ==================================================
 async function useCooldown(
-
   guildId,
   userId,
   command,
   cooldownMs
-
 ) {
+  const safeGuildId = guildId || 'dm';
+  const safeCooldown = Math.max(safeNumber(cooldownMs), 0);
+  if (safeCooldown <= 0) return 0;
 
-  const remaining =
-    await checkCooldown(
+  const now = Date.now();
+  const result = transaction(() => {
+    const row = get(
+      `SELECT lastUsed
+       FROM cooldowns
+       WHERE guildId = ? AND userId = ? AND command = ?`,
+      [safeGuildId, userId, command]
+    );
+    const lastUsed = safeNumber(row?.lastUsed);
+    const remaining = lastUsed ? safeCooldown - (now - lastUsed) : 0;
+    if (remaining > 0) return { remaining, lastUsed };
 
-      guildId,
-      userId,
-      command,
-      cooldownMs
+    run(
+      `INSERT INTO cooldowns (guildId, userId, command, lastUsed)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(guildId, userId, command)
+       DO UPDATE SET lastUsed = excluded.lastUsed`,
+      [safeGuildId, userId, command, now]
     );
 
-  // ==============================================
-  // ⏱ STILL ACTIVE
-  // ==============================================
-  if (
-    remaining > 0
-  ) {
+    return { remaining: 0, lastUsed: now };
+  });
 
-    return remaining;
-  }
+  cache.set(key(guildId, userId, command), {
+    lastUsed: result.lastUsed,
+    expires: now + CACHE_LIFETIME
+  });
 
-  // ==============================================
-  // 💾 APPLY COOLDOWN
-  // ==============================================
-  await setCooldown(
-
-    guildId,
-    userId,
-    command
-  );
-
-  return 0;
+  return Math.max(result.remaining, 0);
 }
 
 // ==================================================

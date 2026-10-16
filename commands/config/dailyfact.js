@@ -190,7 +190,7 @@ module.exports = {
 
       run(
         `UPDATE dailyfact_config
-         SET channelId = ?
+         SET channelId = ?, nextAttemptAt = NULL, lastDeliveryError = NULL
          WHERE guildId = ?`,
         [channel.id, guildId]
       );
@@ -213,7 +213,7 @@ module.exports = {
 
       run(
         `UPDATE dailyfact_config
-         SET enabled = 1
+         SET enabled = 1, nextAttemptAt = NULL, lastDeliveryError = NULL
          WHERE guildId = ?`,
         [guildId]
       );
@@ -245,7 +245,7 @@ module.exports = {
 
       run(
         `UPDATE dailyfact_config
-         SET category = ?
+         SET category = ?, nextAttemptAt = NULL, lastDeliveryError = NULL
          WHERE guildId = ?`,
         [category, guildId]
       );
@@ -281,7 +281,7 @@ module.exports = {
         `UPDATE dailyfact_config
          SET hour = ?,
              minute = ?,
-             timezone = ?
+             timezone = ?, nextAttemptAt = NULL, lastDeliveryError = NULL
          WHERE guildId = ?`,
         [hour, minute, timezone, guildId]
       );

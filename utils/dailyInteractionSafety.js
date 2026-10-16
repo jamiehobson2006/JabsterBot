@@ -3,9 +3,10 @@ const {
 } = require('./censor');
 
 const { findRacistTerm } = require('./racismFilter');
+const { hasLink } = require('./linkDetection');
 
-const MAX_RESPONSE_LENGTH = 600;
-const MAX_GAME_RESPONSE_LENGTH = 300;
+const MAX_RESPONSE_LENGTH = 250;
+const MAX_GAME_RESPONSE_LENGTH = 250;
 const MAX_PROMPT_LENGTH = 600;
 const MAX_TITLE_LENGTH = 120;
 
@@ -30,9 +31,20 @@ const TRIVIA_ANSWERS = Object.freeze({
   'red planet': ['mars']
 });
 
-const LINK_PATTERN = /\b(?:https?:\/\/|www\.|discord\.gg\/|discord(?:app)?\.com\/invite\/|[a-z0-9][a-z0-9-]{0,62}\.(?:com|net|org|gg|io|tv|me|co|uk|app|dev|info|xyz|site|online|link|live|shop|games)(?:[/?#][^\s<]*)?)/iu;
 const MENTION_PATTERN = /(?:@everyone|@here|<@!?\d+>|<@&\d+>|<#\d+>)/u;
 const INVISIBLE_OR_DIRECTIONAL_PATTERN = /[\u180E\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/u;
+const WORD_GAME_DICTIONARY = new Set(require('an-array-of-english-words'));
+
+const LIGHT_RHYMES = new Set([
+  'bright', 'flight', 'fright', 'height', 'kite', 'might', 'night', 'right',
+  'sight', 'tight', 'white'
+]);
+
+const MEDIA_TITLES = new Set([
+  'minecraft', 'mario', 'mario kart', 'moana', 'monopoly', 'mulan',
+  'sonic', 'star wars', 'stardew valley', 'super mario', 'spider man',
+  'scooby doo', 'shrek', 'splatoon', 'subnautica'
+]);
 
 // Daily interactions are intended to be family-friendly. The server's custom
 // censor list remains the extensible layer for community-specific terms.
@@ -260,6 +272,7 @@ function lastLetter(value) {
 
 function validateGameAnswer(post, answer) {
   const prompt = promptText(post);
+  const normalizedAnswer = normalizeAnswer(answer);
 
   const wordChain = prompt.match(/last letter of\s+([\p{L}]+)/iu);
   if (wordChain) {
@@ -269,6 +282,10 @@ function validateGameAnswer(post, answer) {
 
     if (firstLetter(answer) !== lastLetter(wordChain[1])) {
       return `Your word must begin with the letter ${lastLetter(wordChain[1]).toUpperCase()}.`;
+    }
+
+    if (!WORD_GAME_DICTIONARY.has(normalizedAnswer)) {
+      return 'Use a recognised English word for the word chain.';
     }
   }
 
@@ -281,10 +298,19 @@ function validateGameAnswer(post, answer) {
     if (firstLetter(answer) !== firstLetter(alphabetChallenge[1])) {
       return `Your answer must begin with the letter ${firstLetter(alphabetChallenge[1]).toUpperCase()}.`;
     }
+
+    if (!MEDIA_TITLES.has(normalizedAnswer)) {
+      return 'Choose a recognised game, film, or show beginning with the requested letter.';
+    }
   }
 
-  if (/^One-word story:/iu.test(prompt) && !/^\p{L}{2,32}$/u.test(answer)) {
-    return 'This game only accepts one normal word.';
+  if (/^One-word story:/iu.test(prompt)) {
+    if (!/^\p{L}{2,32}$/u.test(answer)) {
+      return 'This game only accepts one normal word.';
+    }
+    if (!WORD_GAME_DICTIONARY.has(normalizedAnswer)) {
+      return 'Use a recognised English word for the story.';
+    }
   }
 
   if (/^Two truths and a lie:/iu.test(prompt)) {
@@ -305,12 +331,15 @@ function validateGameAnswer(post, answer) {
     }
   }
 
-  if (/^Rhyme round:/iu.test(prompt) && !/^\p{L}{1,28}ight$/iu.test(answer)) {
-    return 'Reply with one word that rhymes with light.';
+  if (/^Rhyme round:/iu.test(prompt) && !LIGHT_RHYMES.has(normalizedAnswer)) {
+    return 'Reply with one recognised word that rhymes with light.';
   }
 
-  if (/^Five-letter round:/iu.test(prompt) && !/^[A-Za-z]{5}$/u.test(answer)) {
-    return 'Reply with one ordinary five-letter word.';
+  if (
+    /^Five-letter round:/iu.test(prompt) &&
+    (!/^[A-Za-z]{5}$/u.test(answer) || !WORD_GAME_DICTIONARY.has(normalizedAnswer))
+  ) {
+    return 'Reply with one recognised five-letter word.';
   }
 
   const choices = choicesFromPrompt(post);
@@ -340,7 +369,7 @@ function validateDailyInteractionContent({ answer, censorTerms = [], maxLength =
     return { valid: false, message: 'Use standard English letters in daily interaction answers.' };
   }
 
-  if (LINK_PATTERN.test(cleaned)) {
+  if (hasLink(cleaned)) {
     return { valid: false, message: 'Links are not allowed in daily interaction answers.' };
   }
 
@@ -348,7 +377,7 @@ function validateDailyInteractionContent({ answer, censorTerms = [], maxLength =
     return { valid: false, message: 'Mentions are not allowed in daily interaction answers.' };
   }
 
-  const matchedCustomTerm = findCensoredTerm(cleaned, censorTerms);
+  const matchedCustomTerm = findCensoredTerm(cleaned, censorTerms, 'AGGRESSIVE');
 
   if (matchedCustomTerm || containsBuiltInUnsafeLanguage(cleaned)) {
     return { valid: false, message: 'Keep daily interaction answers family-friendly and respectful.' };

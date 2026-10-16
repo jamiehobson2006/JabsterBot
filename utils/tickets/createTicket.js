@@ -17,6 +17,7 @@ const {
 const {
   get,
   run,
+  transaction,
   checkpointDatabase
 } = require('../../database');
 
@@ -27,6 +28,10 @@ const {
 
 const ticketTypes =
   require('./ticketTypes');
+
+const {
+  ticketFingerprint
+} = require('../ticketFingerprint');
 
 const ticketCreationLocks = new Set();
 
@@ -113,6 +118,30 @@ async function createTicketUnlocked({
   // ==========================================
   // 🔍 FETCH SETTINGS
   // ==========================================
+  const fingerprint = ticketFingerprint({
+    guildId: interaction.guild.id,
+    userId: interaction.user.id,
+    type: safeType,
+    formId: application?.form?.id || null,
+    answers: application?.answers || null,
+    requestId: interaction.id
+  });
+
+  const duplicate = get(
+    `SELECT id, channelId
+     FROM tickets
+     WHERE guildId = ?
+       AND userId = ?
+       AND fingerprint = ?
+       AND UPPER(status) IN ('OPEN', 'CLOSING')
+     LIMIT 1`,
+    [interaction.guild.id, interaction.user.id, fingerprint]
+  );
+
+  if (duplicate) {
+    throw new Error(`This exact ticket already exists in <#${duplicate.channelId}>.`);
+  }
+
   const settings =
     get(
 
@@ -547,73 +576,59 @@ async function createTicketUnlocked({
   // ==========================================
   // 💾 SAVE DATABASE
   // ==========================================
-  const ticketResult =
-    run(
-
-    `INSERT INTO tickets
-
-     (
-       guildId,
-       channelId,
-       messageId,
-       userId,
-       type,
-       applicationFormId,
-       createdAt,
-       status
-     )
-
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-
-    [
-
-      interaction.guild.id,
-
-      channel.id,
-
-      msg.id,
-
-      interaction.user.id,
-
-      safeType,
-
-      application?.form?.id || null,
-
-      Date.now(),
-
-      'OPEN'
-    ]
-  );
-
-  const ticketId =
-    ticketResult.lastInsertRowid;
-
-  if (application) {
-
-    run(
-
-      `INSERT INTO application_responses (
+  const ticketId = transaction(() => {
+    const ticketResult = run(
+      `INSERT INTO tickets (
          guildId,
-         formId,
-         ticketId,
          channelId,
+         messageId,
          userId,
-         answersJson,
-         submittedAt
-       )
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-
+         type,
+         applicationFormId,
+         fingerprint,
+         createdAt,
+         status
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         interaction.guild.id,
-        application.form.id,
-        ticketId,
         channel.id,
+        msg.id,
         interaction.user.id,
-        JSON.stringify(applicationAnswers),
-        Date.now()
+        safeType,
+        application?.form?.id || null,
+        fingerprint,
+        Date.now(),
+        'OPEN'
       ]
     );
-  }
+
+    const savedTicketId = ticketResult.lastInsertRowid;
+
+    if (application) {
+      run(
+        `INSERT INTO application_responses (
+           guildId,
+           formId,
+           ticketId,
+           channelId,
+           userId,
+           answersJson,
+           submittedAt
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          interaction.guild.id,
+          application.form.id,
+          savedTicketId,
+          channel.id,
+          interaction.user.id,
+          JSON.stringify(applicationAnswers),
+          Date.now()
+        ]
+      );
+    }
+
+    return savedTicketId;
+  });
 
   checkpointDatabase();
 

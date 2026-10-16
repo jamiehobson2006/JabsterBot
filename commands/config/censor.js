@@ -22,7 +22,8 @@ const {
   getCensorSettings,
   listCensorTerms,
   removeCensorTerm,
-  setAntiRacismEnabled
+  setAntiRacismEnabled,
+  setCensorPolicy
 } = require('../../utils/censor');
 
 const textChannelTypes = [
@@ -127,6 +128,27 @@ module.exports = {
         .setDescription('Check new and edited messages, including custom censor exemptions')
         .setRequired(true)))
     .addSubcommand(subcommand => subcommand
+      .setName('policy')
+      .setDescription('Choose custom censor matching and enforcement')
+      .addStringOption(option => option
+        .setName('match_mode')
+        .setDescription('How strongly custom terms detect disguises')
+        .addChoices(
+          { name: 'Strict words and phrases', value: 'STRICT' },
+          { name: 'Flexible separators and leetspeak', value: 'FLEXIBLE' },
+          { name: 'Aggressive collapsed matching', value: 'AGGRESSIVE' }
+        )
+        .setRequired(true))
+      .addStringOption(option => option
+        .setName('action')
+        .setDescription('Action taken when a custom term is found')
+        .addChoices(
+          { name: 'Delete', value: 'DELETE' },
+          { name: 'Delete and warn in channel', value: 'DELETE_WARN' },
+          { name: 'Delete and timeout for 5 minutes', value: 'TIMEOUT' }
+        )
+        .setRequired(true)))
+    .addSubcommand(subcommand => subcommand
       .setName('bypass-role-add')
       .setDescription('Allow a role to bypass censoring')
       .addRoleOption(option => option
@@ -203,6 +225,18 @@ module.exports = {
         content: enabled
           ? 'Anti-racism filtering is enabled for new and edited member messages in all server channels and threads. It checks built-in slurs and common disguises, regardless of custom censor exemptions. This setting survives restarts. I need Manage Messages to delete matches.'
           : 'The built-in anti-racism filter is disabled. Your custom censor list is unchanged.'
+      });
+    }
+
+    if (subcommand === 'policy') {
+      const policy = setCensorPolicy(
+        interaction.guild.id,
+        interaction.options.getString('match_mode', true),
+        interaction.options.getString('action', true)
+      );
+
+      return interaction.editReply({
+        content: `Censor policy updated: **${policy.matchMode}** matching with **${policy.action}** enforcement.`
       });
     }
 
@@ -375,6 +409,8 @@ module.exports = {
           { name: 'Custom Censor', value: settings?.censorEnabled ? 'Active' : 'Inactive', inline: true },
           { name: 'Anti-Racism', value: settings?.censorAntiRacismEnabled ? 'Active (no custom exemptions)' : 'Inactive', inline: true },
           { name: 'Manager Role', value: settings?.censorRoleId ? `<@&${settings.censorRoleId}>` : 'Manage Server permission', inline: true },
+          { name: 'Match Mode', value: settings?.censorMatchMode || 'STRICT', inline: true },
+          { name: 'Action', value: settings?.censorAction || 'DELETE', inline: true },
           { name: 'Terms', value: String(terms.length), inline: true },
           { name: 'Role Bypasses', value: String(roleIds.length), inline: true },
           { name: 'Channel Bypasses', value: String(channelIds.length), inline: true },

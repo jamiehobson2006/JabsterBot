@@ -26,6 +26,10 @@ const {
 
 } = require('../../utils/logger');
 
+const {
+  performModerationAction
+} = require('../../utils/moderationActions');
+
 // ========================
 // ⏱ AUTO PUNISHMENTS
 // ========================
@@ -310,93 +314,23 @@ module.exports = {
             user.id
           ]
         );
-
-      // ========================
-      // 🔢 UPDATE WARN COUNT
-      // ========================
-      run(
-
-        `INSERT INTO warns
-
-         (
-           guildId,
-           userId,
-           count
-         )
-
-         VALUES (?, ?, 1)
-
-         ON CONFLICT(guildId, userId)
-
-         DO UPDATE SET
-
-         count = count + 1`,
-
-        [
-
-          interaction.guild.id,
-
-          user.id
-        ]
+      const { caseId } = await performModerationAction(
+        {
+          guildId: interaction.guild.id,
+          userId: user.id,
+          moderatorId: interaction.user.id,
+          action: 'WARN',
+          reason,
+          channelId: interaction.channelId
+        },
+        async () => {}
       );
 
-      const row =
-        get(
-
-          `SELECT count
-           FROM warns
-
-           WHERE guildId = ?
-           AND userId = ?`,
-
-          [
-
-            interaction.guild.id,
-
-            user.id
-          ]
-        );
-
-      const warnCount =
-        row?.count || 1;
-
-      // ========================
-      // 📁 CREATE CASE
-      // ========================
-      const result =
-        run(
-
-          `INSERT INTO cases
-
-           (
-             guildId,
-             userId,
-             moderatorId,
-             action,
-             reason,
-             createdAt
-           )
-
-           VALUES (?, ?, ?, ?, ?, ?)`,
-
-          [
-
-            interaction.guild.id,
-
-            user.id,
-
-            interaction.user.id,
-
-            'WARN',
-
-            reason,
-
-            Date.now()
-          ]
-        );
-
-      const caseId =
-        result?.lastInsertRowid || 'N/A';
+      const row = get(
+        `SELECT count FROM warns WHERE guildId = ? AND userId = ?`,
+        [interaction.guild.id, user.id]
+      );
+      const warnCount = row?.count || 1;
 
       // ========================
       // 🚨 ESCALATION
@@ -427,94 +361,26 @@ module.exports = {
             punishment.type ===
             'timeout'
           ) {
-
-            await member.timeout(
-
-              punishment.duration,
-
-              `Auto punishment (${warnCount} warns)`
+            const expiresAt = Date.now() + punishment.duration;
+            const autoResult = await performModerationAction(
+              {
+                guildId: interaction.guild.id,
+                userId: user.id,
+                moderatorId: interaction.client.user.id,
+                action: 'AUTO-TIMEOUT',
+                reason: `Reached ${warnCount} warns`,
+                duration: punishment.duration,
+                expiresAt,
+                channelId: interaction.channelId
+              },
+              () => member.timeout(
+                punishment.duration,
+                `Auto punishment (${warnCount} warns)`
+              )
             );
-
+            autoCaseId = autoResult.caseId;
             escalationText =
-
               `🔇 Automatic timeout applied (${formatDuration(punishment.duration)})`;
-
-            // ====================
-            // 💾 ACTIVE TIMEOUT
-            // ====================
-            const expiresAt =
-              Date.now() +
-
-              punishment.duration;
-
-            const autoResult =
-              run(
-
-                `INSERT INTO cases
-
-                 (
-                   guildId,
-                   userId,
-                   moderatorId,
-                   action,
-                   reason,
-                   duration,
-                   expiresAt,
-                   createdAt
-                 )
-
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-
-                [
-
-                  interaction.guild.id,
-
-                  user.id,
-
-                  interaction.client.user.id,
-
-                  'AUTO-TIMEOUT',
-
-                  `Reached ${warnCount} warns`,
-
-                  punishment.duration,
-
-                  expiresAt,
-
-                  Date.now()
-                ]
-              );
-
-            autoCaseId =
-              autoResult?.lastInsertRowid || null;
-
-            run(
-
-              `INSERT INTO active_timeouts
-
-               (
-                 guildId,
-                 userId,
-                 caseId,
-                 expiresAt
-               )
-
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT(guildId, userId) DO UPDATE SET
-                 caseId = excluded.caseId,
-                 expiresAt = excluded.expiresAt`,
-
-              [
-
-                interaction.guild.id,
-
-                user.id,
-
-                autoCaseId,
-
-                expiresAt
-              ]
-            );
           }
 
         } catch (err) {

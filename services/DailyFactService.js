@@ -2,6 +2,7 @@ const {
   all,
   run
 } = require('../database');
+const { startManagedLoop } = require('../utils/serviceRunner');
 
 const {
   categoryName,
@@ -296,32 +297,9 @@ class DailyFactService {
       'Daily Fact Service Started'
     );
 
-    DailyFactService.tick(client)
-      .catch(err => {
-
-        console.error(
-          'Daily Fact Service Error:',
-          err
-        );
-      });
-
-    DailyFactService.interval =
-      setInterval(
-        () => {
-
-          DailyFactService.tick(client)
-            .catch(err => {
-
-              console.error(
-                'Daily Fact Service Error:',
-                err
-              );
-            });
-        },
-        60000
-      );
-
-    DailyFactService.interval.unref?.();
+    DailyFactService.interval = startManagedLoop(
+      'daily-facts', () => DailyFactService.tick(client), 60_000, { timeoutMs: 60_000 }
+    );
   }
 
   static async forceCommunityFact(
@@ -387,7 +365,8 @@ class DailyFactService {
 
       if (
         config.lastSent === localTime.dateKey ||
-        !scheduleReached
+        !scheduleReached ||
+        Number(config.nextAttemptAt || 0) > now.getTime()
       ) {
 
         continue;
@@ -423,16 +402,33 @@ class DailyFactService {
           });
 
         if (result.status !== 'sent') {
+          const retryDelay = result.status === 'no-eligible-facts'
+            ? 6 * 60 * 60 * 1000
+            : result.status === 'missing-channel'
+              ? 24 * 60 * 60 * 1000
+              : 60 * 60 * 1000;
 
           run(
             `UPDATE dailyfact_config
-             SET lastSent = NULL
+             SET lastSent = NULL,
+                 nextAttemptAt = ?,
+                 lastDeliveryError = ?
              WHERE guildId = ?
              AND lastSent = ?`,
             [
+              Date.now() + retryDelay,
+              result.status,
               config.guildId,
               localTime.dateKey
             ]
+          );
+        } else {
+          run(
+            `UPDATE dailyfact_config
+             SET nextAttemptAt = NULL,
+                 lastDeliveryError = NULL
+             WHERE guildId = ?`,
+            [config.guildId]
           );
         }
 
@@ -440,10 +436,14 @@ class DailyFactService {
 
         run(
           `UPDATE dailyfact_config
-           SET lastSent = NULL
+           SET lastSent = NULL,
+               nextAttemptAt = ?,
+               lastDeliveryError = ?
            WHERE guildId = ?
            AND lastSent = ?`,
           [
+            Date.now() + (15 * 60 * 1000),
+            String(err?.message || err || 'delivery-error').slice(0, 500),
             config.guildId,
             localTime.dateKey
           ]

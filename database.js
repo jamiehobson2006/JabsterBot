@@ -235,9 +235,15 @@ async function createDatabaseBackup() {
 
     await db.backup(backupPath);
 
+    const backupPrefix =
+      `${path.parse(databasePath).name}-`;
+
     const backups =
       fs.readdirSync(backupDirectory)
-        .filter(file => file.endsWith('.db'))
+        .filter(file =>
+          file.startsWith(backupPrefix) &&
+          file.endsWith('.db')
+        )
         .map(file => ({
           file,
           modifiedAt: fs.statSync(
@@ -431,6 +437,14 @@ function all(
   }
 }
 
+function transaction(work) {
+  if (typeof work !== 'function') {
+    throw new TypeError('Database transaction work must be a function.');
+  }
+
+  return db.transaction(work)();
+}
+
 // ==================================================
 // ?? TABLE HELPERS
 // ==================================================
@@ -619,6 +633,12 @@ function createCasesTable() {
     'INTEGER NOT NULL DEFAULT 0'
   );
 
+  ensureColumn(
+    'cases',
+    'actionRecordId',
+    'TEXT'
+  );
+
   rawRun(`
     UPDATE cases
     SET createdAt = timestamp
@@ -647,6 +667,13 @@ function createCasesTable() {
 
     `CREATE INDEX IF NOT EXISTS idx_cases_action
      ON cases(guildId, action)`
+  );
+
+  createIndex(
+    'idx_cases_action_record',
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_cases_action_record
+     ON cases(actionRecordId)
+     WHERE actionRecordId IS NOT NULL`
   );
 }
 
@@ -910,6 +937,107 @@ function createModerationSupportTables() {
   );
 }
 
+function createReliabilityTables() {
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      appliedAt INTEGER NOT NULL
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS moderation_actions (
+      recordId TEXT PRIMARY KEY,
+      guildId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      moderatorId TEXT NOT NULL,
+      action TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      duration INTEGER,
+      expiresAt INTEGER,
+      channelId TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      discordAppliedAt INTEGER,
+      caseId INTEGER REFERENCES cases(id) ON DELETE SET NULL,
+      error TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS delivery_outbox (
+      deliveryKey TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      guildId TEXT,
+      channelId TEXT,
+      payload TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      leaseUntil INTEGER,
+      messageId TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      nextAttemptAt INTEGER NOT NULL DEFAULT 0,
+      lastError TEXT,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      sentAt INTEGER
+    )
+  `);
+
+  rawRun(`
+    CREATE TABLE IF NOT EXISTS service_health (
+      serviceName TEXT PRIMARY KEY,
+      status TEXT NOT NULL DEFAULT 'IDLE',
+      consecutiveFailures INTEGER NOT NULL DEFAULT 0,
+      lastStartedAt INTEGER,
+      lastSuccessAt INTEGER,
+      lastFailureAt INTEGER,
+      circuitOpenUntil INTEGER,
+      lastError TEXT
+    )
+  `);
+
+  createIndex(
+    'idx_moderation_actions_recovery',
+    `CREATE INDEX IF NOT EXISTS idx_moderation_actions_recovery
+     ON moderation_actions(status, updatedAt)`
+  );
+
+  createIndex(
+    'idx_delivery_outbox_queue',
+    `CREATE INDEX IF NOT EXISTS idx_delivery_outbox_queue
+     ON delivery_outbox(status, nextAttemptAt, leaseUntil)`
+  );
+
+  rawRun(`
+    CREATE TRIGGER IF NOT EXISTS cleanup_application_form_children
+    AFTER DELETE ON application_forms
+    BEGIN
+      DELETE FROM application_questions WHERE formId = OLD.id;
+      DELETE FROM application_drafts WHERE formId = OLD.id;
+    END
+  `);
+
+  rawRun(`
+    CREATE TRIGGER IF NOT EXISTS cleanup_ticket_children
+    AFTER DELETE ON tickets
+    BEGIN
+      DELETE FROM ticket_staff WHERE channelId = OLD.channelId;
+      DELETE FROM ticket_guests WHERE channelId = OLD.channelId;
+      DELETE FROM ticket_sla_alerts WHERE channelId = OLD.channelId;
+      DELETE FROM ticket_target_alerts WHERE ticketId = OLD.id;
+    END
+  `);
+
+  rawRun(
+    `INSERT OR IGNORE INTO schema_migrations (version, name, appliedAt)
+     VALUES (1, 'reliability-foundation', ?)`,
+    [Date.now()]
+  );
+}
+
 function createGuildSettingsTable() {
 
   rawRun(`
@@ -994,7 +1122,11 @@ function createGuildSettingsTable() {
 
       censorBypassChannelIds TEXT,
 
-      censorBypassCategoryIds TEXT
+      censorBypassCategoryIds TEXT,
+
+      censorMatchMode TEXT NOT NULL DEFAULT 'STRICT',
+
+      censorAction TEXT NOT NULL DEFAULT 'DELETE'
     )
   `);
 
@@ -1042,7 +1174,9 @@ function createGuildSettingsTable() {
     ['censorRoleId', 'TEXT'],
     ['censorBypassRoleIds', 'TEXT'],
     ['censorBypassChannelIds', 'TEXT'],
-    ['censorBypassCategoryIds', 'TEXT']
+    ['censorBypassCategoryIds', 'TEXT'],
+    ['censorMatchMode', "TEXT NOT NULL DEFAULT 'STRICT'"],
+    ['censorAction', "TEXT NOT NULL DEFAULT 'DELETE'"]
   ];
 
   for (
@@ -1332,6 +1466,12 @@ function createTicketsTable() {
     'INTEGER'
   );
 
+  ensureColumn(
+    'tickets',
+    'fingerprint',
+    'TEXT'
+  );
+
   rawRun(`
 
     CREATE TABLE IF NOT EXISTS ticket_staff (
@@ -1468,6 +1608,14 @@ function createTicketsTable() {
 
     `CREATE INDEX IF NOT EXISTS idx_tickets_lookup
      ON tickets(guildId, userId, status)`
+  );
+
+  createIndex(
+    'idx_tickets_open_fingerprint',
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_open_fingerprint
+     ON tickets(guildId, userId, fingerprint)
+     WHERE UPPER(status) IN ('OPEN', 'CLOSING')
+     AND fingerprint IS NOT NULL`
   );
 }
 
@@ -3310,7 +3458,11 @@ function createDailyFactTable() {
 
       timezone TEXT DEFAULT 'Europe/London',
 
-      lastSent TEXT
+      lastSent TEXT,
+
+      nextAttemptAt INTEGER,
+
+      lastDeliveryError TEXT
     )
   `);
 }
@@ -3374,6 +3526,18 @@ function createDailyFactSubmissionTable() {
   ensureColumn(
     'dailyfact_config',
     'lastSent',
+    'TEXT'
+  );
+
+  ensureColumn(
+    'dailyfact_config',
+    'nextAttemptAt',
+    'INTEGER'
+  );
+
+  ensureColumn(
+    'dailyfact_config',
+    'lastDeliveryError',
     'TEXT'
   );
 
@@ -3615,6 +3779,18 @@ function createApplicationTables() {
     )
   `);
 
+  ensureColumn(
+    'application_drafts',
+    'updatedAt',
+    'INTEGER NOT NULL DEFAULT 0'
+  );
+
+  ensureColumn(
+    'application_drafts',
+    'dmMessageId',
+    'TEXT'
+  );
+
   rawRun(`
 
     CREATE TABLE IF NOT EXISTS application_responses (
@@ -3667,6 +3843,21 @@ function createApplicationTables() {
 
     `CREATE INDEX IF NOT EXISTS idx_application_drafts_expiry
      ON application_drafts(expiresAt)`
+  );
+
+  rawRun(
+    `DELETE FROM application_drafts
+     WHERE rowid NOT IN (
+       SELECT MAX(rowid)
+       FROM application_drafts
+       GROUP BY guildId, formId, userId
+     )`
+  );
+
+  createIndex(
+    'idx_application_drafts_owner_form',
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_application_drafts_owner_form
+     ON application_drafts(guildId, formId, userId)`
   );
 }
 
@@ -3897,6 +4088,8 @@ createApplicationTables();
 
 createExpansionFeatureTables();
 
+createReliabilityTables();
+
   });
 
   initializeSchema();
@@ -3979,6 +4172,13 @@ function startDatabaseCleanup() {
         [ninetyDaysAgo]
       );
 
+      run(
+        `DELETE FROM delivery_outbox
+         WHERE status = 'SENT'
+         AND sentAt < ?`,
+        [ninetyDaysAgo]
+      );
+
       console.log(
         'Database cleanup complete'
       );
@@ -4015,6 +4215,8 @@ module.exports = {
   get,
 
   all,
+
+  transaction,
 
   rawRun,
 

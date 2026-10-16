@@ -300,23 +300,35 @@ function createDraft({
   formId,
   userId
 }) {
-  const now =
-    Date.now();
-
-  run(
-    `DELETE FROM application_drafts
-     WHERE guildId = ?
-     AND formId = ?
-     AND userId = ?`,
-    [
-      guildId,
-      formId,
-      userId
-    ]
+  const existingRow = get(
+    `SELECT id
+     FROM application_drafts
+     WHERE guildId = ? AND formId = ? AND userId = ?
+     ORDER BY updatedAt DESC, createdAt DESC
+     LIMIT 1`,
+    [guildId, formId, userId]
   );
 
-  const id =
-    crypto.randomUUID();
+  if (existingRow) {
+    const existing = getDraft(existingRow.id);
+    if (existing) {
+      const now = Date.now();
+      run(
+        `UPDATE application_drafts
+         SET expiresAt = ?, updatedAt = ?
+         WHERE id = ?`,
+        [now + DRAFT_LIFETIME_MS, now, existing.id]
+      );
+      checkpointDatabase();
+      return {
+        ...getDraft(existing.id),
+        resumed: true
+      };
+    }
+  }
+
+  const now = Date.now();
+  const id = crypto.randomUUID();
 
   run(
     `INSERT INTO application_drafts (
@@ -327,22 +339,25 @@ function createDraft({
        answersJson,
        nextQuestionIndex,
        createdAt,
+       updatedAt,
        expiresAt
-     )
-     VALUES (?, ?, ?, ?, '[]', 0, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, '[]', 0, ?, ?, ?)`,
     [
       id,
       guildId,
       formId,
       userId,
       now,
+      now,
       now + DRAFT_LIFETIME_MS
     ]
   );
 
   checkpointDatabase();
-
-  return getDraft(id);
+  return {
+    ...getDraft(id),
+    resumed: false
+  };
 }
 
 function getDraft(
@@ -383,18 +398,31 @@ function saveDraft({
     `UPDATE application_drafts
      SET answersJson = ?,
          nextQuestionIndex = ?,
-         expiresAt = ?
+         expiresAt = ?,
+         updatedAt = ?
      WHERE id = ?`,
     [
       JSON.stringify(answers || []),
       nextQuestionIndex,
       expiresAt,
+      Date.now(),
       id
     ]
   );
 
   checkpointDatabase();
 
+  return getDraft(id);
+}
+
+function setDraftMessage(id, dmMessageId) {
+  run(
+    `UPDATE application_drafts
+     SET dmMessageId = ?, updatedAt = ?
+     WHERE id = ?`,
+    [dmMessageId || null, Date.now(), id]
+  );
+  checkpointDatabase();
   return getDraft(id);
 }
 
@@ -475,5 +503,6 @@ module.exports = {
   createDraft,
   getDraft,
   saveDraft,
+  setDraftMessage,
   deleteDraft
 };

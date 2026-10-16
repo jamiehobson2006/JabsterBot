@@ -26,6 +26,10 @@ const {
 
 } = require('../../utils/logger');
 
+const {
+  performModerationAction
+} = require('../../utils/moderationActions');
+
 module.exports = {
 
   cooldown: 5000,
@@ -483,52 +487,17 @@ module.exports = {
             });
 
           } catch {}
-
-          // ======================================
-          // 👢 KICK MEMBER
-          // ======================================
-          await member.kick(
-
-            `${reason} | Kicked by ${interaction.user.tag}`
+          const { caseId } = await performModerationAction(
+            {
+              guildId: interaction.guild.id,
+              userId: user.id,
+              moderatorId: interaction.user.id,
+              action: 'KICK',
+              reason,
+              channelId: interaction.channelId
+            },
+            () => member.kick(`${reason} | Kicked by ${interaction.user.tag}`)
           );
-
-          // ======================================
-          // 💾 SAVE CASE
-          // ======================================
-          const result =
-            run(
-
-              `INSERT INTO cases
-
-               (
-                 guildId,
-                 userId,
-                 moderatorId,
-                 action,
-                 reason,
-                 createdAt
-               )
-
-               VALUES (?, ?, ?, ?, ?, ?)`,
-
-              [
-
-                interaction.guild.id,
-
-                user.id,
-
-                interaction.user.id,
-
-                'KICK',
-
-                reason,
-
-                Date.now()
-              ]
-            );
-
-          const caseId =
-            result?.lastInsertRowid || 'N/A';
 
           // ======================================
           // 📜 AUDIT LOG

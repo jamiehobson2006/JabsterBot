@@ -14,6 +14,10 @@ const {
   createLogEmbed
 } = require('../../utils/logger');
 
+const {
+  performModerationAction
+} = require('../../utils/moderationActions');
+
 module.exports = {
 
   cooldown: 3000,
@@ -450,60 +454,20 @@ module.exports = {
             });
 
           } catch {}
-
-          // ====================================
-          // 🔨 BAN USER
-          // ====================================
-          await interaction.guild.members.ban(
-            user.id,
+          const { caseId } = await performModerationAction(
             {
-
-              deleteMessageSeconds:
-                deleteDays * 86400,
-
-              reason:
-
-                `${reason} | Banned by ${interaction.user.tag}`
-            }
+              guildId: interaction.guild.id,
+              userId: user.id,
+              moderatorId: interaction.user.id,
+              action: 'BAN',
+              reason,
+              channelId: interaction.channelId
+            },
+            () => interaction.guild.members.ban(user.id, {
+              deleteMessageSeconds: deleteDays * 86400,
+              reason: `${reason} | Banned by ${interaction.user.tag}`
+            })
           );
-
-          // ====================================
-          // 💾 SAVE CASE
-          // ====================================
-          const result =
-            await run(
-
-              `INSERT INTO cases
-
-              (
-                guildId,
-                userId,
-                moderatorId,
-                action,
-                reason,
-                createdAt
-              )
-
-              VALUES (?, ?, ?, ?, ?, ?)`,
-
-              [
-
-                interaction.guild.id,
-
-                user.id,
-
-                interaction.user.id,
-
-                'BAN',
-
-                reason,
-
-                Date.now()
-              ]
-            );
-
-          const caseId =
-            result?.lastInsertRowid || 'N/A';
 
           // ====================================
           // 🎨 SUCCESS EMBED

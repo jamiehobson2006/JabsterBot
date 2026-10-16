@@ -24,6 +24,10 @@ const {
 
 } = require('../../utils/logger');
 
+const {
+  performModerationAction
+} = require('../../utils/moderationActions');
+
 // ==================================================
 // ⏱ PARSE DURATION
 // Supports:
@@ -478,15 +482,21 @@ module.exports = {
 
       const expiresAt =
         Date.now() + duration;
-
-      // ==========================================
-      // 🔇 APPLY TIMEOUT
-      // ==========================================
-      await member.timeout(
-
-        duration,
-
-        `${reason} | By ${interaction.user.tag}`
+      const { caseId } = await performModerationAction(
+        {
+          guildId: interaction.guild.id,
+          userId: user.id,
+          moderatorId: interaction.user.id,
+          action: 'MUTE',
+          reason,
+          duration,
+          expiresAt,
+          channelId: interaction.channelId
+        },
+        () => member.timeout(
+          duration,
+          `${reason} | By ${interaction.user.tag}`
+        )
       );
 
       // ==========================================
@@ -555,82 +565,7 @@ module.exports = {
       } catch {}
 
       // ==========================================
-      // 💾 SAVE CASE
-      // ==========================================
-      const result =
-        run(
-
-          `INSERT INTO cases
-
-           (
-             guildId,
-             userId,
-             moderatorId,
-             action,
-             reason,
-             duration,
-             expiresAt,
-             createdAt
-           )
-
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-
-          [
-
-            interaction.guild.id,
-
-            user.id,
-
-            interaction.user.id,
-
-            'MUTE',
-
-            reason,
-
-            duration,
-
-            expiresAt,
-
-            Date.now()
-          ]
-        );
-
-      const caseId =
-        result?.lastInsertRowid || 'N/A';
-
-      // ==========================================
-      // 💾 ACTIVE TIMEOUT TRACKING
-      // ==========================================
-      run(
-
-        `INSERT INTO active_timeouts
-
-         (
-           guildId,
-           userId,
-           caseId,
-           expiresAt
-         )
-
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(guildId, userId) DO UPDATE SET
-           caseId = excluded.caseId,
-           expiresAt = excluded.expiresAt`,
-
-        [
-
-          interaction.guild.id,
-
-          user.id,
-
-          caseId,
-
-          expiresAt
-        ]
-      );
-
-      // ==========================================
-      // ✅ RESPONSE
+      // RESPONSE
       // ==========================================
       await interaction.editReply({
 

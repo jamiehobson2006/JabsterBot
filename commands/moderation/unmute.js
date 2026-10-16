@@ -24,6 +24,10 @@ const {
 
 } = require('../../utils/logger');
 
+const {
+  performModerationAction
+} = require('../../utils/moderationActions');
+
 module.exports = {
 
   cooldown: 3000,
@@ -256,37 +260,23 @@ module.exports = {
             user.id
           ]
         );
-
-      // ========================
-      // 🔊 REMOVE TIMEOUT
-      // ========================
-      await member.timeout(
-
-        null,
-
-        `${reason} | Unmuted by ${interaction.user.tag}`
+      const { caseId } = await performModerationAction(
+        {
+          guildId: interaction.guild.id,
+          userId: user.id,
+          moderatorId: interaction.user.id,
+          action: 'UNMUTE',
+          reason,
+          channelId: interaction.channelId
+        },
+        () => member.timeout(
+          null,
+          `${reason} | Unmuted by ${interaction.user.tag}`
+        )
       );
 
       // ========================
-      // 🧹 REMOVE ACTIVE TIMEOUT
-      // ========================
-      run(
-
-        `DELETE FROM active_timeouts
-
-         WHERE guildId = ?
-         AND userId = ?`,
-
-        [
-
-          interaction.guild.id,
-
-          user.id
-        ]
-      );
-
-      // ========================
-      // 📩 DM USER
+      // DM USER
       // ========================
       try {
 
@@ -344,44 +334,6 @@ module.exports = {
         });
 
       } catch {}
-
-      // ========================
-      // 💾 SAVE CASE
-      // ========================
-      const result =
-        run(
-
-          `INSERT INTO cases
-
-           (
-             guildId,
-             userId,
-             moderatorId,
-             action,
-             reason,
-             createdAt
-           )
-
-           VALUES (?, ?, ?, ?, ?, ?)`,
-
-          [
-
-            interaction.guild.id,
-
-            user.id,
-
-            interaction.user.id,
-
-            'UNMUTE',
-
-            reason,
-
-            Date.now()
-          ]
-        );
-
-      const caseId =
-        result?.lastInsertRowid || 'N/A';
 
       // ========================
       // 📜 AUDIT LOG

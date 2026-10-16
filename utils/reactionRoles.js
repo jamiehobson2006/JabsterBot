@@ -1,3 +1,7 @@
+const {
+  automaticRoleSafetyError
+} = require('./roleSafety');
+
 function parseReactionEmoji(input) {
 
   const value =
@@ -39,19 +43,7 @@ function canManageReactionRole(
   guild,
   role
 ) {
-
-  const botMember =
-    guild.members.me;
-
-  return Boolean(
-    role &&
-    !role.managed &&
-    botMember &&
-    botMember.permissions.has(
-      PermissionFlagsBits.ManageRoles
-    ) &&
-    role.position < botMember.roles.highest.position
-  );
+  return !automaticRoleSafetyError(guild, role);
 }
 
 module.exports = {
@@ -59,6 +51,3 @@ module.exports = {
   parseReactionEmoji,
   reactionEmojiKey
 };
-const {
-  PermissionFlagsBits
-} = require('discord.js');

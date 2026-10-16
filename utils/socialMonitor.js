@@ -12,6 +12,12 @@ const {
 } = require('../database');
 
 const {
+  deliverOnce,
+  enqueueDelivery,
+  sendQueuedMessage
+} = require('./deliveryOutbox');
+
+const {
   getRecentUploads,
   getVideoDetails,
   getUploadType
@@ -707,22 +713,31 @@ if (isQuietHours(social)) {
   continue;
 }
 
-const message =
-  await channel.send({
+const deliveryKey =
+  `social:twitch:${social.guildId}:${social.creatorId}:${social.contentType}:${stream.id}`;
 
-    content: [ping, renderTemplate(social.messageTemplate, {
-      creator: social.creatorName,
-      title: stream.title,
-      url: `https://twitch.tv/${stream.user_login}`,
-      type: 'stream'
-    })].filter(Boolean).join('\n'),
-
-    embeds: [embed],
-
-    components: [row],
-
-    allowedMentions: socialAllowedMentions(social)
-  });
+const payload = {
+  content: [ping, renderTemplate(social.messageTemplate, {
+    creator: social.creatorName,
+    title: stream.title,
+    url: `https://twitch.tv/${stream.user_login}`,
+    type: 'stream'
+  })].filter(Boolean).join('\n'),
+  embeds: [embed],
+  components: [row],
+  allowedMentions: socialAllowedMentions(social)
+};
+enqueueDelivery({
+  deliveryKey,
+  type: 'SOCIAL_TWITCH',
+  guildId: social.guildId,
+  channelId: channel.id,
+  payload: { creatorId: social.creatorId, streamId: stream.id, message: payload }
+});
+const delivery = await deliverOnce(deliveryKey,
+  claimed => sendQueuedMessage(channel, claimed, payload));
+if (delivery?.status !== 'SENT') continue;
+const message = { id: delivery.messageId };
 
 run(
 
@@ -1086,22 +1101,31 @@ if (isQuietHours(social)) {
   break;
 }
 
-const message =
-  await channel.send({
+const deliveryKey =
+  `social:youtube:${social.guildId}:${social.creatorId}:${social.contentType}:${latestUpload.videoId}`;
 
-    content: [ping, renderTemplate(social.messageTemplate, {
-      creator: social.creatorName,
-      title: details.title,
-      url: `https://youtube.com/watch?v=${latestUpload.videoId}`,
-      type: uploadType
-    })].filter(Boolean).join('\n'),
-
-    embeds: [embed],
-
-    components: [row],
-
-    allowedMentions: socialAllowedMentions(social)
-  });
+const payload = {
+  content: [ping, renderTemplate(social.messageTemplate, {
+    creator: social.creatorName,
+    title: details.title,
+    url: `https://youtube.com/watch?v=${latestUpload.videoId}`,
+    type: uploadType
+  })].filter(Boolean).join('\n'),
+  embeds: [embed],
+  components: [row],
+  allowedMentions: socialAllowedMentions(social)
+};
+enqueueDelivery({
+  deliveryKey,
+  type: 'SOCIAL_YOUTUBE',
+  guildId: social.guildId,
+  channelId: channel.id,
+  payload: { creatorId: social.creatorId, videoId: latestUpload.videoId, uploadType, message: payload }
+});
+const delivery = await deliverOnce(deliveryKey,
+  claimed => sendQueuedMessage(channel, claimed, payload));
+if (delivery?.status !== 'SENT') break;
+const message = { id: delivery.messageId };
 
 if (uploadType === 'stream') {
 

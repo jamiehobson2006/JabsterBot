@@ -16,7 +16,8 @@ const {
   getDraft,
   getFormById,
   getQuestions,
-  saveDraft
+  saveDraft,
+  setDraftMessage
 } = require('../utils/applications');
 
 const {
@@ -195,15 +196,20 @@ async function handleApplicationSelect(interaction) {
 
   const startButton = new ButtonBuilder()
     .setCustomId(`application_start_${draft.id}`)
-    .setLabel('View first question')
+    .setLabel(draft.nextQuestionIndex > 0 ? 'Resume application' : 'View first question')
     .setStyle(ButtonStyle.Primary);
 
   try {
-    await interaction.user.send({
+    const dmMessage = await interaction.user.send({
       embeds: [new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle(`Jabster Studios | ${form.name}`)
-        .setDescription(form.description || 'Review each page carefully before submitting your answers.')
+        .setDescription(
+          (form.description || 'Review each page carefully before submitting your answers.') +
+          (draft.nextQuestionIndex > 0
+            ? `\n\nYour saved application is ready to resume from question ${draft.nextQuestionIndex + 1}.`
+            : '')
+        )
         .addFields(
           { name: 'Server', value: interaction.guild.name, inline: true },
           { name: 'Questions', value: String(questions.length), inline: true }
@@ -211,12 +217,18 @@ async function handleApplicationSelect(interaction) {
         .setFooter({ text: 'This application expires after 30 minutes of inactivity.' })],
       components: [new ActionRowBuilder().addComponents(startButton)]
     });
+    setDraftMessage(draft.id, dmMessage.id);
   } catch {
-    deleteDraft(draft.id);
+    if (!draft.resumed) deleteDraft(draft.id);
     return replyPrivate(interaction, 'I could not send you a DM. Please enable direct messages from this server and try again.');
   }
 
-  return replyPrivate(interaction, 'I sent you a DM. Complete the application there; a ticket will be created only after you submit every answer.');
+  return replyPrivate(
+    interaction,
+    draft.nextQuestionIndex > 0
+      ? 'I sent you a DM with a button to resume your saved application.'
+      : 'I sent you a DM. Complete the application there; a ticket will be created only after you submit every answer.'
+  );
 }
 
 async function handleApplicationStart(interaction) {

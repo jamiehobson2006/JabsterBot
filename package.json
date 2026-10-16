@@ -6,14 +6,16 @@
   "scripts": {
     "deploy": "node deploy-commands.js",
     "start": "node index.js",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "test:integration": "node --test tests/integration/*.test.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "axios": "^1.19.0",
+    "an-array-of-english-words": "^2.0.0",
+    "axios": "^1.20.0",
     "better-sqlite3": "^12.11.1",
     "discord-html-transcripts": "^3.2.0",
     "discord.js": "^14.27.0",
@@ -23,7 +25,10 @@
   },
   "overrides": {
     "discord-html-transcripts": {
-      "undici": "6.28.0"
+      "undici": "6.29.1"
     }
+  },
+  "engines": {
+    "node": ">=22.12 <25"
   }
 }

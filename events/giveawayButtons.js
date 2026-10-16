@@ -134,9 +134,10 @@ module.exports = {
         Date.now()
       );
 
-      setTimeout(() => {
+      const cooldownTimer = setTimeout(() => {
         buttonCooldowns.delete(cooldownKey);
       }, 5000);
+      cooldownTimer.unref?.();
 
       const giveaway =
         get(
@@ -295,17 +296,14 @@ module.exports = {
         err
       );
 
-      if (
-        interaction.deferred ||
-        interaction.replied
-      ) {
-        return;
-      }
-
       return replyHidden(
         interaction,
         'Failed to update giveaway entry.'
-      );
+      ).catch(replyError => {
+        if (![10062, 10008].includes(replyError?.code)) {
+          console.error('Giveaway error reply failed:', replyError);
+        }
+      });
     }
   }
 };

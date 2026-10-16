@@ -8,6 +8,10 @@ const {
 } = require('../utils/logger');
 
 const {
+  run
+} = require('../database');
+
+const {
   findRecentAuditLog,
   formatExecutor
 } = require('../utils/auditLookup');
@@ -195,6 +199,20 @@ module.exports = {
         const action = after
           ? (before ? 'MEMBER_TIMEOUT_UPDATED' : 'MEMBER_TIMEOUT_ADDED')
           : 'MEMBER_TIMEOUT_REMOVED';
+
+        if (after && after > Date.now()) {
+          run(
+            `INSERT INTO active_timeouts (guildId, userId, caseId, expiresAt)
+             VALUES (?, ?, NULL, ?)
+             ON CONFLICT(guildId, userId) DO UPDATE SET expiresAt = excluded.expiresAt`,
+            [newMember.guild.id, newMember.id, after]
+          );
+        } else {
+          run(
+            'DELETE FROM active_timeouts WHERE guildId = ? AND userId = ?',
+            [newMember.guild.id, newMember.id]
+          );
+        }
 
         await logMemberChange({
           client,

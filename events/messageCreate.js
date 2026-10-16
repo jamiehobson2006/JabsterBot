@@ -49,28 +49,22 @@ const {
   captureMessageSnapshot
 } = require('../utils/messageSnapshots');
 
+const {
+  extractLinks
+} = require('../utils/linkDetection');
+
 const LevelingService =
   require('../utils/LevelingService');
+
+const {
+  queueMessageStat
+} = require('../utils/messageStatsBuffer');
 
 // ==================================================
 // ⏱ MESSAGE COOLDOWN CACHE
 // ==================================================
-const linkPattern =
-  /\b(?:https?:\/\/|www\.|discord\.gg\/|discord(?:app)?\.com\/invite\/)[^\s<]*/i;
-
 function findBlockedLink(content) {
-
-  if (
-    typeof content !== 'string'
-  ) {
-
-    return null;
-  }
-
-  const match =
-    content.match(linkPattern);
-
-  return match?.[0] || null;
+  return extractLinks(content)[0]?.raw || null;
 }
 
 function canBypassLinkBlock(
@@ -622,173 +616,9 @@ module.exports = {
       // ==========================================
       // 🧹 CLEANUP CACHE
       // ==========================================
-      // ==========================================
-      // 📊 FETCH STATS
-      // ==========================================
-      let stats =
-        get(
+      queueMessageStat(guildId, userId, now);
 
-          `SELECT *
-           FROM message_stats
-           WHERE guildId = ?
-           AND userId = ?`,
-
-          [
-
-            guildId,
-
-            userId
-          ]
-        );
-
-      // ==========================================
-      // 🆕 CREATE ENTRY
-      // ==========================================
-      if (!stats) {
-
-        run(
-
-          `INSERT INTO message_stats (
-
-            guildId,
-            userId,
-
-            totalMessages,
-
-            dailyMessages,
-            weeklyMessages,
-            monthlyMessages,
-
-            lastDailyReset,
-            lastWeeklyReset,
-            lastMonthlyReset
-
-          )
-
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-
-          [
-
-            guildId,
-            userId,
-
-            1,
-
-            1,
-            1,
-            1,
-
-            now,
-            now,
-            now
-          ]
-        );
-
-        await LevelingService.handleMessage(
-  message
-);
-
-        return;
-      }
-
-      // ==========================================
-      // 🔄 RESET CHECKS
-      // ==========================================
-      let daily =
-        stats.dailyMessages || 0;
-
-      let weekly =
-        stats.weeklyMessages || 0;
-
-      let monthly =
-        stats.monthlyMessages || 0;
-
-      let dailyReset =
-        stats.lastDailyReset || 0;
-
-      let weeklyReset =
-        stats.lastWeeklyReset || 0;
-
-      let monthlyReset =
-        stats.lastMonthlyReset || 0;
-
-      // ==========================================
-      // 📅 DAILY RESET
-      // ==========================================
-      if (
-        shouldResetDaily(
-          dailyReset
-        )
-      ) {
-
-        daily = 0;
-        dailyReset = now;
-      }
-
-      // ==========================================
-      // 📆 WEEKLY RESET
-      // ==========================================
-      if (
-        shouldResetWeekly(
-          weeklyReset
-        )
-      ) {
-
-        weekly = 0;
-        weeklyReset = now;
-      }
-
-      // ==========================================
-      // 🗓 MONTHLY RESET
-      // ==========================================
-      if (
-        shouldResetMonthly(
-          monthlyReset
-        )
-      ) {
-
-        monthly = 0;
-        monthlyReset = now;
-      }
-
-      run(
-
-        `UPDATE message_stats
-
-         SET
-
-         totalMessages =
-         totalMessages + 1,
-
-         dailyMessages = ?,
-         weeklyMessages = ?,
-         monthlyMessages = ?,
-
-         lastDailyReset = ?,
-         lastWeeklyReset = ?,
-         lastMonthlyReset = ?
-
-         WHERE guildId = ?
-         AND userId = ?`,
-
-        [
-
-          daily + 1,
-          weekly + 1,
-          monthly + 1,
-
-          dailyReset,
-          weeklyReset,
-          monthlyReset,
-
-          guildId,
-          userId
-        ]
-      );
-
-      await LevelingService.handleMessage(
-  message
-);
+      await LevelingService.handleMessage(message);
 
     } catch (err) {
 

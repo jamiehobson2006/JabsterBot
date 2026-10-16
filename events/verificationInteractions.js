@@ -1,27 +1,14 @@
 const {
-  MessageFlags,
-  PermissionFlagsBits
+  MessageFlags
 } = require('discord.js');
 
 const {
   get
 } = require('../database');
 
-function canManageRole(guild, role) {
-
-  const botMember =
-    guild.members.me;
-
-  return Boolean(
-    role &&
-    !role.managed &&
-    botMember &&
-    botMember.permissions.has(
-      PermissionFlagsBits.ManageRoles
-    ) &&
-    role.position < botMember.roles.highest.position
-  );
-}
+const {
+  automaticRoleSafetyError
+} = require('../utils/roleSafety');
 
 module.exports = {
 
@@ -77,10 +64,12 @@ module.exports = {
     const verifiedRole =
       interaction.guild.roles.cache.get(settings.verifiedRoleId);
 
-    if (!canManageRole(interaction.guild, verifiedRole)) {
+    const verifiedRoleError =
+      automaticRoleSafetyError(interaction.guild, verifiedRole);
 
+    if (verifiedRoleError) {
       return interaction.editReply({
-        content: 'Verification is unavailable because the verified role is missing or above my role.',
+        content: `Verification is unavailable: ${verifiedRoleError}`,
       });
     }
 
@@ -106,7 +95,7 @@ module.exports = {
 
       if (
         unverifiedRole &&
-        canManageRole(interaction.guild, unverifiedRole) &&
+        !automaticRoleSafetyError(interaction.guild, unverifiedRole) &&
         member.roles.cache.has(unverifiedRole.id)
       ) {
 

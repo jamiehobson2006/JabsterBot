@@ -15,6 +15,11 @@ const {
 } = require('../database');
 
 const { sendTranscriptMessage } = require('./tickets/transcriptDelivery');
+const {
+  deliverOnce,
+  enqueueDelivery,
+  sendQueuedMessage
+} = require('./deliveryOutbox');
 
 const PUBLISH_RETRY_MS =
   15 * 60 * 1000;
@@ -297,12 +302,26 @@ async function publishFeedback(client, record) {
   }
 
   try {
-    const message = await channel.send({
+    const deliveryKey = `ticket-feedback:${current.id}`;
+    const payload = {
       embeds: [buildFeedbackEmbed(current)],
-      allowedMentions: {
-        parse: []
-      }
+      allowedMentions: { parse: [] }
+    };
+    enqueueDelivery({
+      deliveryKey,
+      type: 'TICKET_FEEDBACK',
+      guildId: current.guildId,
+      channelId: settings.ticketFeedbackChannelId,
+      payload: { feedbackId: current.id, message: payload }
     });
+
+    const delivery = await deliverOnce(deliveryKey,
+      claimed => sendQueuedMessage(channel, claimed, payload));
+    if (delivery?.status !== 'SENT') return false;
+    const messageId = delivery?.messageId;
+    if (!messageId) {
+      throw new Error('Feedback delivery completed without a Discord message ID.');
+    }
 
     const result = run(
       `UPDATE ticket_feedback
@@ -312,7 +331,7 @@ async function publishFeedback(client, record) {
            lastPublishError = NULL
        WHERE id = ?
        AND publishedMessageId IS NULL`,
-      [Date.now(), message.id, Date.now(), current.id]
+      [Date.now(), messageId, Date.now(), current.id]
     );
 
     return Boolean(result.changes || getFeedback(current.id)?.publishedMessageId);

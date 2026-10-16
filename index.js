@@ -103,6 +103,26 @@ const {
   recoverStaleDailyFactReviews
 } = require('./events/dailyFactInteractions');
 
+const {
+  recoverAppliedModerationActions
+} = require('./utils/moderationActions');
+
+const {
+  startServiceSafe
+} = require('./utils/serviceRunner');
+
+const TimeoutReconciliationService =
+  require('./services/TimeoutReconciliationService');
+const { startDeliveryWorker } = require('./utils/deliveryOutbox');
+
+const {
+  flushMessageSnapshots
+} = require('./utils/messageSnapshots');
+
+const {
+  flushMessageStats
+} = require('./utils/messageStatsBuffer');
+
 if (!process.env.TOKEN) {
 
   throw new Error(
@@ -192,6 +212,8 @@ function shutdown(signal, exitCode = 0) {
   console.log(`Received ${signal}; saving database before shutdown.`);
 
   try {
+    flushMessageSnapshots();
+    flushMessageStats();
     checkpointDatabase();
   } catch (err) {
     console.error('Database checkpoint during shutdown failed:', err);
@@ -511,238 +533,91 @@ function loadEvents() {
   }
 }
 
-client.once(
+async function warmInviteCache() {
+  console.log('Loading invite cache...');
+  let cachedGuilds = 0;
 
-  'clientReady',
-
-  async () => {
-
+  for (const guild of client.guilds.cache.values()) {
     try {
+      const me = guild.members.me;
+      if (!me?.permissions.has(PermissionFlagsBits.ManageGuild)) continue;
+      const inviteCache = await loadGuildInvites(guild);
+      if (inviteCache) cachedGuilds += 1;
+    } catch (error) {
+      console.error(`Failed caching invites for ${guild.name}:`, error);
+    }
+  }
 
-      console.log('━━━━━━━━━━━━━━━━━━━━━━');
+  console.log(`Invite cache loaded for ${cachedGuilds} guild(s)`);
+  return cachedGuilds;
+}
 
-      console.log(
+client.once('clientReady', async () => {
+  console.log('----------------------');
+  console.log(`Logged in as ${client.user.tag}`);
+  console.log(`Build: ${BOT_BUILD}`);
+  console.log(`Servers: ${client.guilds.cache.size}`);
+  console.log(`Users: ${client.users.cache.size}`);
+  console.log(`Commands: ${client.commands.size}`);
+  console.log('----------------------');
 
-        `✅ Logged in as ${client.user.tag}`
-      );
+  await new Promise(resolve => setTimeout(resolve, 3000));
 
-      console.log(
-        `🏗 Build: ${BOT_BUILD}`
-      );
-
-      console.log(
-
-        `🌍 Servers: ${client.guilds.cache.size}`
-      );
-
-      console.log(
-
-        `👥 Users: ${client.users.cache.size}`
-      );
-
-      console.log(
-
-        `📦 Commands: ${client.commands.size}`
-      );
-
-      console.log(
-        '━━━━━━━━━━━━━━━━━━━━━━'
-      );
-
-      await new Promise(
-        resolve =>
-
-          setTimeout(
-            resolve,
-            3000
-          )
-      );
-
+  const startupTasks = [
+    ['review recovery', () => {
       const recoveredSuggestions = recoverStaleSuggestionReviews();
       const recoveredApplications = recoverStaleApplicationReviews();
       const recoveredFacts = recoverStaleDailyFactReviews();
-      if (recoveredSuggestions || recoveredApplications || recoveredFacts) {
-        console.log(
-          `Recovered interrupted reviews: ${recoveredSuggestions} suggestion(s), ` +
-          `${recoveredApplications} application(s), ${recoveredFacts} daily fact(s)`
-        );
-      }
-
+      const recoveredModeration = recoverAppliedModerationActions();
       console.log(
-        '📨 Loading invite cache...'
+        `Recovered interrupted work: ${recoveredSuggestions} suggestion(s), ` +
+        `${recoveredApplications} application(s), ${recoveredFacts} daily fact(s), ` +
+        `${recoveredModeration} moderation action(s)`
       );
+    }],
+    ['invite cache', warmInviteCache],
+    ['giveaway loop', () => startGiveawayLoop(client)],
+    ['social monitor', () => socialMonitor.start(client)],
+    ['free game watch', () => freeGameMonitor.start(client)],
+    ['daily facts', () => DailyFactService.start(client)],
+    ['daily interactions', () => DailyInteractionService.start(client)],
+    ['ticket SLA', () => TicketSlaService.start(client)],
+    ['ticket feedback', () => startFeedbackPublisher(client)],
+    ['poll service', () => startPollService(client)],
+    ['staff list', () => StaffListService.start(client)],
+    ['staff rota', () => StaffRotaService.start(client)],
+    ['leveling rewards', () => LevelingService.start(client)],
+    ['closed ticket cleanup', () => startClosedTicketCleanup(client)],
+    ['ticket targets', () => startTicketTargetLoop(client)],
+    ['timeout reconciliation', () => TimeoutReconciliationService.start(client)],
+    ['delivery outbox', () => startDeliveryWorker(client)],
+    ['temporary voice recovery', () => cleanupTempVoiceRooms(client)]
+  ];
 
-      let cachedGuilds = 0;
-
-      for (
-        const guild of
-        client.guilds.cache.values()
-      ) {
-
-        try {
-
-          const me =
-            guild.members.me;
-
-          if (
-
-            !me ||
-
-            !me.permissions.has(
-               PermissionFlagsBits.ManageGuild
-            )
-          ) {
-
-            continue;
-          }
-
-          const inviteCache =
-            await loadGuildInvites(
-            guild
-          );
-
-          if (inviteCache) {
-
-            cachedGuilds++;
-          }
-
-        } catch (err) {
-
-          console.error(
-
-            `Failed caching invites for ${guild.name}:`,
-
-            err
-          );
-        }
-      }
-
-      console.log(
-
-        `✅ Invite cache loaded for ${cachedGuilds} guild(s)`
-      );
-
-     startGiveawayLoop(
-  client
-);
-
-console.log(
-  '✅ Giveaway loop started'
-);
-
-socialMonitor.start(
-  client
-);
-
-console.log(
-  '✅ Social monitor started'
-);
-
-freeGameMonitor.start(
-  client
-);
-
-console.log(
-  '✅ Free game watch started'
-);
-
-DailyFactService.start(
-  client
-);
-
-console.log(
-  '✅ Daily Fact Service Started'
-);
-
-DailyInteractionService.start(
-  client
-);
-
-console.log(
-  '✅ Daily Interaction Service Started'
-);
-
-TicketSlaService.start(
-  client
-);
-
-console.log(
-  '✅ Ticket SLA service started'
-);
-
-startFeedbackPublisher(
-  client
-);
-
-console.log(
-  '✅ Ticket feedback publisher started'
-);
-
-startPollService(
-  client
-);
-
-console.log(
-  '✅ Poll service started'
-);
-
-StaffListService.start(
-  client
-);
-
-StaffRotaService.start(client);
-
-LevelingService.start(client);
-
-console.log(
-  '✅ Staff list and rota services started'
-);
-
-startClosedTicketCleanup(
-  client
-);
-
-console.log(
-  '✅ Closed ticket cleanup started'
-);
-
-startTicketTargetLoop(
-  client
-);
-
-cleanupTempVoiceRooms(client)
-  .catch(err => console.error('Temporary voice cleanup error:', err));
-
-console.log(
-  '✅ Ticket targets and temporary voice recovery started'
-);
-
-      client.user.setPresence({
-
-        activities: [
-
-          {
-            name: 'games made by Jabster Studios on Roblox',
-            type: ActivityType.Playing
-          }
-        ],
-
-        status: 'online'
-      });
-
-      console.log(
-        '✅ Systems initialized'
-      );
-
-    } catch (err) {
-
-      console.error(
-        'Ready event error:',
-        err
-      );
-    }
+  const startupResults = [];
+  for (const [name, starter] of startupTasks) {
+    startupResults.push(await startServiceSafe(name, starter, { timeoutMs: 60_000 }));
   }
-);
+
+  try {
+    client.user.setPresence({
+      activities: [{
+        name: 'games made by Jabster Studios on Roblox',
+        type: ActivityType.Playing
+      }],
+      status: 'online'
+    });
+  } catch (error) {
+    console.error('Presence update failed:', error);
+  }
+
+  const failures = startupResults.filter(result => !result.ok);
+  console.log(
+    failures.length
+      ? `Systems initialized with ${failures.length} degraded service(s).`
+      : 'Systems initialized successfully.'
+  );
+});
 
 process.on(
 

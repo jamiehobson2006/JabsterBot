@@ -1,6 +1,7 @@
 const {
   get
 } = require('../../database');
+const { flushMessageStats } = require('../messageStatsBuffer');
 
 // ==================================================
 // 🔢 SAFE NUMBER
@@ -88,6 +89,7 @@ async function checkRequirements(
 ) {
 
   try {
+    flushMessageStats();
 
     // ==========================================
     // 🚫 INVALID MEMBER
