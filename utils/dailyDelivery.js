@@ -2,9 +2,10 @@ const crypto = require('node:crypto');
 const { all, get, run, transaction } = require('../database');
 const { deliverOnce, deliveryNonce, enqueueDelivery } = require('./deliveryOutbox');
 const { fetchDailyMessage, withDailyDisplayLock } = require('./dailyDisplay');
+const { cleanDailyFooter, dailyReference } = require('./dailyFooter');
 
 const DAILY_TYPES = ['DAILY_FACT_POST', 'DAILY_INTERACTION_POST', 'DAILY_FACT_REVIEW',
-  'DAILY_FACT_DM', 'DAILY_FACT_REVIEW_UPDATE', 'DAILY_INTERACTION_RESPONSE', 'DAILY_ACTIVITY_UPDATE', 'DAILY_REMINDER'];
+  'DAILY_FACT_DM', 'DAILY_FACT_REVIEW_UPDATE', 'DAILY_INTERACTION_RESPONSE', 'DAILY_ACTIVITY_UPDATE', 'DAILY_REMINDER', 'DAILY_PROMPT_RATING'];
 
 function getDailyDelivery(deliveryKey) {
   return get('SELECT * FROM delivery_outbox WHERE deliveryKey = ?', [deliveryKey]);
@@ -53,6 +54,7 @@ function finalizeDailyDelivery(row) {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [row.messageId, row.guildId, row.channelId, picked.type, picked.key,
         picked.prompt, picked.title || null, sentAt]);
+      run('UPDATE daily_interaction_posts SET footerNormalizedAt = ? WHERE messageId = ?', [sentAt, row.messageId]);
       run('UPDATE daily_interaction_posts SET activityJson = ? WHERE messageId = ? AND activityJson IS NULL',
         [metadata.activity ? JSON.stringify(metadata.activity) : null, row.messageId]);
       if (metadata.trackHistory) {
@@ -109,6 +111,12 @@ async function attemptDailyDelivery(client, row) {
   if (row.status === 'SENT') return finalizeDailyDelivery(row);
   const metadata = dailyMetadata(row);
   if (!metadata || row.status === 'CANCELLED') return row;
+  if (row.type === 'DAILY_FACT_POST' && metadata.selection?.source === 'coded') {
+    const selection = metadata.selection;
+    const review = require('../data/dailyFactReview.json').entries.find(item => item.category === selection.category &&
+      selection.fact.startsWith(item.startsWith));
+    if (review?.status === 'RETIRED' || review?.replacement && selection.fact !== review.replacement) return cancelDailyDelivery(row);
+  }
   if (row.type === 'DAILY_ACTIVITY_UPDATE' && !metadata.reveal) {
     const post = get('SELECT * FROM daily_interaction_posts WHERE messageId = ?', [metadata.postId]);
     if (!post || (metadata.gameVersion != null && require('./dailyActivities').gameState(post).version > metadata.gameVersion) ||
@@ -160,6 +168,9 @@ async function attemptDailyDelivery(client, row) {
   try {
     const delivered = await deliverOnce(row.deliveryKey, async claimed => {
       const payload = claimed.parsedPayload;
+      if (payload.message.embeds?.[0]) {
+        payload.message.embeds[0].footer = cleanDailyFooter(payload.message.embeds[0].footer, metadata.marker);
+      }
       let target;
       if (row.type === 'DAILY_FACT_DM' || row.type === 'DAILY_REMINDER') {
         if (row.type === 'DAILY_REMINDER') {
@@ -241,10 +252,10 @@ function queueDailyDelivery({ deliveryKey, type, guildId, channelId = null, mess
   const existing = getDailyDelivery(deliveryKey);
   if (existing && existing.status !== 'CANCELLED') return existing;
   const payload = JSON.parse(JSON.stringify(message));
-  const marker = `Ref: ${deliveryNonce(deliveryKey)}`;
   payload.embeds ||= [{ footer: { text: 'Jabster Studios Daily Interactions' } }];
-  payload.embeds[0].footer = { ...payload.embeds[0].footer,
-    text: `${payload.embeds[0].footer?.text || 'Jabster Studios'} | ${marker}` };
+  const marker = (metadata.editMessageId && dailyReference(payload.embeds[0].footer?.text))
+    || `Ref: ${deliveryNonce(deliveryKey)}`;
+  payload.embeds[0].footer = cleanDailyFooter(payload.embeds[0].footer, marker);
   const row = enqueueDelivery({ deliveryKey, type, guildId, channelId,
     payload: { message: payload, daily: { ...metadata, marker } } });
   if (existing?.status === 'CANCELLED') {

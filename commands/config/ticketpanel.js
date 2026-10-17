@@ -104,7 +104,8 @@ module.exports = {
             type.name.slice(0, 100),
 
           description:
-            type.description.slice(0, 100),
+            row.type === 'application' ? 'Choose an application to see its staff response estimate'
+              : `Average first reply: ${require('../../utils/tickets/responseTimes').responseEstimate(interaction.guild.id, row.type, row.roleId).label}`,
 
           emoji:
             type.emoji,

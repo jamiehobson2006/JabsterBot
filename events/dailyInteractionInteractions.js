@@ -321,7 +321,8 @@ module.exports = {
     const isButton = isDailyInteractionButton(interaction);
     const isResponseModal = isDailyInteractionResponseModal(interaction);
     const isChoiceMenu = interaction.isStringSelectMenu?.() && interaction.customId === 'dailyinteraction_choice';
-    if (!isButton && !isResponseModal && !isChoiceMenu) return;
+    const isRating = interaction.isStringSelectMenu?.() && interaction.customId === 'dailyinteraction_rate';
+    if (!isButton && !isResponseModal && !isChoiceMenu && !isRating) return;
 
     try {
       if (isResponseModal) {
@@ -335,6 +336,8 @@ module.exports = {
           flags: MessageFlags.Ephemeral
         });
       }
+
+      if (isRating) return await require('../utils/dailyPromptRatings').handlePromptRating(interaction, post);
 
       if (!isDailyInteractionOpen(post) || !activityOpen(post)) {
         return interaction.reply({

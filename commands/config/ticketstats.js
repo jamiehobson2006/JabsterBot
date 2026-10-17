@@ -46,6 +46,9 @@ module.exports = {
       .setDefaultMemberPermissions(
         PermissionFlagsBits.Administrator
       )
+      .addSubcommand(subcommand => subcommand.setName('responses')
+        .setDescription('Average first replies by ticket type and responsible staff role')
+        .addIntegerOption(option => option.setName('page').setDescription('Results page').setMinValue(1)))
       .addSubcommand(subcommand =>
         subcommand
           .setName('overview')
@@ -90,6 +93,29 @@ module.exports = {
 
     const subcommand =
       interaction.options.getSubcommand();
+
+    if (subcommand === 'responses') {
+      const cohorts = all(`SELECT type, roleId FROM ticket_settings WHERE guildId = ? AND enabled = 1
+        UNION SELECT 'application', reviewerRoleId FROM application_forms WHERE guildId = ? AND enabled = 1
+        UNION SELECT type, roleId FROM ticket_response_samples WHERE guildId = ?`,
+      [interaction.guild.id, interaction.guild.id, interaction.guild.id]);
+      const lines = cohorts.filter(row => row.roleId).map(row => {
+        const result = require('../../utils/tickets/responseTimes').responseEstimate(interaction.guild.id, row.type, row.roleId);
+        return `**${row.type}** / <@&${row.roleId}>: **${result.label}** (${result.count} replies)`;
+      });
+      const pages = [];
+      let text = '';
+      for (const line of lines) {
+        if (text.length + line.length > 3800) { pages.push(text); text = ''; }
+        text += `${line}\n`;
+      }
+      if (text) pages.push(text);
+      if (!pages.length) pages.push('No response history yet. N/A.');
+      const page = Math.min(pages.length, interaction.options.getInteger('page') || 1);
+      const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Average First Staff Response').setDescription(pages[page - 1])
+        .setFooter({ text: `Page ${page}/${pages.length} | Observed replies only; historical roles are not guessed.` });
+      return interaction.editReply({ embeds: [embed], allowedMentions: { parse: [] } });
+    }
 
     if (subcommand === 'overview') {
       const ticketTotals =

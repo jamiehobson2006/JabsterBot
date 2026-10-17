@@ -76,6 +76,10 @@ module.exports = {
     .setName('ticket')
     .setDescription('Manage the current ticket')
     .setDMPermission(false)
+    .addSubcommand(subcommand => subcommand.setName('waiting')
+      .setDescription('Set who this ticket is waiting for')
+      .addStringOption(option => option.setName('for').setDescription('Who needs to reply next?')
+        .setRequired(true).addChoices({ name: 'Staff', value: 'STAFF' }, { name: 'Member', value: 'MEMBER' })))
     .addSubcommand(subcommand =>
       subcommand
         .setName('add')
@@ -209,6 +213,18 @@ module.exports = {
       return interaction.editReply({
         content: 'You cannot manage this ticket.'
       });
+    }
+
+    if (subcommand === 'waiting') {
+      try {
+        const waitingOn = interaction.options.getString('for', true);
+        require('../../utils/tickets/responseTimes').setWaiting(ticket.channelId, waitingOn);
+        await require('../../utils/tickets/responseTimes').refreshWaitingDisplay(interaction.client, ticket.channelId)
+          .catch(error => console.error('Ticket waiting display:', error.message));
+        return interaction.editReply({ content: `Waiting for ${waitingOn.toLowerCase()}. Resolution SLA time pauses while waiting for the member.` });
+      } catch (error) {
+        return interaction.editReply({ content: error.message });
+      }
     }
 
     const user =

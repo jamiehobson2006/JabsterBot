@@ -175,6 +175,13 @@ async function sendQueuedMessage(channel, delivery, payload) {
 async function retryChannelDeliveries(client) {
   let sent = 0;
   for (const row of pendingDeliveries()) {
+    if (row.type === 'LOG_BURST') {
+      try {
+        const result = await require('./logBursts').deliverLogBurst(client, row);
+        if (result?.status === 'SENT') sent += 1;
+      } catch (error) { console.error('Queued log burst:', error.message); }
+      continue;
+    }
     let payload;
     try {
       payload = JSON.parse(row.payload || 'null');

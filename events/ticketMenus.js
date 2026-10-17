@@ -172,8 +172,8 @@ module.exports = {
                 label:
                   form.name.slice(0, 100),
                 description:
-                  (form.description || 'Application form')
-                    .slice(0, 100),
+                  `Average first reply: ${require('../utils/tickets/responseTimes').responseEstimate(
+                    interaction.guild.id, 'application', form.reviewerRoleId || require('../utils/tickets/permissions').getStaffRole(interaction.guild.id, 'application')).label}`,
                 value:
                   String(form.id)
               }))

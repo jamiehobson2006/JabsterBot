@@ -380,25 +380,21 @@ async function trackTicketStaffMessage(
     return;
   }
 
-  if (
-    !hasTicketAccess({
+  const isStaff = message.author.id !== ticket.userId && hasTicketAccess({
       member: message.member,
       guildId: message.guild.id,
       type: ticket.type,
       channelId: message.channel.id
-    })
-  ) {
-    return;
+    });
+  require('../utils/tickets/responseTimes').recordTicketReply(ticket, {
+    userId: message.author.id, isStaff,
+    roleId: require('../utils/tickets/permissions').getStaffRole(message.guild.id, ticket.type, ticket.channelId)
+  });
+  if (ticket.waitingOn !== (isStaff ? 'MEMBER' : 'STAFF')) {
+    await require('../utils/tickets/responseTimes').refreshWaitingDisplay(client, ticket.channelId)
+      .catch(error => console.error('Ticket waiting display:', error.message));
   }
-
-  run(
-    `UPDATE tickets
-     SET firstStaffResponseAt = ?
-     WHERE channelId = ?
-     AND UPPER(status) = 'OPEN'
-     AND firstStaffResponseAt IS NULL`,
-    [Date.now(), message.channel.id]
-  );
+  if (!isStaff) return;
 
   addMessage(
     message.guild.id,

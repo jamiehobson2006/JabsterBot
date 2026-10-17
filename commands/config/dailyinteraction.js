@@ -286,7 +286,10 @@ module.exports = {
       .addStringOption(option => option
         .setName('title')
         .setDescription('Optional title replacing the standard heading')
-        .setMaxLength(120)))
+        .setMaxLength(120))
+      .addStringOption(option => option.setName('answer').setDescription('Required for trivia: the correct answer').setMaxLength(100))
+      .addStringOption(option => option.setName('aliases').setDescription('Trivia answer aliases, separated by | (maximum 10)').setMaxLength(1000))
+      .addStringOption(option => option.setName('explanation').setDescription('Required for trivia: explanation revealed after the round').setMaxLength(600)))
     .addSubcommand(subcommand => subcommand
       .setName('prompt-remove')
       .setDescription('Remove one custom prompt')
@@ -608,6 +611,9 @@ module.exports = {
           type: interaction.options.getString('type', true),
           prompt: interaction.options.getString('prompt', true),
           title: interaction.options.getString('title'),
+          answer: interaction.options.getString('answer'),
+          aliases: interaction.options.getString('aliases'),
+          explanation: interaction.options.getString('explanation'),
           createdBy: interaction.user.id
         });
       } catch (err) {

@@ -222,6 +222,11 @@ function choiceMatchesAnswer(answer, choice) {
 }
 
 function triviaAnswersForPrompt(post) {
+  let activity;
+  try { activity = JSON.parse(post?.activityJson || 'null'); } catch { /* Legacy prompt. */ }
+  const answers = post?.trivia?.answers || (activity?.mode === 'trivia' && activity.answers);
+  if (Array.isArray(answers) && answers.length > 0 && answers.length <= 11 &&
+      answers.every(answer => typeof answer === 'string' && answer.trim().length > 0 && answer.length <= 100)) return answers;
   const question = normalizeAnswer(promptText(post)).replace(/^trivia\s+/, '');
   return Object.hasOwn(TRIVIA_ANSWERS, question) ? TRIVIA_ANSWERS[question] : [];
 }

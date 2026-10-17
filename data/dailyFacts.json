@@ -49,7 +49,17 @@
     "The first public zoo opened in Vienna in 1752 and is still operating today.",
     "The world's largest jigsaw puzzle contains over 60,000 pieces.",
     "The longest word that can be typed using only the top row of a QWERTY keyboard is 'typewriter'.",
-    "The human brain can recognise a familiar face in as little as a few hundred milliseconds."
+    "The human brain can recognise a familiar face in as little as a few hundred milliseconds.",
+    { "fact": "The Penny Black, introduced in Britain in 1840, was the world's first adhesive postage stamp.", "sourceUrl": "https://www.postalmuseum.org/collections/highlights/the-first-ever-stamp-the-penny-black/", "checkedAt": "2026-10-17" },
+    { "fact": "The name LEGO comes from the Danish words 'leg godt', meaning 'play well'.", "sourceUrl": "https://www.lego.com/en-us/aboutus/lego-group/the-lego-group-history", "checkedAt": "2026-10-17" },
+    { "fact": "Nintendo began in Kyoto in 1889 as a business making hanafuda playing cards, long before video games existed.", "sourceUrl": "https://www.nintendo.com/us/about/", "checkedAt": "2026-10-17" },
+    { "fact": "An Oscar statuette is about 34 centimetres tall and weighs about 3.9 kilograms.", "sourceUrl": "https://www.oscars.org/oscars/statuette", "checkedAt": "2026-10-17" },
+    { "fact": "For three years during World War II, Oscar statuettes were made from painted plaster because of a metal shortage.", "sourceUrl": "https://www.oscars.org/oscars/statuette", "checkedAt": "2026-10-17" },
+    { "fact": "A standard braille cell has six possible raised dots arranged in two columns of three.", "sourceUrl": "https://www.rnib.org.uk/living-with-sight-loss/education-and-learning/braille-tactile-codes/", "checkedAt": "2026-10-17" },
+    { "fact": "Yellowstone became the world's first national park in 1872.", "sourceUrl": "https://www.nps.gov/yell/learn/historyculture/yellowstoneestablishment.htm", "checkedAt": "2026-10-17" },
+    { "fact": "The Gregorian calendar skips leap days in century years unless the year is divisible by 400, which is why 2000 was a leap year but 1900 was not.", "sourceUrl": "https://aa.usno.navy.mil/faq/leap_years", "checkedAt": "2026-10-17" },
+    { "fact": "LEGO filed its patent application for the familiar stud-and-tube brick design on 28 January 1958.", "sourceUrl": "https://www.lego.com/es-es/history/articles/d-the-stud-and-tube-principle", "checkedAt": "2026-10-17" },
+    { "fact": "The film reel beneath the Oscar statuette has five spokes representing the Academy's five original branches.", "sourceUrl": "https://www.oscars.org/oscars/statuette", "checkedAt": "2026-10-17" }
   ],
 
   "space": [
@@ -102,7 +112,17 @@
     "The James Webb Space Telescope can observe galaxies whose light has travelled for over 13 billion years.",
     "The Solar System takes roughly 230 million years to complete one orbit around the Milky Way.",
     "A comet's tail always points away from the Sun because it is pushed by solar wind and sunlight.",
-    "Every atom heavier than iron in your body was created during ancient stellar explosions or neutron star collisions."
+    "Every atom heavier than iron in your body was created during ancient stellar explosions or neutron star collisions.",
+    { "fact": "Ceres is the largest object in the asteroid belt between Mars and Jupiter, and is classified as a dwarf planet.", "sourceUrl": "https://science.nasa.gov/dwarf-planets/ceres/facts/", "checkedAt": "2026-10-17" },
+    { "fact": "Jupiter's moon Ganymede is larger in diameter than the planet Mercury.", "sourceUrl": "https://science.nasa.gov/jupiter/jupiter-moons/ganymede/facts/", "checkedAt": "2026-10-17" },
+    { "fact": "Neptune's largest moon, Triton, travels around its planet in the opposite direction to the planet's rotation.", "sourceUrl": "https://science.nasa.gov/neptune/moons/facts/", "checkedAt": "2026-10-17" },
+    { "fact": "Jupiter's moon Io is the most volcanically active world in our solar system.", "sourceUrl": "https://science.nasa.gov/jupiter/jupiter-moons/ganymede/facts/", "checkedAt": "2026-10-17" },
+    { "fact": "Jets from Saturn's moon Enceladus spray icy particles into space and help supply material to Saturn's E ring.", "sourceUrl": "https://science.nasa.gov/saturn/moons/enceladus/", "checkedAt": "2026-10-17" },
+    { "fact": "Uranus looks blue-green because methane in its atmosphere absorbs red light.", "sourceUrl": "https://science.nasa.gov/uranus/facts/", "checkedAt": "2026-10-17" },
+    { "fact": "Permanently shadowed craters near Mercury's poles can be cold enough to preserve water ice.", "sourceUrl": "https://science.nasa.gov/mercury/facts/", "checkedAt": "2026-10-17" },
+    { "fact": "Venus spins in the opposite direction to Earth, so the Sun would rise in the west and set in the east there.", "sourceUrl": "https://science.nasa.gov/venus/venus-facts/", "checkedAt": "2026-10-17" },
+    { "fact": "Neptune was located in 1846 using mathematical predictions based on unexpected changes in Uranus's orbit.", "sourceUrl": "https://science.nasa.gov/neptune/neptune-facts/", "checkedAt": "2026-10-17" },
+    { "fact": "Saturn is the only planet in our solar system whose average density is lower than that of water.", "sourceUrl": "https://science.nasa.gov/saturn/facts/", "checkedAt": "2026-10-17" }
   ],
 
   "animals": [
@@ -155,7 +175,17 @@
     "Polar bear fur appears white but is actually made of transparent hairs.",
     "The shoebill stork can remain perfectly still for long periods before striking prey with incredible speed.",
     "Puffins carry multiple fish at once by holding earlier catches in place with specialised spines inside their beaks.",
-    "The Australian lungfish can breathe air using a single lung when oxygen levels in water become too low."
+    "The Australian lungfish can breathe air using a single lung when oxygen levels in water become too low.",
+    { "fact": "A platypus closes its eyes, ears and nostrils while searching for food underwater.", "sourceUrl": "https://australian.museum/learn/animals/mammals/platypus/", "checkedAt": "2026-10-17" },
+    { "fact": "The platypus's bill contains receptors that detect electrical signals as well as pressure.", "sourceUrl": "https://australian.museum/learn/animals/mammals/platypus/", "checkedAt": "2026-10-17" },
+    { "fact": "Male platypuses have ankle spurs connected to venom glands, making them some of the few venomous mammals.", "sourceUrl": "https://australian.museum/learn/animals/mammals/platypus/", "checkedAt": "2026-10-17" },
+    { "fact": "A platypus can carry food in cheek pouches while diving, then chew it while resting at the surface.", "sourceUrl": "https://australian.museum/learn/animals/mammals/platypus/", "checkedAt": "2026-10-17" },
+    { "fact": "Short-beaked echidnas catch ants and termites with a long, sticky tongue.", "sourceUrl": "https://australian.museum/learn/animals/mammals/short-beaked-echidna/", "checkedAt": "2026-10-17" },
+    { "fact": "A short-beaked echidna lays a single egg at a time rather than giving birth to live young.", "sourceUrl": "https://australian.museum/learn/animals/mammals/short-beaked-echidna/", "checkedAt": "2026-10-17" },
+    { "fact": "A short-beaked echidna's egg usually hatches after about ten days.", "sourceUrl": "https://australian.museum/learn/animals/mammals/short-beaked-echidna/", "checkedAt": "2026-10-17" },
+    { "fact": "When a young echidna develops prickly spines, its mother moves it from her pouch into a burrow.", "sourceUrl": "https://australian.museum/learn/animals/mammals/short-beaked-echidna/", "checkedAt": "2026-10-17" },
+    { "fact": "An octopus has three hearts: two pump blood past the gills and one circulates it around the body.", "sourceUrl": "https://www.nhm.ac.uk/discover/octopuses-keep-surprising-us-here-are-eight-examples-how.html", "checkedAt": "2026-10-17" },
+    { "fact": "Octopus blood is blue because its oxygen-carrying pigment contains copper rather than the iron used in human haemoglobin.", "sourceUrl": "https://www.nhm.ac.uk/discover/octopuses-keep-surprising-us-here-are-eight-examples-how.html", "checkedAt": "2026-10-17" }
   ],
 
   "science": [
@@ -208,7 +238,17 @@
     "Plants convert sunlight into chemical energy with an efficiency that scientists are still trying to improve upon artificially.",
     "Some fungi can survive the intense radiation found inside damaged nuclear reactors.",
     "The universe has no known centre because space itself is expanding in every direction.",
-    "Every second, your body carries out trillions of chemical reactions to keep you alive."
+    "Every second, your body carries out trillions of chemical reactions to keep you alive.",
+    { "fact": "The seven base units of the modern SI measurement system are defined using seven fixed constants of nature.", "sourceUrl": "https://www.nist.gov/si-redefinition/meet-constants", "checkedAt": "2026-10-17" },
+    { "fact": "Defining the kilogram uses a fixed value of the Planck constant, a number from quantum physics.", "sourceUrl": "https://www.nist.gov/si-redefinition/meet-constants", "checkedAt": "2026-10-17" },
+    { "fact": "One mole contains exactly 602,214,076,000,000,000,000,000 specified particles, such as atoms or molecules.", "sourceUrl": "https://www.nist.gov/si-redefinition/meet-constants", "checkedAt": "2026-10-17" },
+    { "fact": "The ampere, the unit of electric current, is defined using the fixed magnitude of the elementary electric charge.", "sourceUrl": "https://www.nist.gov/si-redefinition/meet-constants", "checkedAt": "2026-10-17" },
+    { "fact": "The Boltzmann constant links temperature to energy and is used to define the kelvin.", "sourceUrl": "https://www.nist.gov/si-redefinition/meet-constants", "checkedAt": "2026-10-17" },
+    { "fact": "The definition of the candela uses a particular green light near the colour our eyes detect most sensitively in bright conditions.", "sourceUrl": "https://www.nist.gov/si-redefinition/meet-constants", "checkedAt": "2026-10-17" },
+    { "fact": "Isotopes of an element have the same number of protons but different numbers of neutrons.", "sourceUrl": "https://goldbook.iupac.org/terms/view/I03331", "checkedAt": "2026-10-17" },
+    { "fact": "An element's atomic number tells you how many protons are in its atomic nucleus.", "sourceUrl": "https://goldbook.iupac.org/terms/view/A00499", "checkedAt": "2026-10-17" },
+    { "fact": "Isomers can have the same molecular formula while their atoms are arranged differently.", "sourceUrl": "https://goldbook.iupac.org/terms/view/I03289", "checkedAt": "2026-10-17" },
+    { "fact": "Stereoisomers have the same atom-to-atom connections but differ in how those atoms are arranged in three dimensions.", "sourceUrl": "https://goldbook.iupac.org/terms/view/S05983", "checkedAt": "2026-10-17" }
   ],
 
   "history": [
@@ -261,7 +301,17 @@
     "During World War I, a temporary Christmas Truce saw soldiers from opposing sides meet peacefully in parts of the front line.",
     "The world's oldest known wooden wheel is over 5,000 years old.",
     "The Panama Canal uses a system of locks to lift ships approximately 26 metres above sea level before lowering them again.",
-    "The first successful ascent of Mount Everest was achieved by Edmund Hillary and Tenzing Norgay in 1953."
+    "The first successful ascent of Mount Everest was achieved by Edmund Hillary and Tenzing Norgay in 1953.",
+    { "fact": "Most of Stonehenge's large sarsen stones have been traced to West Woods near Marlborough in Wiltshire.", "sourceUrl": "https://www.english-heritage.org.uk/about/search-news/research-reveals-origin-of-stonehenge-stones/", "checkedAt": "2026-10-17" },
+    { "fact": "Many of Stonehenge's smaller bluestones were brought from the Preseli Hills in south-west Wales.", "sourceUrl": "https://www.english-heritage.org.uk/visit/places/stonehenge/things-to-do/stone-circle/stones-of-stonehenge", "checkedAt": "2026-10-17" },
+    { "fact": "The Anglo-Saxon ship buried at Sutton Hoo was about 27 metres long.", "sourceUrl": "https://www.britishmuseum.org/blog/eighty-years-and-more-sutton-hoo", "checkedAt": "2026-10-17" },
+    { "fact": "Basil Brown excavated the great ship burial at Sutton Hoo in 1939, shortly before the Second World War began.", "sourceUrl": "https://www.britishmuseum.org/blog/eighty-years-and-more-sutton-hoo", "checkedAt": "2026-10-17" },
+    { "fact": "Sutton Hoo landowner Edith Pretty donated the burial's extraordinary finds to the British Museum in 1939.", "sourceUrl": "https://www.britishmuseum.org/about-us/british-museum-story/people-behind-collection/edith-pretty", "checkedAt": "2026-10-17" },
+    { "fact": "The medieval Lewis chess pieces were carved from walrus ivory and whale teeth.", "sourceUrl": "https://www.britishmuseum.org/research/projects/rethinking-lewis-chess-pieces-north-sea-and-arctic-world", "checkedAt": "2026-10-17" },
+    { "fact": "Despite its name, the Bayeux Tapestry is embroidery: its designs were stitched onto linen rather than woven into it.", "sourceUrl": "https://www.bayeuxmuseum.com/en/the-bayeux-tapestry/discover-the-bayeux-tapestry/tapestry-or-embroidery/", "checkedAt": "2026-10-17" },
+    { "fact": "Four original copies of the 1215 Magna Carta survive, and the British Library holds two of them.", "sourceUrl": "https://support.bl.uk/Page/Magna-Carta-exhibition", "checkedAt": "2026-10-17" },
+    { "fact": "Ancient Mesopotamian scribes made cuneiform signs by pressing a stylus, often made of reed, into clay.", "sourceUrl": "https://www.britishmuseum.org/sites/default/files/2019-09/Visit_Mesopotamia_KS2b.pdf", "checkedAt": "2026-10-17" },
+    { "fact": "The famous Sutton Hoo ship burial dates to the early seventh century, more than a thousand years before it was excavated.", "sourceUrl": "https://www.britishmuseum.org/blog/eighty-years-and-more-sutton-hoo", "checkedAt": "2026-10-17" }
   ],
 
   "technology": [
@@ -314,7 +364,17 @@
     "Modern CPUs perform billions of clock cycles every second.",
     "The first robot used in a factory began work in 1961 at a General Motors production line.",
     "The World Wide Web and the internet are different—the web is just one service that runs on the internet.",
-    "Many websites are hosted on servers that run the Linux operating system rather than Windows."
+    "Many websites are hosted on servers that run the Linux operating system rather than Windows.",
+    { "fact": "The world's first website ran on a NeXT computer at CERN and explained the World Wide Web project itself.", "sourceUrl": "https://home.cern/science/computing/the-birth-of-the-web/short-history-web/", "checkedAt": "2026-10-17" },
+    { "fact": "Tim Berners-Lee's original web browser could edit pages as well as display them.", "sourceUrl": "https://home.cern/science/computing/the-birth-of-the-web/short-history-web/", "checkedAt": "2026-10-17" },
+    { "fact": "CERN made the World Wide Web's source code available royalty-free on 30 April 1993.", "sourceUrl": "https://home.cern/science/computing/the-birth-of-the-web/short-history-web/", "checkedAt": "2026-10-17" },
+    { "fact": "QR codes include mathematical error correction so some data can still be recovered if the code becomes dirty or damaged.", "sourceUrl": "https://www.qrcode.com/en/about/error_correction.html", "checkedAt": "2026-10-17" },
+    { "fact": "QR codes offer four error-correction levels, trading some storage capacity for greater damage resistance.", "sourceUrl": "https://www.qrcode.com/en/about/error_correction.html", "checkedAt": "2026-10-17" },
+    { "fact": "The blank border around a standard QR code is a 'quiet zone' that should be four modules wide on every side.", "sourceUrl": "https://www.qrcode.com/en/howto/code.html", "checkedAt": "2026-10-17" },
+    { "fact": "IPv6 uses 128-bit addresses, compared with the 32-bit addresses used by IPv4.", "sourceUrl": "https://www.rfc-editor.org/rfc/rfc8200", "checkedAt": "2026-10-17" },
+    { "fact": "UTF-8 represents each Unicode scalar value with one to four bytes; a visible character can combine several such values.", "sourceUrl": "https://www.unicode.org/faq/utf_bom.html", "checkedAt": "2026-10-17" },
+    { "fact": "A GPS receiver normally uses signals from at least four satellites to work out its three-dimensional position and clock offset.", "sourceUrl": "https://www.gps.gov/sites/default/files/2025-07/gps_finalreport618.pdf", "checkedAt": "2026-10-17" },
+    { "fact": "GPS satellites carry multiple atomic clocks, and their precise time signals are essential to navigation.", "sourceUrl": "https://www.gps.gov/gps-and-telling-time", "checkedAt": "2026-10-17" }
   ],
 
   "geography": [
@@ -367,7 +427,17 @@
     "There are more than 2,000 active volcanoes around the world.",
     "The Equator passes through 13 countries.",
     "The Grand Canyon was carved over millions of years, mainly by the Colorado River.",
-    "The Earth's continents move by a few centimetres every year due to plate tectonics."
+    "The Earth's continents move by a few centimetres every year due to plate tectonics.",
+    { "fact": "Point Nemo in the Pacific Ocean is about 2,688 kilometres from the nearest land, making it the ocean's most remote point.", "sourceUrl": "https://oceanservice.noaa.gov/facts/nemo.html", "checkedAt": "2026-10-17" },
+    { "fact": "Lakes Michigan and Huron are hydrologically one lake, linked by the Straits of Mackinac.", "sourceUrl": "https://www.glerl.noaa.gov/res/straits/", "checkedAt": "2026-10-17" },
+    { "fact": "Mauna Kea rises more than ten kilometres from its base on the ocean floor, although much of it is hidden underwater.", "sourceUrl": "https://oceanservice.noaa.gov/facts/highestpoint.html", "checkedAt": "2026-10-17" },
+    { "fact": "The volcanic islands of the Hawaiian chain generally become older towards the northwest as the Pacific Plate moves over a hotspot.", "sourceUrl": "https://pubs.usgs.gov/gip/dynamic/hotspots.html", "checkedAt": "2026-10-17" },
+    { "fact": "The Ring of Fire is a zone of frequent earthquakes and volcanoes around the margins of the Pacific Ocean.", "sourceUrl": "https://www.usgs.gov/faqs/what-ring-fire", "checkedAt": "2026-10-17" },
+    { "fact": "North America's Continental Divide separates watersheds that drain towards the Atlantic and Pacific oceans.", "sourceUrl": "https://www.nps.gov/glac/learn/education/continental_divide.htm", "checkedAt": "2026-10-17" },
+    { "fact": "In Glacier National Park, water near Triple Divide Peak can flow towards the Pacific Ocean, Atlantic Ocean or Hudson Bay.", "sourceUrl": "https://www.nps.gov/glac/learn/education/continental_divide.htm", "checkedAt": "2026-10-17" },
+    { "fact": "Molten rock is called magma while underground and lava after it reaches the surface.", "sourceUrl": "https://www.usgs.gov/programs/VHP/about-volcanoes", "checkedAt": "2026-10-17" },
+    { "fact": "Mount St. Helens has a horseshoe-shaped crater left by the collapse and eruption of its northern side in 1980.", "sourceUrl": "https://www.usgs.gov/volcanoes/mount-st.-helens/science/2004-2008-eruption-mount-st-helens-and-what-ifs", "checkedAt": "2026-10-17" },
+    { "fact": "Yellowstone's great caldera is a depression formed when the ground collapsed after a huge eruption emptied part of a magma reservoir.", "sourceUrl": "https://www.usgs.gov/volcanoes/yellowstone/questions-about-yellowstone-volcanic-history", "checkedAt": "2026-10-17" }
   ],
 
   "nature": [
@@ -420,7 +490,17 @@
     "Avalanches can travel faster than 300 kilometres per hour.",
     "The Antarctic ice sheet contains enough frozen water to raise global sea levels by around 58 metres if it completely melted.",
     "Many tropical rainforests contain more species of trees in a single hectare than are found across entire countries in cooler climates.",
-    "The aurora borealis is created when charged particles from the Sun collide with gases high in Earth's atmosphere."
+    "The aurora borealis is created when charged particles from the Sun collide with gases high in Earth's atmosphere.",
+    { "fact": "Venus flytraps are native to a small area of wetlands in North and South Carolina, despite being grown around the world.", "sourceUrl": "https://www.kew.org/read-and-watch/carnivorous-plants", "checkedAt": "2026-10-17" },
+    { "fact": "A Venus flytrap normally closes only after two trigger hairs are touched, or one is touched twice, in quick succession.", "sourceUrl": "https://www.kew.org/read-and-watch/carnivorous-plants", "checkedAt": "2026-10-17" },
+    { "fact": "Sundew plants trap insects with sticky droplets on fine tentacles covering their leaves.", "sourceUrl": "https://www.kew.org/read-and-watch/carnivorous-plants", "checkedAt": "2026-10-17" },
+    { "fact": "A pitcher plant's insect-catching pitcher is a specially modified leaf, not a flower.", "sourceUrl": "https://www.kew.org/read-and-watch/carnivorous-plants", "checkedAt": "2026-10-17" },
+    { "fact": "Bladderwort plants create low pressure inside tiny traps, then suck in water and prey when a trigger opens the trap.", "sourceUrl": "https://www.kew.org/read-and-watch/carnivorous-plants", "checkedAt": "2026-10-17" },
+    { "fact": "Welwitschia plants keep the same two true leaves growing throughout their lives, even though the leaves split into many strips.", "sourceUrl": "https://powo.science.kew.org/taxon/urn%3Alsid%3Aipni.org%3Anames%3A383591-1/general-information", "checkedAt": "2026-10-17" },
+    { "fact": "Ginkgo is a deciduous gymnosperm with distinctive fan-shaped leaves, rather than a flowering broadleaf tree.", "sourceUrl": "https://www.fs.usda.gov/nsl/Wpsm/Ginkgo.pdf", "checkedAt": "2026-10-17" },
+    { "fact": "Welwitschia has separate male and female plants, producing pollen cones and seed cones respectively.", "sourceUrl": "https://www.kew.org/plants/welwitschia-mirabilis", "checkedAt": "2026-10-17" },
+    { "fact": "Mangrove seeds can begin growing while still attached to the parent tree before their seedlings fall into the water.", "sourceUrl": "https://oceanservice.noaa.gov/education/tutorial_estuaries/est07_adaptations.html", "checkedAt": "2026-10-17" },
+    { "fact": "Seagrasses are rooted flowering plants, not seaweeds, and have stems, leaves and roots like plants on land.", "sourceUrl": "https://oceanservice.noaa.gov/podcast/mar23/nop63-seagrass.html", "checkedAt": "2026-10-17" }
   ],
 
   "humanbody": [
@@ -473,7 +553,17 @@
     "Your fingerprints begin forming before you are born and remain unique throughout your life.",
     "Even identical twins have different fingerprints.",
     "The average human jaw can exert a bite force of over 700 newtons using the back teeth.",
-    "Your body is constantly repairing DNA damage that occurs naturally inside your cells every day."
+    "Your body is constantly repairing DNA damage that occurs naturally inside your cells every day.",
+    { "fact": "Food moves through your digestive tract by waves of muscle contractions called peristalsis.", "sourceUrl": "https://www.niddk.nih.gov/health-information/digestive-diseases/digestive-system-how-it-works", "checkedAt": "2026-10-17" },
+    { "fact": "When you swallow, a flap called the epiglottis folds over your windpipe to help direct food into the oesophagus.", "sourceUrl": "https://www.niddk.nih.gov/health-information/digestive-diseases/digestive-system-how-it-works", "checkedAt": "2026-10-17" },
+    { "fact": "Your liver makes bile, while your gallbladder stores it until it is needed for digestion.", "sourceUrl": "https://www.niddk.nih.gov/health-information/digestive-diseases/digestive-system-how-it-works", "checkedAt": "2026-10-17" },
+    { "fact": "Most digested nutrients enter your bloodstream through the walls of the small intestine.", "sourceUrl": "https://www.niddk.nih.gov/health-information/digestive-diseases/digestive-system-how-it-works", "checkedAt": "2026-10-17" },
+    { "fact": "The digestive tract has its own network of nerves within its walls, known as the enteric nervous system.", "sourceUrl": "https://www.niddk.nih.gov/health-information/digestive-diseases/digestive-system-how-it-works", "checkedAt": "2026-10-17" },
+    { "fact": "Each inner ear has three fluid-filled semicircular canals arranged roughly at right angles to detect head rotation.", "sourceUrl": "https://www.nidcd.nih.gov/health/balance-disorders", "checkedAt": "2026-10-17" },
+    { "fact": "Tiny calcium carbonate grains called otoconia help your inner ears detect gravity and changes in head position.", "sourceUrl": "https://www.nidcd.nih.gov/health/balance-disorders", "checkedAt": "2026-10-17" },
+    { "fact": "Keeping your balance combines information from your inner ears, eyes and sensory signals from muscles and joints.", "sourceUrl": "https://www.nidcd.nih.gov/health/balance-disorders", "checkedAt": "2026-10-17" },
+    { "fact": "The healthy cornea at the front of your eye is transparent and has no blood vessels.", "sourceUrl": "https://www.nei.nih.gov/research-and-training/research-news/nei-funded-research-shows-promise-healing-damage-dry-eye-surgery-and-toxin-exposure", "checkedAt": "2026-10-17" },
+    { "fact": "Photoreceptor cells in your retina turn light into electrical signals that travel to the brain through the optic nerve.", "sourceUrl": "https://www.nei.nih.gov/learn-about-eye-health/healthy-vision/how-eyes-work", "checkedAt": "2026-10-17" }
   ],
 
   "ocean": [
@@ -526,6 +616,16 @@
     "The Moon's gravity causes most of Earth's ocean tides.",
     "Scientists discover hundreds of new marine species almost every year.",
     "The deepest parts of the ocean are colder than most household refrigerators.",
-    "Less people have visited the deepest part of the ocean than have walked on the Moon."
+    "Less people have visited the deepest part of the ocean than have walked on the Moon.",
+    { "fact": "The named oceans are connected parts of one global ocean rather than completely separate bodies of water.", "sourceUrl": "https://oceanservice.noaa.gov/facts/howmanyoceans.html", "checkedAt": "2026-10-17" },
+    { "fact": "Sodium and chloride together make up around 85 percent of the dissolved ions in seawater.", "sourceUrl": "https://oceanservice.noaa.gov/facts/whysalty.html", "checkedAt": "2026-10-17" },
+    { "fact": "Upwelling brings colder, nutrient-rich water from deeper in the ocean towards the surface, helping feed productive ecosystems.", "sourceUrl": "https://oceanservice.noaa.gov/facts/upwelling.html", "checkedAt": "2026-10-17" },
+    { "fact": "Some deep-ocean ecosystems depend on chemosynthesis, which uses chemical energy rather than sunlight to make food.", "sourceUrl": "https://oceanexplorer.noaa.gov/ocean-fact/photochemo/", "checkedAt": "2026-10-17" },
+    { "fact": "The ocean's SOFAR sound channel can guide low-frequency sound over extremely long distances.", "sourceUrl": "https://oceanservice.noaa.gov/facts/sofar.html", "checkedAt": "2026-10-17" },
+    { "fact": "Differences in water temperature and salinity help drive deep ocean circulation, known as thermohaline circulation.", "sourceUrl": "https://oceanservice.noaa.gov/education/tutorial_currents/05conveyor1.html", "checkedAt": "2026-10-17" },
+    { "fact": "When the ocean absorbs carbon dioxide, chemical reactions increase acidity even though seawater remains slightly alkaline overall.", "sourceUrl": "https://oceanservice.noaa.gov/facts/acidification.html", "checkedAt": "2026-10-17" },
+    { "fact": "Ocean pressure increases by about one additional atmosphere for every ten metres of depth.", "sourceUrl": "https://oceanservice.noaa.gov/facts/pressure.html", "checkedAt": "2026-10-17" },
+    { "fact": "The Sun helps generate ocean tides too, although its tide-generating effect is smaller than the Moon's.", "sourceUrl": "https://oceanservice.noaa.gov/education/tutorial_tides/tides02_cause.html", "checkedAt": "2026-10-17" },
+    { "fact": "In deep ocean water, tsunami waves can travel as fast as jet aircraft before slowing in shallower water.", "sourceUrl": "https://oceanservice.noaa.gov/facts/tsunami.html", "checkedAt": "2026-10-17" }
   ]
 }

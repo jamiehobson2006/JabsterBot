@@ -1652,6 +1652,16 @@ function createTicketStatsTable() {
 // ==================================================
 function createTicketSlaTables() {
 
+  ensureColumn('tickets', 'responseRoleId', 'TEXT');
+  ensureColumn('tickets', 'waitingOn', "TEXT NOT NULL DEFAULT 'STAFF'");
+  ensureColumn('tickets', 'waitingSince', 'INTEGER');
+  ensureColumn('tickets', 'memberWaitMs', 'INTEGER NOT NULL DEFAULT 0');
+  rawRun(`CREATE TABLE IF NOT EXISTS ticket_response_samples (
+    guildId TEXT NOT NULL, channelId TEXT PRIMARY KEY, type TEXT NOT NULL,
+    roleId TEXT NOT NULL, responseMs INTEGER NOT NULL, recordedAt INTEGER NOT NULL)`);
+  createIndex('idx_ticket_response_cohort', `CREATE INDEX IF NOT EXISTS idx_ticket_response_cohort
+    ON ticket_response_samples(guildId, type, roleId)`);
+
   ensureColumn(
     'tickets',
     'firstStaffResponseAt',

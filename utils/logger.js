@@ -1272,6 +1272,12 @@ async function logAudit(
           : undefined
     });
 
+  if (!files?.length) {
+    const { queueLogBurst, scheduleLogBurst } = require('./logBursts');
+    const queued = queueLogBurst({ guildId, action, type, executorId, targetId, metadata, embed: logEmbed });
+    if (queued) { scheduleLogBurst(client, queued); return queued; }
+  }
+
   return sendLog(
 
     client,

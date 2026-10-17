@@ -428,6 +428,9 @@ async function createTicketUnlocked({
       ? application.answers
       : [];
 
+  const responseEstimate = require('./responseTimes').responseEstimate(
+    interaction.guild.id, safeType, staffRole.id);
+
   const embed =
     new EmbedBuilder()
 
@@ -551,6 +554,9 @@ async function createTicketUnlocked({
     }
   }
 
+  embed.addFields({ name: 'Average First Staff Response', value: responseEstimate.label, inline: true });
+  embed.addFields({ name: 'Waiting For', value: 'Staff', inline: true });
+
   const msg =
     await channel.send({
 
@@ -585,10 +591,11 @@ async function createTicketUnlocked({
          userId,
          type,
          applicationFormId,
+         responseRoleId,
          fingerprint,
          createdAt,
          status
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         interaction.guild.id,
         channel.id,
@@ -596,6 +603,7 @@ async function createTicketUnlocked({
         interaction.user.id,
         safeType,
         application?.form?.id || null,
+        staffRole.id,
         fingerprint,
         Date.now(),
         'OPEN'

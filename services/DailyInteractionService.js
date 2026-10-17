@@ -8,6 +8,7 @@ const {
 } = require('discord.js');
 const crypto = require('node:crypto');
 const { fetchDailyMessage, withDailyDisplayLock } = require('../utils/dailyDisplay');
+const { cleanDailyFooter } = require('../utils/dailyFooter');
 const { activityOpen, createActivity, maintainActivities } = require('../utils/dailyActivities');
 const { activeDayGap, engagementSettings, isQuietDay, applyMilestones, sendReminders } = require('../utils/dailyEngagement');
 
@@ -183,19 +184,29 @@ const INTERACTION_TYPES = Object.freeze({
     ]
   },
   COMMUNITY_PICK: {
-    label: 'Community Pick',
+    label: 'Daily Dilemma',
     emoji: '\u{1F4CB}',
     prompts: [
-      'Pick one for game night: racing, building, survival, or puzzles.',
-      'Pick a future event time: weekday evening or weekend afternoon.',
-      'Pick a theme for a community challenge: summer, underwater, space, or fantasy.',
-      'Pick one feature for a dream server: game nights, art shows, tournaments, or movie nights.',
-      'Pick a setting for an adventure: island, city, forest, or mountains.',
-      'Pick a community reward: custom role, spotlight, event access, or badge.',
-      'Pick a game mood: relaxed, competitive, creative, or social.',
-      'Pick an event style: team challenge, scavenger hunt, quiz, or showcase.',
-      'Pick a soundtrack mood: calm, upbeat, cinematic, or retro.',
-      'Pick a mascot idea: robot, dragon, explorer, or wizard.'
+      'A mysterious vending machine offers one impossible item. Pick your prize: teleporting backpack, pocket-sized dragon, floating skateboard, or instant treehouse.',
+      'You wake up inside a game with only one unusual ability. Pick your power: rewind ten seconds, double jump, talk to animals, or summon snacks.',
+      'Your pet can say exactly one sentence. Pick what you ask: what is your name, what do you dream about, where do you go at night, or what do humans get wrong.',
+      'A hidden door appears in your room for one hour. Pick the destination: a library in the clouds, an underwater city, a dinosaur sanctuary, or a moon cafe.',
+      'You must survive a day as a tiny character in your own house. Pick your transport: toy train, paper aeroplane, remote control car, or friendly beetle.',
+      'A wizard offers to upgrade one ordinary object forever. Pick the upgrade: self-filling notebook, perfectly warm socks, never-tangled headphones, or weatherproof umbrella.',
+      'You can add one harmless cheat code to real life. Pick your code: find lost objects, skip queues, undo a spilled drink, or always catch the bus.',
+      'A friendly robot wants to learn one human hobby. Pick what you teach it: baking, dancing, gardening, or painting.',
+      'You discover an unexplored island with one strange landmark. Pick what you investigate: a singing waterfall, a glowing cave, an upside-down tower, or a giant stone door.',
+      'You get a companion for an imaginary adventure. Pick your teammate: a sarcastic map, a brave squirrel, a shy ghost, or a retired superhero.',
+      'Every time you open a cupboard it leads somewhere different. Pick the first cupboard: a space station, a secret bakery, a miniature kingdom, or a tropical greenhouse.',
+      'You must build a base using an unusual material. Pick your building blocks: giant cushions, crystal cubes, enchanted books, or floating islands.',
+      'A dragon offers you a part-time job with free training. Pick your job: treasure organiser, sky delivery rider, cave decorator, or baby dragon sitter.',
+      'One fictional shop opens on your street for a week. Pick the shop: potion bakery, robot repair cafe, costume workshop, or time-travel gift shop.',
+      'Your next game character has a ridiculous special move. Pick the move: confetti tornado, rubber duck army, pancake shield, or dramatic slow motion.',
+      'You find a button that changes one thing about the weather. Pick its effect: music during rain, colourful snow, cloud animals, or gentle bubble storms.',
+      'A secret lift has four unlabelled buttons and one clue each. Pick your floor: footsteps above the clouds, music beneath the sea, sunlight underground, or snow in summer.',
+      'Your team has to cross a fantastical obstacle course. Pick the team vehicle: giant hamster ball, flying sofa, mechanical spider, or bouncy castle.',
+      'You can borrow one skill from a game character for a weekend. Pick your skill: perfect inventory sorting, instant crafting, safe wall climbing, or underwater breathing.',
+      'An alien asks you to introduce Earth with one experience. Pick the introduction: a sunset picnic, a snowball game, a live concert, or a busy food market.'
     ]
   },
   APPRECIATION: {
@@ -439,7 +450,7 @@ function updateInteractionType({ guildId, type, enabled, weight }) {
   );
 }
 
-function addCustomPrompt({ guildId, type, prompt, title, createdBy }) {
+function addCustomPrompt({ guildId, type, prompt, title, createdBy, answer, aliases, explanation }) {
   const normalizedType = String(type || '').toUpperCase();
   if (!interactionType(normalizedType)) {
     throw new Error('Invalid daily interaction type.');
@@ -455,12 +466,15 @@ function addCustomPrompt({ guildId, type, prompt, title, createdBy }) {
     throw new Error(validation.message);
   }
 
+  const trivia = normalizedType === 'TRIVIA'
+    ? require('../utils/customTrivia').validateTrivia({ answer, aliases, explanation, guildId }) : null;
+
   return run(
     `INSERT INTO daily_interaction_prompts (
-       guildId, type, prompt, title, createdBy, createdAt
+       guildId, type, prompt, title, createdBy, createdAt, triviaJson
      )
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [guildId, normalizedType, validation.prompt, validation.title, createdBy, Date.now()]
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [guildId, normalizedType, validation.prompt, validation.title, createdBy, Date.now(), trivia ? JSON.stringify(trivia) : null]
   ).lastInsertRowid;
 }
 
@@ -522,7 +536,7 @@ function promptsForType(guildId, type) {
     .digest('hex')}`;
   const builtIn = preset.prompts.map((prompt, index) => ({
     key: keyFor(prompt),
-    legacyKeys: [`builtin:${normalizedType}:${index}`],
+    legacyKeys: normalizedType === 'COMMUNITY_PICK' ? [] : [`builtin:${normalizedType}:${index}`],
     type: normalizedType,
     prompt,
     title: null,
@@ -537,9 +551,11 @@ function promptsForType(guildId, type) {
       type: normalizedType,
       prompt: row.prompt,
       title: row.title,
-      source: 'custom'
+      source: 'custom',
+      trivia: require('../utils/customTrivia').readTrivia(row.triviaJson, guildId)
     }))
-    .filter(safePrompt);
+    .filter(safePrompt)
+    .filter(row => normalizedType !== 'TRIVIA' || supportsSubmittedAnswer(row));
 
   const seen = new Map();
   for (const row of [...builtIn, ...custom]) {
@@ -660,6 +676,9 @@ function buildInteractionEmbed(
 }
 
 function buildInteractionComponents({ canSubmitAnswers, interaction, activity }) {
+  const ratingRow = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+    .setCustomId('dailyinteraction_rate').setPlaceholder('How interesting was this activity?')
+    .addOptions([1, 2, 3, 4, 5].map(value => ({ label: `${value}/5 - ${['Not interesting', 'A little interesting', 'Okay', 'Interesting', 'Very interesting'][value - 1]}`, value: String(value) }))));
   const buttons = [
     new ButtonBuilder()
       .setCustomId('dailyinteraction_join')
@@ -671,11 +690,11 @@ function buildInteractionComponents({ canSubmitAnswers, interaction, activity })
     if (activity.choices.length <= 4 && activity.choices.every(choice => choice.length <= 80)) {
       buttons.push(...activity.choices.map((choice, index) => new ButtonBuilder()
         .setCustomId(`dailyinteraction_choice_${index}`).setLabel(choice).setStyle(ButtonStyle.Primary)));
-      return [new ActionRowBuilder().addComponents(buttons)];
+      return [new ActionRowBuilder().addComponents(buttons), ratingRow];
     }
     return [new ActionRowBuilder().addComponents(buttons), new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder().setCustomId('dailyinteraction_choice').setPlaceholder('Choose your answer')
-        .addOptions(activity.choices.map((choice, index) => ({ label: choice, value: String(index) }))))];
+        .addOptions(activity.choices.map((choice, index) => ({ label: choice, value: String(index) })))), ratingRow];
   }
   if (canSubmitAnswers && supportsSubmittedAnswer(interaction)) {
     buttons.push(
@@ -686,7 +705,7 @@ function buildInteractionComponents({ canSubmitAnswers, interaction, activity })
     );
   }
 
-  return [new ActionRowBuilder().addComponents(buttons)];
+  return [new ActionRowBuilder().addComponents(buttons), ratingRow];
 }
 
 function isDailyInteractionOpen(post, now = Date.now()) {
@@ -797,9 +816,9 @@ async function refreshDailyPosts(client, now = Date.now()) {
   const posts = all(`SELECT post.*, (SELECT COUNT(*) FROM daily_interaction_participants participant
     WHERE participant.messageId = post.messageId) AS participantCount
     FROM daily_interaction_posts post
-    WHERE (sentAt <= ? AND buttonsClosedAt IS NULL) OR displayedParticipantCount !=
+    WHERE (sentAt <= ? AND buttonsClosedAt IS NULL) OR (sentAt > ? AND footerNormalizedAt IS NULL) OR displayedParticipantCount !=
       (SELECT COUNT(*) FROM daily_interaction_participants participant WHERE participant.messageId = post.messageId)
-    ORDER BY sentAt DESC LIMIT 25`, [now - DAY_MS]);
+    ORDER BY sentAt DESC LIMIT 25`, [now - DAY_MS, now - DAY_MS]);
   for (const post of posts) {
     try {
       await withDailyDisplayLock(post.messageId, async () => {
@@ -807,6 +826,7 @@ async function refreshDailyPosts(client, now = Date.now()) {
         const message = await fetchDailyMessage(channel, post.messageId);
         post.participantCount = get('SELECT COUNT(*) AS count FROM daily_interaction_participants WHERE messageId = ?', [post.messageId]).count;
         const embed = EmbedBuilder.from(message.embeds[0]);
+        embed.setFooter(cleanDailyFooter(embed.data.footer));
         const fields = (embed.data.fields || []).filter(field => field.name !== 'Status')
           .map(field => field.name === 'Participants' ? { ...field, value: String(post.participantCount) } : field);
         const closed = !isDailyInteractionOpen(post, now) || !activityOpen(post, now);
@@ -814,13 +834,13 @@ async function refreshDailyPosts(client, now = Date.now()) {
         embed.setFields(fields);
         await message.edit({ embeds: [embed], ...(closed ? { components: [] } : {}) });
         run(`UPDATE daily_interaction_posts SET displayedParticipantCount = ?,
-          buttonsClosedAt = CASE WHEN ? THEN ? ELSE buttonsClosedAt END WHERE messageId = ?`,
-        [post.participantCount, closed ? 1 : 0, now, post.messageId]);
+          buttonsClosedAt = CASE WHEN ? THEN ? ELSE buttonsClosedAt END, footerNormalizedAt = ? WHERE messageId = ?`,
+        [post.participantCount, closed ? 1 : 0, now, now, post.messageId]);
       });
     } catch (error) {
       if ([10003, 10008].includes(Number(error.code))) {
-        run(`UPDATE daily_interaction_posts SET buttonsClosedAt = ?, displayedParticipantCount = ?
-          WHERE messageId = ?`, [now, post.participantCount, post.messageId]);
+        run(`UPDATE daily_interaction_posts SET buttonsClosedAt = ?, displayedParticipantCount = ?, footerNormalizedAt = ?
+          WHERE messageId = ?`, [now, post.participantCount, now, post.messageId]);
       } else {
         console.error(`Daily interaction refresh ${post.messageId}:`, error.message);
       }
@@ -1147,7 +1167,7 @@ class DailyInteractionService {
         console.error(`Daily interaction send failed for ${config.guildId}:`, err);
       }
     }
-    await recoverDailyDeliveries(client, ['DAILY_ACTIVITY_UPDATE', 'DAILY_REMINDER']);
+    await recoverDailyDeliveries(client, ['DAILY_ACTIVITY_UPDATE', 'DAILY_REMINDER', 'DAILY_PROMPT_RATING']);
     await maintainActivities(client).catch(error => console.error('Daily activity maintenance:', error.message));
     await applyMilestones(client).catch(error => console.error('Daily milestone roles:', error.message));
     await sendReminders(client).catch(error => console.error('Daily reminders:', error.message));

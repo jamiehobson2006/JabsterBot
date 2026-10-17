@@ -29,7 +29,7 @@ function createActivity(picked, settings) {
   if (picked.type === 'TRIVIA') {
     const answers = triviaAnswersForPrompt(picked);
     if (answers.length) return { mode: 'trivia', answers, minutes: settings.triviaMinutes,
-      explanation: TRIVIA_EXPLANATIONS[answers[0]] || `The accepted answer is ${answers[0]}.` };
+      explanation: picked.trivia?.explanation || TRIVIA_EXPLANATIONS[answers[0]] || `The accepted answer is ${answers[0]}.` };
   }
   const choices = choicesFromPrompt(picked);
   if (choices.length > 1 && choices.length <= 25 && choices.every(choice => choice.length <= 100)) {

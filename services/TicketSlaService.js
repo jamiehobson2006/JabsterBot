@@ -89,8 +89,9 @@ async function checkTicketSlas(client, now = Date.now()) {
         if (await sendAlert(client, ticket, 'FIRST_RESPONSE', age)) sent += 1;
       }
 
-      if (age >= resolutionLimit) {
-        if (await sendAlert(client, ticket, 'RESOLUTION', age)) sent += 1;
+      const activeAge = require('../utils/tickets/responseTimes').resolutionAge(ticket, now);
+      if (ticket.waitingOn !== 'MEMBER' && activeAge >= resolutionLimit) {
+        if (await sendAlert(client, ticket, 'RESOLUTION', activeAge)) sent += 1;
       }
     } catch (error) {
       console.error(`Ticket SLA check failed for ${ticket.channelId}:`, error);

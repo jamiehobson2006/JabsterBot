@@ -57,10 +57,6 @@ module.exports = {
         changes.push(`Mentionable: ${oldRole.mentionable} -> ${newRole.mentionable}`);
       }
 
-      if (oldRole.position !== newRole.position) {
-        changes.push(`Position: ${oldRole.position} -> ${newRole.position}`);
-      }
-
       if (oldRole.icon !== newRole.icon) {
         changes.push('Role icon changed');
       }

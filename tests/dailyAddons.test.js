@@ -22,7 +22,7 @@ const tables = ['delivery_outbox', 'dailyfact_config', 'dailyfact_facts', 'daily
   'dailyfact_delivery_history', 'daily_interaction_config', 'daily_interaction_types',
   'daily_interaction_posts', 'daily_interaction_prompts', 'daily_interaction_history',
   'daily_interaction_participants', 'daily_interaction_responses', 'daily_interaction_member_stats',
-  'daily_game_turns', 'daily_trivia_attempts', 'daily_engagement_settings', 'daily_member_preferences',
+  'daily_game_turns', 'daily_trivia_attempts', 'daily_prompt_ratings', 'daily_engagement_settings', 'daily_member_preferences',
   'daily_point_events', 'daily_seasons', 'daily_milestone_roles', 'daily_role_grants', 'censor_words'];
 test.beforeEach(() => { for (const table of tables) db.exec(`DELETE FROM ${table}`); });
 test.after(() => { db.close(); fs.rmSync(temp, { recursive: true, force: true }); });
@@ -94,6 +94,137 @@ function request(context, post, userId, answer) {
     editReply: async function (payload) { this.response = payload; },
     reply: async function (payload) { this.response = payload; } };
 }
+
+test('custom trivia saves safe answer aliases and explanation, and snapshots them into the posted round', async () => {
+  const context = sandbox();
+  service.addCustomPrompt({ guildId: 'guild', type: 'TRIVIA', prompt: 'What is the capital city of the UK?',
+    answer: 'London', aliases: 'City of London|london', explanation: 'London is the capital of the United Kingdom.', createdBy: 'manager' });
+  const post = await postActivity(context, 'TRIVIA', () => 0.9999);
+  const activity = activities.activityFor(post);
+  assert.deepEqual(activity.answers, ['London', 'City of London']);
+  assert.match(activity.explanation, /United Kingdom/);
+  assert.equal(require('../utils/dailyInteractionSafety').supportsSubmittedAnswer(post), true);
+  const interaction = request(context, post, 'member', 'City of London');
+  await events.execute(interaction);
+  assert.equal(get('SELECT correct FROM daily_trivia_attempts').correct, 1);
+  run('DELETE FROM daily_interaction_prompts');
+  assert.deepEqual(activities.activityFor(get('SELECT * FROM daily_interaction_posts')).answers, activity.answers);
+});
+
+test('trivia rejects missing or unsafe answer metadata, overly long answers and excessive aliases', () => {
+  const base = { guildId: 'guild', type: 'TRIVIA', prompt: 'Which city is the capital of the UK?', createdBy: 'manager' };
+  for (const metadata of [{}, { answer: 'London' }, { answer: 'London', explanation: 'Visit https://example.com' },
+    { answer: '.fuck', explanation: 'Safe explanation.' }, { answer: 'x'.repeat(101), explanation: 'Explanation.' },
+    { answer: 'London', aliases: Array(11).fill('another'), explanation: 'Explanation.' }]) {
+    assert.throws(() => service.addCustomPrompt({ ...base, ...metadata }));
+  }
+  assert.equal(all('SELECT * FROM daily_interaction_prompts').length, 0);
+  const id = service.addCustomPrompt({ ...base, answer: 'London', aliases: null, explanation: 'London is the capital city.' });
+  assert.deepEqual(JSON.parse(get('SELECT triviaJson FROM daily_interaction_prompts WHERE id = ?', [Number(id)]).triviaJson).answers, ['London']);
+});
+
+test('rating controls fit beside all four choice buttons without exceeding Discord row limits', () => {
+  const rows = service.buildInteractionComponents({ canSubmitAnswers: true, interaction: { type: 'COMMUNITY_PICK' },
+    activity: { mode: 'choice', choices: ['One', 'Two', 'Three', 'Four'] } }).map(row => row.toJSON());
+  assert.equal(rows[0].components.length, 5);
+  assert.equal(rows[1].components[0].custom_id, 'dailyinteraction_rate');
+  assert.equal(rows[1].components[0].options.length, 5);
+});
+
+test('ratings persist once per member and queue private feedback into the hardcoded fact-review channel', async () => {
+  const context = sandbox();
+  context.channel(reviews.reviewChannelId());
+  const post = await postActivity(context, 'TRIVIA');
+  const { savePromptRating } = require('../utils/dailyPromptRatings');
+  const row = savePromptRating(post, 'member', 5);
+  assert.equal(row.channelId, reviews.reviewChannelId());
+  assert.equal(savePromptRating(post, 'member', 1), null);
+  assert.throws(() => savePromptRating(post, 'other', 6));
+  assert.throws(() => savePromptRating(post, 'other', 4, post.sentAt + 86400000));
+  await delivery.recoverDailyDeliveries(context.client, ['DAILY_PROMPT_RATING']);
+  await delivery.recoverDailyDeliveries(context.client, ['DAILY_PROMPT_RATING']);
+  assert.equal(context.channels.get(reviews.reviewChannelId()).sent, 1);
+  assert.equal(get('SELECT rating FROM daily_prompt_ratings').rating, 5);
+  assert.equal(get("SELECT finalizedAt FROM delivery_outbox WHERE type = 'DAILY_PROMPT_RATING'").finalizedAt > 0, true);
+});
+
+test('rating interaction rejects copied controls and accepts the original activity', async () => {
+  const context = sandbox();
+  context.channel(reviews.reviewChannelId());
+  const post = await postActivity(context, 'TRIVIA');
+  const original = await context.main.messages.fetch(post.messageId);
+  const interaction = { ...request(context, post, 'member'), customId: 'dailyinteraction_rate',
+    isModalSubmit: () => false, isStringSelectMenu: () => true, message: original, values: ['4'],
+    channel: context.main, channelId: 'wrong-channel' };
+  await events.execute(interaction);
+  assert.match(interaction.response.content, /original/);
+  assert.equal(all('SELECT * FROM daily_prompt_ratings').length, 0);
+  interaction.channelId = 'main';
+  await events.execute(interaction);
+  assert.equal(get('SELECT rating FROM daily_prompt_ratings').rating, 4);
+});
+
+test('custom trivia, ratings and queued feedback survive a fresh bot process', async () => {
+  const context = sandbox();
+  const id = service.addCustomPrompt({ guildId: 'guild', type: 'TRIVIA', prompt: 'Which planet do humans live on?',
+    answer: 'Earth', aliases: 'the Earth', explanation: 'Humans live on Earth.', createdBy: 'manager' });
+  const post = await postActivity(context, 'TRIVIA', () => 0.9999);
+  require('../utils/dailyPromptRatings').savePromptRating(post, 'member', 5);
+  const script = `const {initDatabase,get,db}=require('./database');initDatabase();
+    const prompt=get('SELECT triviaJson FROM daily_interaction_prompts WHERE id=?',[${Number(id)}]);
+    if(JSON.parse(prompt.triviaJson).answers[0]!=='Earth')process.exit(2);
+    if(get('SELECT rating FROM daily_prompt_ratings').rating!==5)process.exit(3);
+    if(get("SELECT status FROM delivery_outbox WHERE type='DAILY_PROMPT_RATING'").status!=='PENDING')process.exit(4);db.close();`;
+  const child = spawnSync(process.execPath, ['-e', script], { cwd: path.resolve(__dirname, '..'), env: { ...process.env }, encoding: 'utf8' });
+  assert.equal(child.status, 0, child.stderr);
+});
+
+test('retired and superseded queued built-in facts are cancelled before delivery', async () => {
+  const context = sandbox();
+  const catalogue = require('../data/dailyFacts.json');
+  for (const [index, item] of require('../data/dailyFactReview.json').entries.filter(row => row.status === 'RETIRED' || row.replacement).entries()) {
+    const original = catalogue[item.category].find(row => typeof row === 'string' && row.startsWith(item.startsWith));
+    const queued = delivery.queueDailyDelivery({ deliveryKey: `old-fact:${index}`, type: 'DAILY_FACT_POST',
+      guildId: 'guild', channelId: 'main', metadata: { selection: { source: 'coded', category: item.category, fact: original } },
+      message: { embeds: [new EmbedBuilder().setDescription(original)] } });
+    const result = await delivery.attemptDailyDelivery(context.client, queued);
+    assert.equal(result.status, 'CANCELLED', item.startsWith);
+  }
+  assert.equal(context.main.sent, 0);
+});
+
+test('corrected built-in facts keep their cooldown even when an approved community copy wins deduplication', () => {
+  const item = require('../data/dailyFactReview.json').entries.find(row => row.replacement);
+  const original = require('../data/dailyFacts.json')[item.category].find(row => typeof row === 'string' && row.startsWith(item.startsWith));
+  facts.saveApprovedFact({ fact: item.replacement, category: item.category });
+  const row = facts.getFactsForCategory(item.category).find(row => row.fact === item.replacement);
+  assert.equal(row.source, 'community');
+  assert.ok(row.legacyFactKeys.includes(`fact:${facts.normalizeFact(original)}`));
+  const now = Date.now();
+  run('INSERT INTO dailyfact_delivery_history (guildId, factKey, deliveredAt) VALUES (?, ?, ?)',
+    ['guild', `fact:${facts.normalizeFact(original)}`, now - 86400000]);
+  const eligible = require('../services/DailyFactService').eligibleFacts({ guildId: 'guild', category: item.category, now });
+  assert.equal(eligible.some(entry => entry.fact === item.replacement), false);
+});
+
+test('legacy fact review decisions resolve uniquely, remove retired claims and preserve corrected cooldown aliases', () => {
+  const catalogue = require('../data/dailyFacts.json');
+  const review = require('../data/dailyFactReview.json');
+  const pool = facts.buildDailyFactPools().all;
+  for (const item of review.entries) {
+    const matches = catalogue[item.category].filter(entry => (typeof entry === 'string' ? entry : entry.fact).startsWith(item.startsWith));
+    assert.equal(matches.length, 1, item.startsWith);
+    const original = typeof matches[0] === 'string' ? matches[0] : matches[0].fact;
+    if (item.status === 'RETIRED') assert.equal(pool.some(row => row.fact === original), false, item.startsWith);
+    else {
+      const row = pool.find(row => row.fact === (item.replacement || original));
+      assert.ok(row?.verifiedAt, item.startsWith);
+      assert.equal(row.sourceUrl, item.sourceUrl);
+      assert.ok(row.legacyFactKeys.includes(`fact:${facts.normalizeFact(original)}`));
+    }
+  }
+  assert.ok(pool.some(row => row.reviewStatus === 'UNVERIFIED' && !row.verifiedAt));
+});
 
 test('source URLs accept public HTTPS pages and reject unsafe schemes and credentials', () => {
   assert.equal(sources.validateSourceUrl('https://science.nasa.gov/jupiter/'), 'https://science.nasa.gov/jupiter/');
@@ -554,4 +685,102 @@ test('private trivia responses contribute to aggregate answer analytics', async 
   const post = await postActivity(context, 'TRIVIA');
   await events.execute(request(context, post, 'one', 'Jupiter'));
   assert.equal(service.getDailyInteractionAnalytics('guild').responses, 1);
+});
+
+test('every stored fact group gains ten unique sourced facts and all additions enter the delivery pool', () => {
+  const catalogue = require('../data/dailyFacts.json');
+  const oldFacts = new Set(Object.values(catalogue).flat().filter(entry => typeof entry === 'string').map(facts.normalizeFact));
+  const added = new Set();
+  for (const entries of Object.values(catalogue)) {
+    assert.equal(entries.length, 60);
+    assert.equal(entries.filter(entry => typeof entry === 'string').length, 50);
+    const additions = entries.filter(entry => typeof entry === 'object');
+    assert.equal(additions.length, 10);
+    for (const entry of additions) {
+      const normalized = facts.normalizeFact(entry.fact);
+      assert.equal(oldFacts.has(normalized), false, entry.fact);
+      assert.equal(added.has(normalized), false, entry.fact);
+      added.add(normalized);
+      assert.equal(sources.validateSourceUrl(entry.sourceUrl), entry.sourceUrl);
+      assert.ok(Number.isFinite(Date.parse(entry.checkedAt)));
+    }
+  }
+  const delivered = facts.getFactsForCategory('random').filter(entry => added.has(facts.normalizeFact(entry.fact)));
+  assert.equal(delivered.length, 100);
+  assert.equal(delivered.every(entry => entry.sourceUrl && entry.verifiedAt), true);
+  for (const { value } of facts.FACT_CATEGORIES) {
+    assert.equal(facts.getFactsForCategory(value).filter(entry => added.has(facts.normalizeFact(entry.fact))).length, 10);
+  }
+});
+
+test('Daily Dilemma replaces server-planning polls with twenty safely answerable scenarios', () => {
+  const definition = service.DAILY_INTERACTION_TYPES.COMMUNITY_PICK;
+  assert.equal(definition.label, 'Daily Dilemma');
+  assert.equal(definition.prompts.length, 20);
+  const safety = require('../utils/dailyInteractionSafety');
+  for (const prompt of definition.prompts) {
+    assert.doesNotMatch(prompt, /future event time|event style|dream server|community reward/i);
+    const post = { type: 'COMMUNITY_PICK', prompt };
+    assert.equal(safety.validateDailyInteractionPrompt({ prompt }).valid, true, prompt);
+    const activity = activities.createActivity(post, engagement.engagementSettings('guild'));
+    assert.equal(activity.mode, 'choice');
+    assert.equal(activity.choices.length, 4, prompt);
+    for (const answer of activity.choices) assert.equal(safety.validateDailyInteractionAnswer({ post, answer }).valid, true, answer);
+  }
+});
+
+test('footer cleanup preserves its label, icon, and first reference without growing on repeated edits', () => {
+  const { cleanDailyFooter } = require('../utils/dailyFooter');
+  const first = 'Ref: 123456789012345678901234';
+  const second = 'Ref: abcdefabcdefabcdefabcdef';
+  let footer = { text: `Daily Interactions | ${first} | ${second}`, icon_url: 'https://example.com/icon.png' };
+  for (let index = 0; index < 50; index++) footer = cleanDailyFooter(footer);
+  assert.equal(footer.text, `Daily Interactions | ${first}`);
+  assert.equal(footer.icon_url, 'https://example.com/icon.png');
+  assert.ok(cleanDailyFooter({ text: 'x'.repeat(3000) }, first).text.length <= 2048);
+});
+
+test('repeated choice changes keep exactly one stable delivery reference in the live footer', async () => {
+  const context = sandbox();
+  const post = await postActivity(context, 'COMMUNITY_PICK');
+  const source = await context.main.messages.fetch(post.messageId);
+  const { dailyReference } = require('../utils/dailyFooter');
+  const initial = dailyReference(source.embeds[0].data.footer.text);
+  for (const index of [0, 1, 2, 3, 0, 2, 1]) {
+    const click = request(context, post, 'one');
+    Object.assign(click, { message: source, customId: `dailyinteraction_choice_${index}`, isButton: () => true, isModalSubmit: () => false });
+    await events.execute(click);
+    assert.equal(source.embeds[0].data.footer.text.match(/Ref:/g).length, 1);
+    assert.equal(dailyReference(source.embeds[0].data.footer.text), initial);
+  }
+});
+
+test('maintenance repairs stacked legacy footers once without changing votes or progress', async () => {
+  const context = sandbox();
+  const post = await postActivity(context, 'COMMUNITY_PICK');
+  const source = await context.main.messages.fetch(post.messageId);
+  const first = source.embeds[0].data.footer.text;
+  source.embeds[0].setFooter({ text: `${first} | Ref: abcdefabcdefabcdefabcdef | Ref: 123456789012345678901234` });
+  run('UPDATE daily_interaction_posts SET footerNormalizedAt = NULL');
+  await service.refreshDailyPosts(context.client);
+  assert.equal(source.embeds[0].data.footer.text, first);
+  assert.ok(get('SELECT footerNormalizedAt FROM daily_interaction_posts').footerNormalizedAt);
+  assert.equal(all('SELECT * FROM daily_interaction_participants').length, 0);
+  const fetch = context.main.messages.fetch;
+  let fetches = 0;
+  context.main.messages.fetch = async key => { fetches++; return fetch(key); };
+  await service.refreshDailyPosts(context.client);
+  assert.equal(fetches, 0);
+});
+
+test('a deleted active post does not become an endless footer-repair job', async () => {
+  const context = sandbox();
+  await postActivity(context);
+  run('UPDATE daily_interaction_posts SET footerNormalizedAt = NULL');
+  let fetches = 0;
+  context.main.messages.fetch = async () => { fetches++; throw Object.assign(new Error('Deleted'), { code: 10008 }); };
+  await service.refreshDailyPosts(context.client);
+  await service.refreshDailyPosts(context.client);
+  assert.equal(fetches, 1);
+  assert.ok(get('SELECT footerNormalizedAt FROM daily_interaction_posts').footerNormalizedAt);
 });

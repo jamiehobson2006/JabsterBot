@@ -1,4 +1,9 @@
 function migrateDailyFeatures(run, ensureColumn) {
+  ensureColumn('daily_interaction_prompts', 'triviaJson', 'TEXT');
+  run(`CREATE TABLE IF NOT EXISTS daily_prompt_ratings (
+    messageId TEXT NOT NULL, userId TEXT NOT NULL, guildId TEXT NOT NULL,
+    rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5), createdAt INTEGER NOT NULL,
+    PRIMARY KEY(messageId, userId))`);
   for (const table of ['dailyfact_submissions', 'dailyfact_facts']) {
     for (const [column, definition] of Object.entries({ sourceUrl: 'TEXT', verifiedAt: 'INTEGER',
       verifiedBy: 'TEXT', verificationNote: 'TEXT' })) ensureColumn(table, column, definition);
@@ -7,6 +12,7 @@ function migrateDailyFeatures(run, ensureColumn) {
   ensureColumn('daily_interaction_posts', 'displayedGameVersion', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn('daily_interaction_posts', 'triviaRevealedAt', 'INTEGER');
   ensureColumn('daily_interaction_posts', 'displayedChoiceHash', 'TEXT');
+  ensureColumn('daily_interaction_posts', 'footerNormalizedAt', 'INTEGER');
   run(`CREATE TABLE IF NOT EXISTS daily_engagement_settings (
     guildId TEXT PRIMARY KEY, quietDays TEXT NOT NULL DEFAULT '[]',
     remindersEnabled INTEGER NOT NULL DEFAULT 0, reminderDelayMinutes INTEGER NOT NULL DEFAULT 120,

@@ -6,6 +6,7 @@ const {
 
 const codedFacts =
   require('../data/dailyFacts.json');
+const catalogueReview = require('../data/dailyFactReview.json');
 
 const FACT_CATEGORIES = [
   {
@@ -99,9 +100,13 @@ function codedFactRows() {
     }
 
     for (const fact of facts) {
+      const entry = typeof fact === 'string' ? { fact } : fact;
+      if (!entry || typeof entry.fact !== 'string') continue;
+      const review = catalogueReview.entries.find(item => item.category === category && entry.fact.startsWith(item.startsWith));
+      if (review?.status === 'RETIRED') continue;
 
       const cleaned =
-        cleanFact(fact);
+        cleanFact(review?.replacement || entry.fact);
 
       if (!cleaned) {
         continue;
@@ -109,10 +114,14 @@ function codedFactRows() {
 
       rows.push({
         fact: cleaned,
+        sourceUrl: review?.sourceUrl || entry.sourceUrl || null,
+        verifiedAt: review?.status === 'VERIFIED' ? Date.parse(`${catalogueReview.reviewedAt}T00:00:00Z`)
+          : entry.sourceUrl && entry.checkedAt ? Date.parse(`${entry.checkedAt}T00:00:00Z`) || null : null,
+        reviewStatus: review?.status || (entry.sourceUrl && entry.checkedAt ? 'VERIFIED' : 'UNVERIFIED'),
         category,
         source: 'coded',
         factKey: `fact:${normalizeFact(cleaned)}`,
-        legacyFactKeys: [`coded:${normalizeFact(cleaned)}`],
+        legacyFactKeys: [...new Set([`coded:${normalizeFact(cleaned)}`, `coded:${normalizeFact(entry.fact)}`, `fact:${normalizeFact(entry.fact)}`])],
         status: 'APPROVED'
       });
     }
@@ -169,7 +178,7 @@ function findDuplicateFact(
 
   const codedDuplicate =
     codedFactRows().find(row =>
-      normalizeFact(row.fact) === normalized
+      normalizeFact(row.fact) === normalized || row.legacyFactKeys.includes(`fact:${normalized}`)
     );
 
   if (codedDuplicate) {
@@ -289,12 +298,23 @@ function buildDailyFactPools() {
       return;
     }
 
+    // A community copy must retain the old wording's cooldown after a correction.
+    const mergeAliases = existing => {
+      if (existing) existing.legacyFactKeys = [...new Set([
+        ...(existing.legacyFactKeys || []), ...(row.legacyFactKeys || [])
+      ])];
+    };
+    mergeAliases(allFacts.find(existing => normalizeFact(existing.fact) === normalized));
+    if (isRealCategory(row.category)) {
+      mergeAliases(byCategory[row.category].find(existing => normalizeFact(existing.fact) === normalized));
+    }
+
     if (!seenAll.has(normalized)) {
 
       seenAll.add(normalized);
 
       allFacts.push({
-        sourceUrl: row.sourceUrl, verifiedAt: row.verifiedAt, id: row.id,
+        sourceUrl: row.sourceUrl, verifiedAt: row.verifiedAt, reviewStatus: row.reviewStatus, id: row.id,
         fact: row.fact,
         category: isRealCategory(row.category)
           ? row.category
@@ -313,7 +333,7 @@ function buildDailyFactPools() {
       seenByCategory[row.category].add(normalized);
 
       byCategory[row.category].push({
-        sourceUrl: row.sourceUrl, verifiedAt: row.verifiedAt, id: row.id,
+        sourceUrl: row.sourceUrl, verifiedAt: row.verifiedAt, reviewStatus: row.reviewStatus, id: row.id,
         fact: row.fact,
         category: row.category,
         source: row.source,
