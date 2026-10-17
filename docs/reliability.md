@@ -8,11 +8,13 @@ must check the actual result before retrying it.
 
 Social announcements, ticket target alerts, and ticket feedback store their complete
 message payloads in `delivery_outbox`. A worker retries failures with backoff. Completed
-items are not resent. Each message uses a stable nonce; recent channel history is
-checked on retries to recover messages accepted before the database was updated.
-Discord nonce deduplication lasts a few minutes and history recovery checks the latest
-100 messages, so this reduces duplicate delivery without promising universal exactly-once
-delivery after every possible process or network failure.
+items are not resent. Each message uses a stable nonce for Discord's short deduplication
+window. Discord does not retain nonces in later history fetches. Daily Facts and Daily
+Interactions therefore also persist reference footers and search the latest 100 messages
+on retries to recover accepted messages before a database update. Other outbox consumers
+cannot rely on nonce history after that short window. This reduces duplicate delivery
+without promising universal exactly-once delivery after every possible process or
+network failure.
 
 Service health and circuit state persist in `service_health`. Managed cycles prevent
 overlap, time out slow work, and pause after repeated failures. Timed-out work keeps its

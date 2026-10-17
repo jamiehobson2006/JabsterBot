@@ -64,7 +64,7 @@ function claimDelivery(deliveryKey, leaseMs = DEFAULT_LEASE_MS) {
     const row = get(
       `SELECT * FROM delivery_outbox
        WHERE deliveryKey = ?
-         AND status != 'SENT'
+          AND status IN ('PENDING', 'FAILED', 'PROCESSING')
          AND nextAttemptAt <= ?
          AND (leaseUntil IS NULL OR leaseUntil < ?)`,
       [String(deliveryKey), now, now]
@@ -118,7 +118,7 @@ function pendingDeliveries(type = null, limit = 50) {
   if (type) {
     return all(
       `SELECT * FROM delivery_outbox
-       WHERE type = ? AND status != 'SENT' AND nextAttemptAt <= ?
+       WHERE type = ? AND status IN ('PENDING', 'FAILED', 'PROCESSING') AND nextAttemptAt <= ?
          AND (leaseUntil IS NULL OR leaseUntil < ?)
        ORDER BY createdAt ASC LIMIT ?`,
       [String(type), now, now, safeLimit]
@@ -127,7 +127,7 @@ function pendingDeliveries(type = null, limit = 50) {
 
   return all(
     `SELECT * FROM delivery_outbox
-     WHERE status != 'SENT' AND nextAttemptAt <= ?
+     WHERE status IN ('PENDING', 'FAILED', 'PROCESSING') AND nextAttemptAt <= ?
        AND (leaseUntil IS NULL OR leaseUntil < ?)
      ORDER BY createdAt ASC LIMIT ?`,
     [now, now, safeLimit]
@@ -179,6 +179,15 @@ async function retryChannelDeliveries(client) {
     try {
       payload = JSON.parse(row.payload || 'null');
     } catch {
+      continue;
+    }
+    if (payload?.daily) {
+      try {
+        const result = await require('./dailyDelivery').attemptDailyDelivery(client, row);
+        if (result?.status === 'SENT') sent += 1;
+      } catch (error) {
+        console.error(`Daily delivery ${row.deliveryKey} failed:`, error.message);
+      }
       continue;
     }
     if (!payload?.message || !row.channelId) continue;

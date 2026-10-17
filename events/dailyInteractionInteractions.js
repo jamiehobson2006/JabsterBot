@@ -9,11 +9,16 @@ const {
 
 const {
   get,
-  run
+  run,
+  transaction
 } = require('../database');
+const { attemptDailyDelivery, newDailyKey, queueDailyDelivery } = require('../utils/dailyDelivery');
+const { activityFor, activityOpen, gameState, submitTrivia, validateGameTurn } = require('../utils/dailyActivities');
+const { fetchDailyMessage, withDailyDisplayLock } = require('../utils/dailyDisplay');
 
 const {
   getDailyInteractionConfig,
+  ANSWER_PERMISSIONS,
   getDateParts,
   getOrCreateDiscussionThread,
   isDailyInteractionOpen,
@@ -29,6 +34,7 @@ const {
   MAX_RESPONSE_LENGTH,
   answerInstruction,
   supportsSubmittedAnswer,
+  validateDailyInteractionContent,
   validateDailyInteractionAnswer
 } = require('../utils/dailyInteractionSafety');
 
@@ -40,7 +46,7 @@ function isDailyInteractionButton(interaction) {
     'dailyinteraction_join',
     'dailyinteraction_answer',
     'dailyinteraction_discuss'
-  ].includes(interaction.customId);
+  ].includes(interaction.customId) || interaction.isButton() && /^dailyinteraction_choice_\d+$/.test(interaction.customId);
 }
 
 function isDailyInteractionResponseModal(interaction) {
@@ -74,18 +80,23 @@ function hasAnswerButton(message) {
 }
 
 async function updateParticipantCount(message, count) {
-  const original = message.embeds?.[0];
-  if (!original) return;
+  return withDailyDisplayLock(message.id, async () => {
+    const latest = message.channel?.messages ? await fetchDailyMessage(message.channel, message.id) : message;
+    count = participantCount(message.id);
+    const original = latest.embeds?.[0];
+    if (!original) return;
 
-  const embed = EmbedBuilder.from(original);
-  const fields = (embed.data.fields || []).map(field =>
-    field.name === 'Participants'
-      ? { ...field, value: String(count) }
-      : field
-  );
+    const embed = EmbedBuilder.from(original);
+    const fields = (embed.data.fields || []).map(field =>
+      field.name === 'Participants'
+        ? { ...field, value: String(count) }
+        : field
+    );
 
-  embed.setFields(fields);
-  await message.edit({ embeds: [embed] });
+    embed.setFields(fields);
+    await latest.edit({ embeds: [embed] });
+    run('UPDATE daily_interaction_posts SET displayedParticipantCount = ? WHERE messageId = ?', [count, message.id]);
+  });
 }
 
 function participantCount(messageId) {
@@ -128,24 +139,27 @@ function responseModal(post) {
 async function fetchPostMessage(interaction, post) {
   const channel = await interaction.guild.channels.fetch(post.channelId).catch(() => null);
   if (!channel?.isTextBased()) return null;
-  return channel.messages.fetch(post.messageId).catch(() => null);
+  return fetchDailyMessage(channel, post.messageId).catch(() => null);
 }
 
 async function handleJoin(interaction, post) {
-  if (!isDailyInteractionOpen(post)) {
+  if (!isDailyInteractionOpen(post) || !activityOpen(post)) {
     return interaction.editReply({ content: 'This daily interaction has closed.' });
   }
 
-  const joined = addParticipant(post, interaction.user.id);
   const config = getDailyInteractionConfig(interaction.guild.id);
-
-  if (joined.changes) {
-    recordMemberEngagement({
+  const joined = transaction(() => {
+    const result = addParticipant(post, interaction.user.id);
+    if (result.changes) recordMemberEngagement({
       guildId: interaction.guild.id,
       userId: interaction.user.id,
       dateKey: getInteractionDateKey(config),
-      joined: true
+      joined: true, messageId: post.messageId
     });
+    return result;
+  });
+
+  if (joined.changes) {
 
     await updateParticipantCount(interaction.message, participantCount(post.messageId))
       .catch(err => console.error('Daily interaction participant count update error:', err.message));
@@ -155,6 +169,7 @@ async function handleJoin(interaction, post) {
     content: joined.changes
       ? hasAnswerButton(interaction.message)
         ? 'You are in. Use **Submit Answer** to share your response.'
+        : activityFor(post)?.mode === 'choice' ? 'You are in. Choose an option on the activity message.'
         : 'You are in. This activity counts participation only.'
       : 'You have already joined this daily interaction.',
   });
@@ -182,19 +197,40 @@ function withResponseSubmissionLock(key, operation) {
   });
 }
 
-async function processAnswerModal(interaction, messageId) {
+async function processAnswerModal(interaction, messageId, chosenIndex = null) {
   const post = getPost(interaction.guild.id, messageId);
 
   if (!post) {
     return interaction.editReply({ content: 'This daily interaction is no longer active.' });
   }
 
-  if (!isDailyInteractionOpen(post)) {
+  if (!isDailyInteractionOpen(post) || !activityOpen(post)) {
     return interaction.editReply({ content: 'This daily interaction has closed.' });
   }
+  const config = getDailyInteractionConfig(interaction.guild.id);
+  if (Number(config?.discussionEnabled) !== 1) {
+    return interaction.editReply({ content: 'Answer submission is disabled for this server.' });
+  }
+  const activity = activityFor(post);
+  const multiTurn = ['chain', 'story'].includes(activity?.mode);
+  if (multiTurn && get(`SELECT 1 FROM delivery_outbox WHERE type = 'DAILY_INTERACTION_RESPONSE'
+      AND status IN ('PENDING', 'FAILED', 'PROCESSING') AND json_extract(payload, '$.daily.postId') = ?`, [post.messageId])) {
+    return interaction.editReply({ content: 'The previous turn is still being delivered. Please wait before taking the next turn.' });
+  }
+  const pending = get(`SELECT deliveryKey FROM delivery_outbox WHERE guildId = ?
+    AND type = 'DAILY_INTERACTION_RESPONSE' AND status IN ('PENDING', 'FAILED', 'PROCESSING')
+    AND json_extract(payload, '$.daily.postId') = ? AND json_extract(payload, '$.daily.userId') = ?`,
+  [interaction.guild.id, post.messageId, interaction.user.id]);
+  if (pending) return interaction.editReply({ content: 'Your previous answer is queued for delivery. Please wait before updating it.' });
 
-  const submittedAnswer = interaction.fields.getTextInputValue('response');
-  const validation = validateDailyInteractionAnswer({
+  if (chosenIndex !== null && (activity?.mode !== 'choice' || !Number.isInteger(chosenIndex) || !activity.choices[chosenIndex])) {
+    return interaction.editReply({ content: 'That choice is no longer available.' });
+  }
+  const submittedAnswer = chosenIndex !== null ? activity.choices[chosenIndex] : interaction.fields.getTextInputValue('response');
+  const terms = listCensorTerms(interaction.guild.id);
+  const validation = multiTurn ? validateGameTurn(post, interaction.user.id, submittedAnswer, terms)
+    : activity?.mode === 'trivia' ? validateDailyInteractionContent({ answer: submittedAnswer, censorTerms: terms })
+    : validateDailyInteractionAnswer({
     post,
     answer: submittedAnswer,
     // Responses are posted by the bot, so honor the server's terms even when
@@ -212,6 +248,19 @@ async function processAnswerModal(interaction, messageId) {
   if (!sourceMessage) {
     return interaction.editReply({ content: 'I could not find the original daily interaction message.' });
   }
+  const botPermissions = sourceMessage.channel?.permissionsFor?.(interaction.guild.members.me);
+  if (botPermissions && !botPermissions.has(ANSWER_PERMISSIONS)) {
+    return interaction.editReply({ content: 'I need Create Public Threads, Send Messages in Threads, Manage Threads, and Manage Messages to publish and protect answers.' });
+  }
+  const memberPermissions = sourceMessage.channel?.permissionsFor?.(interaction.member);
+  if (memberPermissions && !memberPermissions.has('ViewChannel')) {
+    return interaction.editReply({ content: 'You no longer have access to this activity channel.' });
+  }
+  if (activity?.mode === 'trivia') {
+    const result = submitTrivia(post, interaction.user.id, validation.answer, getInteractionDateKey(config));
+    await updateParticipantCount(sourceMessage, participantCount(post.messageId)).catch(() => null);
+    return interaction.editReply({ content: result.message });
+  }
 
   const thread = await getOrCreateDiscussionThread({
     guild: interaction.guild,
@@ -226,58 +275,28 @@ async function processAnswerModal(interaction, messageId) {
      AND userId = ?`,
     [post.messageId, interaction.user.id]
   );
-  const threadContent = `**${interaction.user}'s answer**\n${answer}`;
-  let threadMessageId = previous?.threadMessageId || null;
-
-  if (threadMessageId) {
-    const previousMessage = await thread.messages.fetch(threadMessageId).catch(() => null);
-    if (previousMessage) {
-      await previousMessage.edit({
-        content: threadContent,
-        allowedMentions: { parse: [] }
-      });
-    } else {
-      threadMessageId = null;
-    }
-  }
-
-  if (!threadMessageId) {
-    const responseMessage = await thread.send({
-      content: threadContent,
-      allowedMentions: { parse: [] }
-    });
-    threadMessageId = responseMessage.id;
-  }
-
-  run(
-    `INSERT INTO daily_interaction_responses (
-       messageId, userId, response, submittedAt, threadMessageId
-     )
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(messageId, userId)
-     DO UPDATE SET response = excluded.response,
-                   submittedAt = excluded.submittedAt,
-                   threadMessageId = excluded.threadMessageId`,
-    [post.messageId, interaction.user.id, answer, Date.now(), threadMessageId]
-  );
-
-  const joined = addParticipant(post, interaction.user.id);
-  const config = getDailyInteractionConfig(interaction.guild.id);
-  recordMemberEngagement({
-    guildId: interaction.guild.id,
-    userId: interaction.user.id,
-    dateKey: getInteractionDateKey(config),
-    joined: Boolean(joined.changes),
-    responded: !previous
+  const threadContent = multiTurn ? `**Turn ${validation.gameVersion} | ${interaction.user}**\n${answer}`
+    : `**${interaction.user}'s answer**\n${answer}`;
+  const queued = queueDailyDelivery({ deliveryKey: newDailyKey(`daily-answer:${post.messageId}:${interaction.user.id}`),
+    type: 'DAILY_INTERACTION_RESPONSE', guildId: interaction.guild.id, channelId: thread.id,
+    message: { content: threadContent, allowedMentions: { parse: [] } },
+    metadata: { postId: post.messageId, userId: interaction.user.id, answer,
+      engagementDateKey: getInteractionDateKey(config), gameVersion: validation.gameVersion,
+      editMessageId: multiTurn ? null : previous?.threadMessageId || null } });
+  const delivered = await attemptDailyDelivery(interaction.client, queued).catch(error => {
+    console.error('Daily interaction answer queued for retry:', error.message);
+    return null;
   });
-
-  if (joined.changes) {
-    await updateParticipantCount(sourceMessage, participantCount(post.messageId))
-      .catch(err => console.error('Daily interaction participant count update error:', err.message));
-  }
+  if (delivered?.status === 'CANCELLED') return interaction.editReply({
+    content: 'Your answer was not published because this activity closed, was locked, or its settings changed.' });
+  if (delivered?.status !== 'SENT') return interaction.editReply({ content: 'Your answer is saved and queued for delivery.' });
+  await updateParticipantCount(sourceMessage, participantCount(post.messageId))
+    .catch(err => console.error('Daily interaction participant count update error:', err.message));
+  if (activity) await require('../utils/dailyActivities').maintainActivities(interaction.client, Date.now(), post.messageId)
+    .catch(error => console.error('Daily activity display refresh:', error.message));
 
   return interaction.editReply({
-    content: previous
+    content: multiTurn ? `Turn ${validation.gameVersion} added in ${thread}.` : previous
       ? `Your answer was updated in ${thread}.`
       : `Your answer was posted in ${thread}.`
   });
@@ -288,7 +307,7 @@ async function handleAnswerModal(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   return withResponseSubmissionLock(
-    `${interaction.guild.id}:${messageId}:${interaction.user.id}`,
+    `${interaction.guild.id}:${messageId}`,
     () => processAnswerModal(interaction, messageId)
   );
 }
@@ -301,11 +320,12 @@ module.exports = {
 
     const isButton = isDailyInteractionButton(interaction);
     const isResponseModal = isDailyInteractionResponseModal(interaction);
-    if (!isButton && !isResponseModal) return;
+    const isChoiceMenu = interaction.isStringSelectMenu?.() && interaction.customId === 'dailyinteraction_choice';
+    if (!isButton && !isResponseModal && !isChoiceMenu) return;
 
     try {
       if (isResponseModal) {
-        return handleAnswerModal(interaction);
+        return await handleAnswerModal(interaction);
       }
 
       const post = getPost(interaction.guild.id, interaction.message?.id);
@@ -316,19 +336,30 @@ module.exports = {
         });
       }
 
-      if (!isDailyInteractionOpen(post)) {
+      if (!isDailyInteractionOpen(post) || !activityOpen(post)) {
         return interaction.reply({
           content: 'This daily interaction has closed.',
           flags: MessageFlags.Ephemeral
         });
       }
 
+      if (isChoiceMenu || /^dailyinteraction_choice_\d+$/.test(interaction.customId)) {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const index = Number(isChoiceMenu ? interaction.values[0] : interaction.customId.split('_').at(-1));
+        return await withResponseSubmissionLock(`${interaction.guild.id}:${post.messageId}`,
+          () => processAnswerModal(interaction, post.messageId, index));
+      }
+
       if (interaction.customId === 'dailyinteraction_join') {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        return handleJoin(interaction, post);
+        return await withResponseSubmissionLock(`${interaction.guild.id}:${post.messageId}`,
+          () => handleJoin(interaction, post));
       }
 
       if (interaction.customId === 'dailyinteraction_answer') {
+        if (Number(getDailyInteractionConfig(interaction.guild.id)?.discussionEnabled) !== 1) {
+          return await interaction.reply({ content: 'Answer submission is disabled for this server.', flags: MessageFlags.Ephemeral });
+        }
         if (!supportsSubmittedAnswer(post)) {
           return interaction.reply({
             content: 'This activity tracks participation through Join In and does not accept text responses.',
@@ -336,10 +367,16 @@ module.exports = {
           });
         }
 
-        return interaction.showModal(responseModal(post));
+        const activity = activityFor(post);
+        if (activity?.mode === 'choice') return await interaction.reply({ content: 'Choose an option on the activity message.', flags: MessageFlags.Ephemeral });
+        if (activity?.mode === 'chain') {
+          const state = gameState(post);
+          post.prompt = `Word chain: reply with a word beginning with the last letter of **${state.lastWord}**.`;
+        }
+        return await interaction.showModal(responseModal(post));
       }
 
-      return handleDiscussion(interaction, post);
+      return await handleDiscussion(interaction, post);
     } catch (err) {
       console.error('Daily interaction action error:', err);
 

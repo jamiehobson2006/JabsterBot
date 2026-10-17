@@ -3,14 +3,22 @@ const {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  StringSelectMenuBuilder,
   PermissionFlagsBits
 } = require('discord.js');
+const crypto = require('node:crypto');
+const { fetchDailyMessage, withDailyDisplayLock } = require('../utils/dailyDisplay');
+const { activityOpen, createActivity, maintainActivities } = require('../utils/dailyActivities');
+const { activeDayGap, engagementSettings, isQuietDay, applyMilestones, sendReminders } = require('../utils/dailyEngagement');
 
 const {
   all,
   get,
   run
 } = require('../database');
+const { startManagedLoop } = require('../utils/serviceRunner');
+const { attemptDailyDelivery, dailyMetadata, getDailyDelivery, newDailyKey, pendingDailyKeys,
+  queueDailyDelivery, recoverDailyDeliveries } = require('../utils/dailyDelivery');
 
 const {
   createAuditEmbed,
@@ -32,6 +40,8 @@ const DELIVERY_COOLDOWN_MS = 30 * DAY_MS;
 const THREAD_DELETE_AFTER_MS = 7 * DAY_MS;
 const DEFAULT_TIMEZONE = 'Europe/London';
 const threadCreationLocks = new Map();
+const ANSWER_PERMISSIONS = [PermissionFlagsBits.CreatePublicThreads, PermissionFlagsBits.SendMessagesInThreads,
+  PermissionFlagsBits.ManageThreads, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ReadMessageHistory];
 
 const DAY_NAMES = Object.freeze([
   'Sunday',
@@ -354,7 +364,7 @@ function updateDailyInteractionConfig(guildId, fields) {
     'color',
     'discussionEnabled',
     'lastDateKey',
-    'updatedBy'
+    'updatedBy', 'nextAttemptAt', 'lastDeliveryError'
   ]);
 
   const entries = Object.entries(fields)
@@ -383,6 +393,9 @@ function updateDailyInteractionConfig(guildId, fields) {
   const values = entries.map(([, value]) => value);
 
   assignments.push('updatedAt = ?');
+  if (entries.some(([key]) => ['enabled', 'channelId', 'hour', 'minute', 'timezone'].includes(key))) {
+    assignments.push('nextAttemptAt = NULL', 'lastDeliveryError = NULL');
+  }
   values.push(Date.now(), guildId);
 
   return run(
@@ -504,8 +517,12 @@ function promptsForType(guildId, type) {
     censorTerms
   }).valid;
 
+  const keyFor = prompt => `prompt:${crypto.createHash('sha256')
+    .update(`${normalizedType}:${prompt.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()}`)
+    .digest('hex')}`;
   const builtIn = preset.prompts.map((prompt, index) => ({
-    key: `builtin:${normalizedType}:${index}`,
+    key: keyFor(prompt),
+    legacyKeys: [`builtin:${normalizedType}:${index}`],
     type: normalizedType,
     prompt,
     title: null,
@@ -515,7 +532,8 @@ function promptsForType(guildId, type) {
   const custom = listCustomPrompts(guildId, normalizedType)
     .filter(row => Number(row.enabled) === 1)
     .map(row => ({
-      key: `custom:${row.id}`,
+      key: keyFor(row.prompt),
+      legacyKeys: [`custom:${row.id}`],
       type: normalizedType,
       prompt: row.prompt,
       title: row.title,
@@ -523,7 +541,13 @@ function promptsForType(guildId, type) {
     }))
     .filter(safePrompt);
 
-  return [...builtIn, ...custom];
+  const seen = new Map();
+  for (const row of [...builtIn, ...custom]) {
+    const existing = seen.get(row.key);
+    if (existing) existing.legacyKeys.push(...row.legacyKeys);
+    else seen.set(row.key, row);
+  }
+  return [...seen.values()];
 }
 
 function chooseWeightedType(types, random = Math.random) {
@@ -542,7 +566,8 @@ function chooseWeightedType(types, random = Math.random) {
 }
 
 function choosePrompt({ guildId, type, now = Date.now(), random = Math.random }) {
-  const prompts = promptsForType(guildId, type);
+  const pending = pendingDailyKeys(guildId, 'DAILY_INTERACTION_POST');
+  const prompts = promptsForType(guildId, type).filter(prompt => !pending.has(prompt.key));
   if (!prompts.length) return null;
 
   const cutoff = now - DELIVERY_COOLDOWN_MS;
@@ -562,55 +587,30 @@ function choosePrompt({ guildId, type, now = Date.now(), random = Math.random })
     ).map(row => [row.promptKey, row.deliveredAt])
   );
 
-  const eligible = prompts.filter(prompt => !history.has(prompt.key));
+  const lastUsed = prompt => Math.max(0, ...[prompt.key, ...(prompt.legacyKeys || [])]
+    .map(key => Number(history.get(key)) || 0));
+  const eligible = prompts.filter(prompt => !lastUsed(prompt));
   if (eligible.length) {
     return eligible[Math.floor(random() * eligible.length)];
   }
 
   const oldest = [...prompts]
-    .sort((left, right) => (history.get(left.key) || 0) - (history.get(right.key) || 0));
+    .sort((left, right) => lastUsed(left) - lastUsed(right));
 
   return oldest[0] || null;
 }
 
 function chooseInteraction({ guildId, type = 'RANDOM', now = Date.now(), random = Math.random }) {
+  const pending = pendingDailyKeys(guildId, 'DAILY_INTERACTION_POST');
   const selectedType = String(type || 'RANDOM').toUpperCase() === 'RANDOM'
-    ? chooseWeightedType(getInteractionTypes(guildId), random)
+    ? chooseWeightedType(getInteractionTypes(guildId)
+      .filter(row => promptsForType(guildId, row.type).some(prompt => !pending.has(prompt.key))), random)
     : String(type).toUpperCase();
 
   if (!interactionType(selectedType)) return null;
 
   const prompt = choosePrompt({ guildId, type: selectedType, now, random });
   return prompt ? { ...prompt, type: selectedType } : null;
-}
-
-function savePromptDelivery(guildId, promptKey, deliveredAt) {
-  return run(
-    `INSERT INTO daily_interaction_history (guildId, promptKey, deliveredAt)
-     VALUES (?, ?, ?)
-     ON CONFLICT(guildId, promptKey)
-     DO UPDATE SET deliveredAt = excluded.deliveredAt`,
-    [guildId, promptKey, deliveredAt]
-  );
-}
-
-function restorePromptDelivery(guildId, promptKey, previous) {
-  if (previous?.deliveredAt) {
-    return run(
-      `UPDATE daily_interaction_history
-       SET deliveredAt = ?
-       WHERE guildId = ?
-       AND promptKey = ?`,
-      [previous.deliveredAt, guildId, promptKey]
-    );
-  }
-
-  return run(
-    `DELETE FROM daily_interaction_history
-     WHERE guildId = ?
-     AND promptKey = ?`,
-    [guildId, promptKey]
-  );
 }
 
 function buildInteractionEmbed(
@@ -640,7 +640,7 @@ function buildInteractionEmbed(
     : 'This interaction prompt is no longer available.';
 
   const embed = new EmbedBuilder()
-    .setColor(Number(config.color) || 0x5865F2)
+    .setColor(Number(config.color ?? 0x5865F2))
     .setTitle(`${type.emoji} ${title}`.slice(0, 256))
     .setDescription(description)
     .addFields(
@@ -659,7 +659,7 @@ function buildInteractionEmbed(
   return embed;
 }
 
-function buildInteractionComponents({ canSubmitAnswers, interaction }) {
+function buildInteractionComponents({ canSubmitAnswers, interaction, activity }) {
   const buttons = [
     new ButtonBuilder()
       .setCustomId('dailyinteraction_join')
@@ -667,6 +667,16 @@ function buildInteractionComponents({ canSubmitAnswers, interaction }) {
       .setStyle(ButtonStyle.Success)
   ];
 
+  if (canSubmitAnswers && activity?.mode === 'choice') {
+    if (activity.choices.length <= 4 && activity.choices.every(choice => choice.length <= 80)) {
+      buttons.push(...activity.choices.map((choice, index) => new ButtonBuilder()
+        .setCustomId(`dailyinteraction_choice_${index}`).setLabel(choice).setStyle(ButtonStyle.Primary)));
+      return [new ActionRowBuilder().addComponents(buttons)];
+    }
+    return [new ActionRowBuilder().addComponents(buttons), new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder().setCustomId('dailyinteraction_choice').setPlaceholder('Choose your answer')
+        .addOptions(activity.choices.map((choice, index) => ({ label: choice, value: String(index) }))))];
+  }
   if (canSubmitAnswers && supportsSubmittedAnswer(interaction)) {
     buttons.push(
       new ButtonBuilder()
@@ -681,24 +691,40 @@ function buildInteractionComponents({ canSubmitAnswers, interaction }) {
 
 function isDailyInteractionOpen(post, now = Date.now()) {
   const sentAt = Number(post?.sentAt);
-  return Number.isFinite(sentAt) && now < sentAt + DAY_MS;
+  return Boolean(post) && Number.isFinite(sentAt) && sentAt <= now && now < sentAt + DAY_MS;
 }
 
 async function getOrCreateDiscussionThread({ guild, message, post, openedBy }) {
   if (post.threadId) {
-    const existingThread = await guild.channels.fetch(post.threadId).catch(() => null);
-    if (existingThread) return existingThread;
+    const existingThread = await guild.channels.fetch(post.threadId).catch(error => {
+      if (Number(error.code) === 10003) return null;
+      throw error;
+    });
+    if (existingThread) {
+      if (existingThread.archived && !existingThread.locked) await existingThread.setArchived(false);
+      return existingThread;
+    }
+    run('UPDATE daily_interaction_posts SET threadId = NULL WHERE messageId = ?', [post.messageId]);
+    post.threadId = null;
   }
 
   const existingCreation = threadCreationLocks.get(post.messageId);
   if (existingCreation) return existingCreation;
 
   const creation = (async () => {
-    const thread = await message.startThread({
+    const saved = get('SELECT threadId FROM daily_interaction_posts WHERE messageId = ?', [post.messageId]);
+    const recovered = saved?.threadId
+      ? await guild.channels.fetch(saved.threadId)
+      : await guild.channels.fetch(message.id).catch(error => {
+        if (Number(error.code) === 10003) return null;
+        throw error;
+      });
+    const thread = recovered?.isThread?.() ? recovered : await message.startThread({
       name: `Discuss ${post.type.replace(/_/g, ' ').toLowerCase()}`.slice(0, 100),
       autoArchiveDuration: 1440,
       reason: `Daily interaction discussion opened by ${openedBy || 'a community member'}`
     });
+    if (thread.archived && !thread.locked) await thread.setArchived(false);
 
     run(
       `UPDATE daily_interaction_posts
@@ -734,8 +760,15 @@ async function cleanupDiscussionThreads(client, now = Date.now()) {
     const guild = client.guilds.cache.get(post.guildId);
     if (!guild) continue;
 
-    const thread = await guild.channels.fetch(post.threadId).catch(() => null);
-    if (!thread) continue;
+    let thread;
+    try { thread = await guild.channels.fetch(post.threadId); }
+    catch (error) {
+      if (Number(error.code) !== 10003) continue;
+    }
+    if (!thread) {
+      run('UPDATE daily_interaction_posts SET threadId = NULL WHERE messageId = ?', [post.messageId]);
+      continue;
+    }
 
     if (now >= Number(post.sentAt) + THREAD_DELETE_AFTER_MS) {
       const deleted = await thread
@@ -760,13 +793,39 @@ async function cleanupDiscussionThreads(client, now = Date.now()) {
   }
 }
 
-function dayDifference(previousDateKey, currentDateKey) {
-  if (!previousDateKey || !currentDateKey) return null;
-
-  const previous = Date.parse(`${previousDateKey}T00:00:00.000Z`);
-  const current = Date.parse(`${currentDateKey}T00:00:00.000Z`);
-  if (!Number.isFinite(previous) || !Number.isFinite(current)) return null;
-  return Math.round((current - previous) / DAY_MS);
+async function refreshDailyPosts(client, now = Date.now()) {
+  const posts = all(`SELECT post.*, (SELECT COUNT(*) FROM daily_interaction_participants participant
+    WHERE participant.messageId = post.messageId) AS participantCount
+    FROM daily_interaction_posts post
+    WHERE (sentAt <= ? AND buttonsClosedAt IS NULL) OR displayedParticipantCount !=
+      (SELECT COUNT(*) FROM daily_interaction_participants participant WHERE participant.messageId = post.messageId)
+    ORDER BY sentAt DESC LIMIT 25`, [now - DAY_MS]);
+  for (const post of posts) {
+    try {
+      await withDailyDisplayLock(post.messageId, async () => {
+        const channel = await client.channels.fetch(post.channelId);
+        const message = await fetchDailyMessage(channel, post.messageId);
+        post.participantCount = get('SELECT COUNT(*) AS count FROM daily_interaction_participants WHERE messageId = ?', [post.messageId]).count;
+        const embed = EmbedBuilder.from(message.embeds[0]);
+        const fields = (embed.data.fields || []).filter(field => field.name !== 'Status')
+          .map(field => field.name === 'Participants' ? { ...field, value: String(post.participantCount) } : field);
+        const closed = !isDailyInteractionOpen(post, now) || !activityOpen(post, now);
+        if (closed) fields.push({ name: 'Status', value: 'Closed' });
+        embed.setFields(fields);
+        await message.edit({ embeds: [embed], ...(closed ? { components: [] } : {}) });
+        run(`UPDATE daily_interaction_posts SET displayedParticipantCount = ?,
+          buttonsClosedAt = CASE WHEN ? THEN ? ELSE buttonsClosedAt END WHERE messageId = ?`,
+        [post.participantCount, closed ? 1 : 0, now, post.messageId]);
+      });
+    } catch (error) {
+      if ([10003, 10008].includes(Number(error.code))) {
+        run(`UPDATE daily_interaction_posts SET buttonsClosedAt = ?, displayedParticipantCount = ?
+          WHERE messageId = ?`, [now, post.participantCount, post.messageId]);
+      } else {
+        console.error(`Daily interaction refresh ${post.messageId}:`, error.message);
+      }
+    }
+  }
 }
 
 function recordMemberEngagement({
@@ -775,11 +834,12 @@ function recordMemberEngagement({
   dateKey,
   joined = false,
   responded = false,
-  now = Date.now()
+  now = Date.now(), messageId = null
 }) {
   if (!joined && !responded) return getMemberEngagementStats(guildId, userId);
+  require('../utils/dailyEngagement').creditParticipation({ guildId, userId, messageId, dateKey, joined, responded, now });
 
-  const current = getMemberEngagementStats(guildId, userId);
+  const current = getMemberEngagementStats(guildId, userId, { now });
   if (!current) {
     const firstStreak = dateKey ? 1 : 0;
     run(
@@ -806,8 +866,8 @@ function recordMemberEngagement({
   let longestStreak = Number(current.longestStreak) || 0;
   let lastDateKey = current.lastDateKey;
 
-  if (dateKey && lastDateKey !== dateKey) {
-    currentStreak = dayDifference(lastDateKey, dateKey) === 1
+  if (dateKey && (!lastDateKey || dateKey > lastDateKey)) {
+    currentStreak = lastDateKey && activeDayGap(guildId, lastDateKey, dateKey) <= 1
       ? currentStreak + 1
       : 1;
     longestStreak = Math.max(longestStreak, currentStreak);
@@ -821,7 +881,7 @@ function recordMemberEngagement({
          currentStreak = ?,
          longestStreak = ?,
          lastDateKey = ?,
-         lastParticipatedAt = ?
+         lastParticipatedAt = MAX(COALESCE(lastParticipatedAt, 0), ?)
      WHERE guildId = ?
      AND userId = ?`,
     [
@@ -839,14 +899,19 @@ function recordMemberEngagement({
   return getMemberEngagementStats(guildId, userId);
 }
 
-function getMemberEngagementStats(guildId, userId) {
-  return get(
+function getMemberEngagementStats(guildId, userId, { now = Date.now() } = {}) {
+  const row = get(
     `SELECT *
      FROM daily_interaction_member_stats
      WHERE guildId = ?
      AND userId = ?`,
     [guildId, userId]
   );
+  if (!row) return row;
+  const config = getDailyInteractionConfig(guildId);
+  const today = getDateParts(new Date(now), config?.timezone).dateKey;
+  const elapsed = activeDayGap(guildId, row.lastDateKey, today);
+  return { ...row, currentStreak: elapsed > 1 ? 0 : row.currentStreak };
 }
 
 function getEngagementLeaderboard(guildId, limit = 10) {
@@ -857,7 +922,7 @@ function getEngagementLeaderboard(guildId, limit = 10) {
      ORDER BY score DESC, longestStreak DESC, lastParticipatedAt DESC
      LIMIT ?`,
     [guildId, Math.max(1, Math.min(20, Number(limit) || 10))]
-  );
+  ).map(row => ({ ...row, currentStreak: getMemberEngagementStats(guildId, row.userId).currentStreak }));
 }
 
 function getDailyInteractionAnalytics(guildId, now = Date.now()) {
@@ -880,7 +945,8 @@ function getDailyInteractionAnalytics(guildId, now = Date.now()) {
   ).count;
   const responses = get(
     `SELECT COUNT(*) AS count
-     FROM daily_interaction_responses AS response
+     FROM (SELECT messageId FROM daily_interaction_responses UNION ALL
+       SELECT messageId FROM daily_trivia_attempts) AS response
      INNER JOIN daily_interaction_posts AS post
        ON post.messageId = response.messageId
      WHERE post.guildId = ?
@@ -906,12 +972,21 @@ async function sendDailyInteraction({
   type = 'RANDOM',
   now = Date.now(),
   random = Math.random,
-  trackHistory = true
+  trackHistory = true,
+  deliveryKey = newDailyKey('daily-interaction'),
+  dateKey = null
 }) {
+  const existing = getDailyDelivery(deliveryKey);
+  if (existing && existing.status !== 'CANCELLED') {
+    const delivery = await attemptDailyDelivery(client, existing);
+    if (delivery?.status !== 'CANCELLED') return { status: delivery?.status === 'SENT' ? 'sent' : 'pending',
+      message: { id: delivery?.messageId }, interaction: dailyMetadata(existing).selection };
+  }
   if (!config?.channelId) return { status: 'missing-channel' };
 
   const channel = await client.channels.fetch(config.channelId).catch(() => null);
   if (!channel?.isTextBased()) return { status: 'missing-channel' };
+  if (channel.guild?.id && channel.guild.id !== config.guildId) return { status: 'missing-channel' };
 
   const permissions = channel.permissionsFor(channel.guild.members.me);
   if (!permissions?.has([
@@ -925,83 +1000,57 @@ async function sendDailyInteraction({
   const picked = chooseInteraction({ guildId: config.guildId, type, now, random });
   if (!picked) return { status: 'no-prompts' };
 
-  const previous = trackHistory
-    ? get(
-      `SELECT deliveredAt
-       FROM daily_interaction_history
-       WHERE guildId = ?
-       AND promptKey = ?`,
-      [config.guildId, picked.key]
-    )
-    : null;
+  const canSubmitAnswers = Number(config.discussionEnabled) === 1 && permissions.has(ANSWER_PERMISSIONS);
+  const activity = canSubmitAnswers ? createActivity(picked, engagementSettings(config.guildId)) : null;
 
-  if (trackHistory) {
-    savePromptDelivery(config.guildId, picked.key, now);
-  }
-
-  const canSubmitAnswers = Number(config.discussionEnabled) === 1 &&
-    permissions.has([
-      PermissionFlagsBits.CreatePublicThreads,
-      PermissionFlagsBits.SendMessagesInThreads
-    ]);
-
-  try {
-    const message = await channel.send({
-      content: config.pingRoleId ? `<@&${config.pingRoleId}>` : undefined,
-      embeds: [buildInteractionEmbed(config, picked, 0, canSubmitAnswers)],
-      components: buildInteractionComponents({
+  const embed = buildInteractionEmbed(config, picked, 0, canSubmitAnswers);
+  if (activity?.mode === 'choice') embed.data.fields = embed.data.fields.map(field => field.name === 'How to Join'
+    ? { ...field, value: 'Choose an option below to submit your answer, or use Join In.' } : field);
+  if (activity?.mode === 'trivia') embed.addFields({ name: 'Private Trivia',
+    value: `One first attempt per member. Answers stay private and are revealed ${activity.minutes} minute(s) after posting.` });
+  if (activity?.mode === 'chain' || activity?.mode === 'story') embed.addFields({ name: 'Current Game',
+    value: activity.mode === 'chain' ? `Latest word: **${activity.seed}**. Take turns; no repeated words.` : 'Add the opening word. Players take alternating turns.' });
+  if (!trackHistory) embed.setFooter({ text: 'Jabster Studios Daily Interactions | Preview' });
+  const queued = queueDailyDelivery({ deliveryKey, type: 'DAILY_INTERACTION_POST',
+    guildId: config.guildId, channelId: channel.id,
+    metadata: { contentKey: picked.key, selection: picked, dateKey, trackHistory, preview: !trackHistory, activity },
+    message: {
+      content: trackHistory && config.pingRoleId ? `<@&${config.pingRoleId}>` : undefined,
+      embeds: [embed],
+      components: !trackHistory ? [] : buildInteractionComponents({
         canSubmitAnswers,
-        interaction: picked
+        interaction: picked, activity
       }),
-      allowedMentions: config.pingRoleId
+      allowedMentions: trackHistory && config.pingRoleId
         ? { roles: [config.pingRoleId], parse: [] }
         : { parse: [] }
-    });
-
-    run(
-      `INSERT OR REPLACE INTO daily_interaction_posts (
-         messageId, guildId, channelId, type, promptKey, prompt, title, sentAt
-       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        message.id,
-        config.guildId,
-        channel.id,
-        picked.type,
-        picked.key,
-        picked.prompt,
-        picked.title || null,
-        now
-      ]
-    );
-
-    await logAudit(client, config.guildId, {
-      action: 'DAILY_INTERACTION_POSTED',
-      executorId: client.user?.id,
-      type: 'COMMANDS',
-      metadata: {
-        messageId: message.id,
-        channelId: channel.id,
-        interactionType: picked.type,
-        promptKey: picked.key,
-        scheduled: trackHistory
-      },
-      embed: createAuditEmbed({
-        action: 'Daily Interaction Posted',
-        executor: client.user ? `${client.user.tag}\n<@${client.user.id}>` : 'Bot',
-        channel: `<#${channel.id}>`,
-        extra: `${interactionType(picked.type).label}: ${picked.prompt}`,
-        color: Number(config.color) || 0x5865F2
-      })
-    });
-
-    return { status: 'sent', message, interaction: picked };
-  } catch (err) {
-    if (trackHistory) {
-      restorePromptDelivery(config.guildId, picked.key, previous);
     }
-    throw err;
-  }
+  });
+  const delivery = await attemptDailyDelivery(client, queued);
+  if (delivery?.status !== 'SENT') return { status: 'pending' };
+  const message = { id: delivery.messageId };
+  const actual = dailyMetadata(queued).selection;
+  await logAudit(client, config.guildId, {
+    action: 'DAILY_INTERACTION_POSTED',
+    executorId: client.user?.id,
+    type: 'COMMANDS',
+    metadata: {
+      messageId: message.id,
+      channelId: channel.id,
+      interactionType: actual.type,
+      promptKey: actual.key,
+      scheduled: Boolean(dateKey), preview: !trackHistory
+    },
+    embed: createAuditEmbed({
+      action: 'Daily Interaction Posted',
+      executor: client.user ? `${client.user.tag}\n<@${client.user.id}>` : 'Bot',
+      channel: `<#${channel.id}>`,
+      extra: `${interactionType(actual.type).label}: ${actual.prompt}`,
+      color: Number(config.color ?? 0x5865F2)
+    })
+  }).catch(error => console.error('Daily interaction audit failed:', error.message));
+
+  return { status: 'sent', message, interaction: actual };
 }
 
 class DailyInteractionService {
@@ -1011,15 +1060,8 @@ class DailyInteractionService {
   static start(client) {
     if (DailyInteractionService.interval) return DailyInteractionService.interval;
 
-    DailyInteractionService.tick(client)
-      .catch(err => console.error('Daily interaction service error:', err));
-
-    DailyInteractionService.interval = setInterval(() => {
-      DailyInteractionService.tick(client)
-        .catch(err => console.error('Daily interaction service error:', err));
-    }, 60 * 1000);
-
-    DailyInteractionService.interval.unref?.();
+    DailyInteractionService.interval = startManagedLoop('daily-interactions',
+      () => DailyInteractionService.tick(client), 60_000, { timeoutMs: 60_000 });
     return DailyInteractionService.interval;
   }
 
@@ -1051,6 +1093,8 @@ class DailyInteractionService {
   }
 
   static async runTick(client) {
+    await recoverDailyDeliveries(client, ['DAILY_INTERACTION_POST', 'DAILY_INTERACTION_RESPONSE']);
+    await refreshDailyPosts(client).catch(error => console.error('Daily interaction display refresh:', error.message));
     await cleanupDiscussionThreads(client)
       .catch(err => console.error('Daily interaction thread cleanup failed:', err));
 
@@ -1065,24 +1109,14 @@ class DailyInteractionService {
     const now = new Date();
 
     for (const config of configs) {
+      if (isQuietDay(config.guildId, now.getTime())) continue;
       const local = getDateParts(now, config.timezone);
       const scheduleReached = local.hour > Number(config.hour) ||
         (local.hour === Number(config.hour) && local.minute >= Number(config.minute));
 
-      if (!scheduleReached || config.lastDateKey === local.dateKey) {
+      if (!scheduleReached || config.lastDateKey === local.dateKey || Number(config.nextAttemptAt) > now.getTime()) {
         continue;
       }
-
-      const claim = run(
-        `UPDATE daily_interaction_config
-         SET lastDateKey = ?
-         WHERE guildId = ?
-         AND enabled = 1
-         AND (lastDateKey IS NULL OR lastDateKey <> ?)`,
-        [local.dateKey, config.guildId, local.dateKey]
-      );
-
-      if (!claim.changes) continue;
 
       try {
         const theme = getDayTheme(config.guildId, local.dayOfWeek);
@@ -1092,39 +1126,43 @@ class DailyInteractionService {
           client,
           config,
           type: themedTypeEnabled ? theme.type : 'RANDOM',
-          now: now.getTime()
+          now: now.getTime(),
+          deliveryKey: `daily-interaction:${config.guildId}:${local.dateKey}`,
+          dateKey: local.dateKey
         });
 
         if (result.status !== 'sent') {
           run(
             `UPDATE daily_interaction_config
-             SET lastDateKey = NULL
-             WHERE guildId = ?
-             AND lastDateKey = ?`,
-            [config.guildId, local.dateKey]
+             SET nextAttemptAt = ?, lastDeliveryError = ? WHERE guildId = ?`,
+            [Date.now() + 15 * 60_000, result.status, config.guildId]
           );
         }
       } catch (err) {
         run(
           `UPDATE daily_interaction_config
-           SET lastDateKey = NULL
-           WHERE guildId = ?
-           AND lastDateKey = ?`,
-          [config.guildId, local.dateKey]
+           SET nextAttemptAt = ?, lastDeliveryError = ? WHERE guildId = ?`,
+          [Date.now() + 15 * 60_000, String(err.message).slice(0, 500), config.guildId]
         );
         console.error(`Daily interaction send failed for ${config.guildId}:`, err);
       }
     }
+    await recoverDailyDeliveries(client, ['DAILY_ACTIVITY_UPDATE', 'DAILY_REMINDER']);
+    await maintainActivities(client).catch(error => console.error('Daily activity maintenance:', error.message));
+    await applyMilestones(client).catch(error => console.error('Daily milestone roles:', error.message));
+    await sendReminders(client).catch(error => console.error('Daily reminders:', error.message));
   }
 }
 
 module.exports = {
+  ANSWER_PERMISSIONS,
   DAILY_INTERACTION_TYPES: INTERACTION_TYPES,
   DAY_NAMES,
   DEFAULT_TIMEZONE,
   DailyInteractionService,
   addCustomPrompt,
   buildInteractionEmbed,
+  buildInteractionComponents,
   chooseInteraction,
   clearDayTheme,
   cleanupDiscussionThreads,
@@ -1142,6 +1180,7 @@ module.exports = {
   listInteractionTypes,
   removeCustomPrompt,
   recordMemberEngagement,
+  refreshDailyPosts,
   sendDailyInteraction,
   setDayTheme,
   setCustomPromptEnabled,

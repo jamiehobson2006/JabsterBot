@@ -49,12 +49,12 @@ module.exports = {
         return;
       }
 
+      if (await handleDailyInteractionThreadSafety(newMessage, client)) return;
+
       if (newMessage.author.bot) {
         captureMessageSnapshot(newMessage);
         return;
       }
-
-      if (await handleDailyInteractionThreadSafety(newMessage, client)) return;
 
       if (await handlePhishing(newMessage, client)) return;
 

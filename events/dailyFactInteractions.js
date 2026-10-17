@@ -21,6 +21,8 @@ const {
   normalizeFact,
   saveApprovedFact
 } = require('../utils/dailyFacts');
+const { notifyFactSubmitter, reviewChannelId, updateFactReview } = require('../utils/dailyFactReview');
+const { sourceFields, validateSourceUrl } = require('../utils/factSources');
 
 function duplicateLabel(
   duplicate
@@ -50,7 +52,7 @@ function recoverStaleDailyFactReviews(now = Date.now()) {
   return run(
     `UPDATE dailyfact_submissions
      SET status = 'PENDING', reviewerId = NULL, decisionAt = NULL
-     WHERE status = 'REVIEWING' AND decisionAt <= ?`,
+     WHERE status = 'REVIEWING' AND COALESCE(decisionAt, 0) <= ?`,
     [now - REVIEW_TIMEOUT_MS]
   ).changes;
 }
@@ -83,50 +85,7 @@ async function sendSubmissionDm(
   }
 ) {
 
-  const user =
-    await client.users.fetch(
-      submission.userId
-    ).catch(() => null);
-
-  if (!user) {
-    return;
-  }
-
-  await user.send({
-
-    embeds: [
-
-      new EmbedBuilder()
-
-        .setColor(color)
-
-        .setTitle(title)
-
-        .setDescription(description)
-
-        .addFields(
-
-          {
-            name: 'Category',
-            value: categoryName(submission.category),
-            inline: true
-          },
-
-          {
-            name: 'Submission ID',
-            value: `#${submission.id}`,
-            inline: true
-          },
-
-          {
-            name: 'Fact',
-            value: fact
-          }
-        )
-
-        .setTimestamp()
-    ]
-  }).catch(() => {});
+  return notifyFactSubmitter(client, submission, { color, title, description, fact });
 }
 
 function updateReviewEmbed(
@@ -195,6 +154,12 @@ function updateReviewEmbed(
   return embed;
 }
 
+function approvedSourceEmbed(embed, submission) {
+  const replaced = new Set(['Source Link', 'Source Verification', 'Verification Checklist']);
+  return embed.setFields((embed.data.fields || []).filter(field => !replaced.has(field.name)))
+    .addFields(...sourceFields(submission));
+}
+
 async function markDuplicate({
   interaction,
   submission,
@@ -237,7 +202,7 @@ async function markDuplicate({
     }
   );
 
-  return interaction.message.edit({
+  return updateFactReview(interaction, {
 
     embeds: [
       updateReviewEmbed(
@@ -293,17 +258,21 @@ async function approveSubmission({
       [fact, normalizeFact(fact), approvedAt, approvedAt, submission.id, interaction.user.id]
     );
     if (!updated.changes) throw new Error('The submission review claim was lost.');
+    run(`UPDATE dailyfact_submissions SET sourceUrl = ?, verifiedAt = ?, verifiedBy = ?, verificationNote = ? WHERE id = ?`,
+      [submission.sourceUrl || null, submission.verifiedAt || null, submission.verifiedBy || null,
+        submission.verificationNote || null, submission.id]);
 
-    saveApprovedFact({
+    return saveApprovedFact({
       submissionId: submission.id,
       userId: submission.userId,
       reviewerId: interaction.user.id,
       fact,
       category: submission.category || 'random',
-      approvedAt
+      approvedAt, sourceUrl: submission.sourceUrl, verifiedAt: submission.verifiedAt,
+      verifiedBy: submission.verifiedBy, verificationNote: submission.verificationNote
     });
   });
-  approve();
+  const approvedFact = approve();
 
   await sendSubmissionDm(
     interaction.client,
@@ -317,17 +286,17 @@ async function approveSubmission({
     }
   );
 
-  return interaction.message.edit({
+  return updateFactReview(interaction, {
 
     embeds: [
-      updateReviewEmbed(
+      approvedSourceEmbed(updateReviewEmbed(
         interaction.message,
         {
           color: 0x57F287,
           footer: `Approved by ${interaction.user.tag}`,
           fact
         }
-      )
+      ), submission).addFields({ name: 'Library ID', value: String(approvedFact.id), inline: true })
     ],
 
     components: []
@@ -371,7 +340,7 @@ async function denySubmission(
     }
   );
 
-  return interaction.message.edit({
+  return updateFactReview(interaction, {
 
     embeds: [
       updateReviewEmbed(
@@ -392,8 +361,22 @@ module.exports = {
   name: 'interactionCreate',
 
   async execute(interaction) {
+    const relevantButton = interaction.isButton?.() && /^dailyfact_(approve|edit|verify|deny)_[1-9]\d*$/.test(interaction.customId);
+    const relevantModal = interaction.type === InteractionType.ModalSubmit && /^dailyfact_(editmodal|verifymodal)_[1-9]\d*$/.test(interaction.customId);
+    if (!relevantButton && !relevantModal) return;
 
     try {
+      if (interaction.channelId !== reviewChannelId() ||
+          interaction.message?.author?.id !== interaction.client.user.id) {
+        return await interaction.reply({ content: 'Daily Facts can only be reviewed on their original message in the review channel.',
+          flags: MessageFlags.Ephemeral });
+      }
+      const bound = get('SELECT reviewMessageId FROM dailyfact_submissions WHERE id = ?',
+        [submissionIdFromCustomId(interaction.customId)]);
+      if (bound?.reviewMessageId && bound.reviewMessageId !== interaction.message.id) {
+        return await interaction.reply({ content: 'This is not the original review message for that submission.',
+          flags: MessageFlags.Ephemeral });
+      }
 
       recoverStaleDailyFactReviews();
 
@@ -437,13 +420,13 @@ module.exports = {
           });
         }
 
-        if (action === 'edit') {
+        if (action === 'edit' || action === 'verify') {
 
           const modal =
             new ModalBuilder()
 
               .setCustomId(
-                `dailyfact_editmodal_${submissionId}`
+                `dailyfact_${action === 'verify' ? 'verifymodal' : 'editmodal'}_${submissionId}`
               )
 
               .setTitle(
@@ -472,15 +455,27 @@ module.exports = {
             new ActionRowBuilder()
               .addComponents(input)
           );
+          const sourceInput = new TextInputBuilder().setCustomId('source').setLabel('Authoritative HTTPS source')
+            .setStyle(TextInputStyle.Short).setRequired(action === 'verify').setMaxLength(800);
+          if (submission.sourceUrl) sourceInput.setValue(submission.sourceUrl);
+          modal.addComponents(new ActionRowBuilder().addComponents(sourceInput));
+          if (action === 'verify') {
+            modal.setTitle('Verify & Approve Fact').addComponents(new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId('checklist').setLabel('Type CHECKED after completing the checklist')
+                .setPlaceholder('Claim, context, date, and authoritative publisher checked')
+                .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(7)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('note')
+              .setLabel('Private verification note').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(500)));
+          }
 
-          return interaction.showModal(modal);
+          return await interaction.showModal(modal);
         }
 
         await interaction.deferUpdate();
 
         if (action === 'approve') {
 
-          return approveSubmission({
+          return await approveSubmission({
             interaction,
             submission
           });
@@ -488,7 +483,7 @@ module.exports = {
 
         if (action === 'deny') {
 
-          return denySubmission(
+          return await denySubmission(
             interaction,
             submission
           );
@@ -499,7 +494,7 @@ module.exports = {
 
       if (
         interaction.type === InteractionType.ModalSubmit &&
-        interaction.customId.startsWith('dailyfact_editmodal_')
+        /^dailyfact_(editmodal|verifymodal)_/.test(interaction.customId)
       ) {
 
         await interaction.deferUpdate();
@@ -515,6 +510,10 @@ module.exports = {
               'fact'
             )
           );
+        if (editedFact.length < 20 || editedFact.length > 500 || !normalizeFact(editedFact)) {
+          return await interaction.followUp({ content: 'Enter a fact between 20 and 500 characters.',
+            flags: MessageFlags.Ephemeral });
+        }
 
         const submission =
           get(
@@ -542,7 +541,16 @@ module.exports = {
           });
         }
 
-        return approveSubmission({
+        const verifying = interaction.customId.startsWith('dailyfact_verifymodal_');
+        const sourceUrl = validateSourceUrl(interaction.fields.getTextInputValue('source'));
+        if (verifying && (!sourceUrl || interaction.fields.getTextInputValue('checklist').trim().toUpperCase() !== 'CHECKED')) {
+          return interaction.followUp({ content: 'Provide a source and complete the review checklist before verifying.', flags: MessageFlags.Ephemeral });
+        }
+        Object.assign(submission, { sourceUrl, verifiedAt: verifying ? Date.now() : null,
+          verifiedBy: verifying ? interaction.user.id : null,
+          verificationNote: verifying ? interaction.fields.getTextInputValue('note').trim() || null : null });
+
+        return await approveSubmission({
           interaction,
           submission,
           fact: editedFact

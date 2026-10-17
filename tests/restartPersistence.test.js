@@ -98,7 +98,7 @@ test('Daily Fact rotation history survives a fresh bot process', () => {
         channels: {
           fetch: async () => ({
             isTextBased: () => true,
-            send: async () => null
+            send: async () => ({ id: 'fact-message' })
           })
         }
       },
@@ -121,7 +121,7 @@ test('Daily Fact rotation history survives a fresh bot process', () => {
         channels: {
           fetch: async () => ({
             isTextBased: () => true,
-            send: async () => null
+            send: async () => ({ id: 'fact-message' })
           })
         }
       },

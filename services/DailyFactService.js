@@ -3,6 +3,9 @@ const {
   run
 } = require('../database');
 const { startManagedLoop } = require('../utils/serviceRunner');
+const { PermissionFlagsBits } = require('discord.js');
+const { attemptDailyDelivery, dailyMetadata, getDailyDelivery, newDailyKey,
+  pendingDailyKeys, queueDailyDelivery, recoverDailyDeliveries } = require('../utils/dailyDelivery');
 
 const {
   categoryName,
@@ -130,7 +133,7 @@ function eligibleFacts({
 
   run(
     `DELETE FROM dailyfact_delivery_history
-     WHERE deliveredAt < ?`,
+     WHERE deliveredAt <= ?`,
     [cutoff]
   );
 
@@ -140,16 +143,19 @@ function eligibleFacts({
         `SELECT factKey
          FROM dailyfact_delivery_history
          WHERE guildId = ?
-         AND deliveredAt >= ?`,
+         AND deliveredAt > ?`,
         [guildId, cutoff]
       ).map(row => row.factKey)
     );
 
+  const pending = pendingDailyKeys(guildId, 'DAILY_FACT_POST');
   return getFactsForCategory(category)
     .filter(fact =>
       !onlyCommunity || fact.source === 'community'
     )
-    .filter(fact => !recentlyDelivered.has(factKey(fact)));
+    .filter(fact => !pending.has(factKey(fact)))
+    .filter(fact => ![factKey(fact), ...(fact.legacyFactKeys || [])]
+      .some(key => recentlyDelivered.has(key)));
 }
 
 function dailyFactEmbed(fact) {
@@ -159,6 +165,8 @@ function dailyFactEmbed(fact) {
     title: 'Daily Fact',
     description: fact.fact,
     fields: [
+      ...require('../utils/factSources').sourceFields(fact),
+      ...(fact.id ? [{ name: 'Library ID', value: String(fact.id), inline: true }] : []),
       {
         name: 'Category',
         value: fact.category === 'random'
@@ -187,8 +195,16 @@ async function sendFact({
   category = config.category || 'random',
   onlyCommunity = false,
   now = Date.now(),
-  random = Math.random
+  random = Math.random,
+  deliveryKey = newDailyKey('daily-fact'),
+  dateKey = null
 }) {
+  const existing = getDailyDelivery(deliveryKey);
+  if (existing && existing.status !== 'CANCELLED') {
+    const delivery = await attemptDailyDelivery(client, existing);
+    if (delivery?.status !== 'CANCELLED') return { status: delivery?.status === 'SENT' ? 'sent' : 'pending',
+      fact: dailyMetadata(existing).selection };
+  }
 
   const channel =
     await client.channels.fetch(
@@ -200,6 +216,12 @@ async function sendFact({
     return {
       status: 'missing-channel'
     };
+  }
+  if (channel.guild?.id && channel.guild.id !== config.guildId) return { status: 'missing-channel' };
+  const permissions = channel.permissionsFor?.(channel.guild?.members.me);
+  if (permissions && !permissions.has([PermissionFlagsBits.ViewChannel,
+    PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
+    return { status: 'missing-permissions' };
   }
 
   const facts =
@@ -220,61 +242,18 @@ async function sendFact({
     };
   }
 
-  const deliveredAt =
-    now;
-
-  const claim =
-    run(
-      `INSERT OR IGNORE INTO dailyfact_delivery_history (
-         guildId,
-         factKey,
-         deliveredAt
-       )
-       VALUES (?, ?, ?)`,
-      [
-        config.guildId,
-        factKey(picked),
-        deliveredAt
-      ]
-    );
-
-  if (!claim.changes) {
-
-    return {
-      status: 'already-delivered'
-    };
-  }
-
-  try {
-
-    await channel.send({
+  const queued = queueDailyDelivery({
+    deliveryKey, type: 'DAILY_FACT_POST', guildId: config.guildId, channelId: config.channelId,
+    metadata: { contentKey: factKey(picked), selection: picked, dateKey },
+    message: {
       embeds: [dailyFactEmbed(picked)],
       allowedMentions: {
         parse: []
       }
-    });
-
-    return {
-      status: 'sent',
-      fact: picked
-    };
-
-  } catch (err) {
-
-    run(
-      `DELETE FROM dailyfact_delivery_history
-       WHERE guildId = ?
-       AND factKey = ?
-       AND deliveredAt = ?`,
-      [
-        config.guildId,
-        factKey(picked),
-        deliveredAt
-      ]
-    );
-
-    throw err;
-  }
+    }
+  });
+  const delivery = await attemptDailyDelivery(client, queued);
+  return { status: delivery?.status === 'SENT' ? 'sent' : 'pending', fact: dailyMetadata(queued).selection };
 }
 
 class DailyFactService {
@@ -331,6 +310,9 @@ class DailyFactService {
   }
 
   static async tick(client) {
+    require('../utils/dailyFactReview').queueMissingFactReviews();
+    await recoverDailyDeliveries(client, ['DAILY_FACT_POST', 'DAILY_FACT_REVIEW',
+      'DAILY_FACT_DM', 'DAILY_FACT_REVIEW_UPDATE']);
 
     const configs =
       all(
@@ -372,33 +354,15 @@ class DailyFactService {
         continue;
       }
 
-      // Claim today's scheduled send before Discord is contacted. A process
-      // restart therefore cannot send a second scheduled Daily Fact.
-      const claim =
-        run(
-          `UPDATE dailyfact_config
-           SET lastSent = ?
-           WHERE guildId = ?
-           AND COALESCE(lastSent, '') != ?`,
-          [
-            localTime.dateKey,
-            config.guildId,
-            localTime.dateKey
-          ]
-        );
-
-      if (!claim.changes) {
-
-        continue;
-      }
-
       try {
 
         const result =
           await sendFact({
             client,
             config,
-            now: now.getTime()
+            now: now.getTime(),
+            deliveryKey: `daily-fact:${config.guildId}:${localTime.dateKey}`,
+            dateKey: localTime.dateKey
           });
 
         if (result.status !== 'sent') {
@@ -413,13 +377,11 @@ class DailyFactService {
              SET lastSent = NULL,
                  nextAttemptAt = ?,
                  lastDeliveryError = ?
-             WHERE guildId = ?
-             AND lastSent = ?`,
+             WHERE guildId = ?`,
             [
               Date.now() + retryDelay,
               result.status,
-              config.guildId,
-              localTime.dateKey
+              config.guildId
             ]
           );
         } else {
@@ -439,13 +401,11 @@ class DailyFactService {
            SET lastSent = NULL,
                nextAttemptAt = ?,
                lastDeliveryError = ?
-           WHERE guildId = ?
-           AND lastSent = ?`,
+           WHERE guildId = ?`,
           [
             Date.now() + (15 * 60 * 1000),
             String(err?.message || err || 'delivery-error').slice(0, 500),
-            config.guildId,
-            localTime.dateKey
+            config.guildId
           ]
         );
 

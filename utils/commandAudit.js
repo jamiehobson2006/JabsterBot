@@ -8,6 +8,7 @@ const MUTATING_COMMANDS = new Set([
   'commandcontrol',
   'dailyfact',
   'dailyinteraction',
+  'dailysettings',
   'freegames',
   'gblacklist',
   'gdelete',
@@ -60,6 +61,12 @@ const MUTATING_COMMANDS = new Set([
 ]);
 
 const READ_ONLY_SUBCOMMANDS = new Set([
+  'analytics',
+  'leaderboard',
+  'member-stats',
+  'prompt-list',
+  'theme-list',
+  'reward-list',
   'bypass-category-list',
   'bypass-channel-list',
   'bypass-role-list',

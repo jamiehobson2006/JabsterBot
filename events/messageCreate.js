@@ -222,6 +222,7 @@ async function handleLinkBlock(
 }
 
 async function handleDailyInteractionThreadSafety(message, client) {
+  if (!message.guild || !message.author || message.author.id === client.user?.id) return false;
   const post = get(
     `SELECT messageId, type
      FROM daily_interaction_posts
@@ -239,8 +240,6 @@ async function handleDailyInteractionThreadSafety(message, client) {
     message: 'Direct discussion messages are disabled. Use Submit Answer on the original daily interaction.'
   };
 
-  if (validation.valid) return false;
-
   suppressMessageDelete(message.id);
   try {
     await message.delete();
@@ -254,7 +253,10 @@ async function handleDailyInteractionThreadSafety(message, client) {
     content: `${message.author}, ${validation.message}`,
     allowedMentions: { users: [message.author.id], roles: [], parse: [] }
   })
-    .then(sent => setTimeout(() => sent.delete().catch(() => {}), 5000))
+    .then(sent => {
+      const timer = setTimeout(() => sent.delete().catch(() => {}), 5000);
+      timer.unref?.();
+    })
     .catch(() => {});
 
   await logAudit(client, message.guild.id, {
@@ -523,6 +525,8 @@ module.exports = {
 
       captureMessageSnapshot(message);
 
+      if (await handleDailyInteractionThreadSafety(message, client)) return;
+
       if (message.author.bot) {
         return;
       }
@@ -560,16 +564,6 @@ module.exports = {
 
       const now =
         Date.now();
-
-      if (
-        await handleDailyInteractionThreadSafety(
-          message,
-          client
-        )
-      ) {
-
-        return;
-      }
 
       if (await handlePhishing(message, client)) {
         return;

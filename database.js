@@ -999,6 +999,8 @@ function createReliabilityTables() {
     )
   `);
 
+  ensureColumn('delivery_outbox', 'finalizedAt', 'INTEGER');
+
   createIndex(
     'idx_moderation_actions_recovery',
     `CREATE INDEX IF NOT EXISTS idx_moderation_actions_recovery
@@ -2762,6 +2764,13 @@ function createDailyInteractionTables() {
     'title',
     'TEXT'
   );
+  ensureColumn('daily_interaction_config', 'nextAttemptAt', 'INTEGER');
+  ensureColumn('daily_interaction_config', 'lastDeliveryError', 'TEXT');
+  ensureColumn('daily_interaction_posts', 'displayedParticipantCount', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('daily_interaction_posts', 'buttonsClosedAt', 'INTEGER');
+  createIndex('idx_daily_interaction_threads',
+    `CREATE INDEX IF NOT EXISTS idx_daily_interaction_threads
+     ON daily_interaction_posts(guildId, threadId) WHERE threadId IS NOT NULL`);
 
   createIndex(
 
@@ -3674,6 +3683,18 @@ function createDailyFactFactsTable() {
      AND normalizedFact IS NOT NULL
      AND normalizedFact != ''`
   );
+  // SQLite cannot perform the Unicode normalization used by the submission API.
+  for (const row of rawAll(`SELECT * FROM dailyfact_submissions WHERE status = 'APPROVED'
+    AND (normalizedFact IS NULL OR TRIM(normalizedFact) = '')`)) {
+    const normalized = String(row.fact || '').normalize('NFKC').replace(/\p{Cf}/gu, '')
+      .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
+    if (!normalized) continue;
+    rawRun('UPDATE dailyfact_submissions SET normalizedFact = ? WHERE id = ?', [normalized, row.id]);
+    rawRun(`INSERT OR IGNORE INTO dailyfact_facts
+      (fact, normalizedFact, category, sourceSubmissionId, submittedBy, approvedBy, approvedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`, [row.fact, normalized, row.category || 'random', row.id,
+      row.userId, row.reviewerId, row.approvedAt || row.decisionAt || row.submittedAt]);
+  }
 }
 
 function createDailyFactDeliveryHistoryTable() {
@@ -4089,6 +4110,8 @@ createApplicationTables();
 createExpansionFeatureTables();
 
 createReliabilityTables();
+
+require('./utils/dailySchema').migrateDailyFeatures(rawRun, ensureColumn);
 
   });
 

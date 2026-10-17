@@ -49,6 +49,8 @@ const FACT_CATEGORIES = [
 function normalizeFact(fact) {
 
   return String(fact || '')
+    .normalize('NFKC')
+    .replace(/\p{Cf}/gu, '')
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
@@ -58,6 +60,8 @@ function normalizeFact(fact) {
 function cleanFact(fact) {
 
   return String(fact || '')
+    .normalize('NFKC')
+    .replace(/\p{Cf}/gu, '')
     .trim()
     .replace(/\s+/g, ' ');
 }
@@ -107,7 +111,8 @@ function codedFactRows() {
         fact: cleaned,
         category,
         source: 'coded',
-        factKey: `coded:${normalizeFact(cleaned)}`,
+        factKey: `fact:${normalizeFact(cleaned)}`,
+        legacyFactKeys: [`coded:${normalizeFact(cleaned)}`],
         status: 'APPROVED'
       });
     }
@@ -134,14 +139,16 @@ function approvedFactRows() {
 
   return all(
 
-    `SELECT id, fact, category, sourceSubmissionId, submittedBy, approvedBy, approvedAt
+    `SELECT id, fact, category, sourceSubmissionId, submittedBy, approvedBy, approvedAt,
+       sourceUrl, verifiedAt, verifiedBy, verificationNote
      FROM dailyfact_facts`
   ).map(row => ({
     ...row,
     fact: cleanFact(row.fact),
     category: row.category || 'random',
     source: 'community',
-    factKey: `community:${row.id}`
+    factKey: `fact:${normalizeFact(row.fact)}`,
+    legacyFactKeys: [`community:${row.id}`, `coded:${normalizeFact(row.fact)}`]
   }));
 }
 
@@ -193,7 +200,7 @@ function saveApprovedFact({
   reviewerId = null,
   fact,
   category = 'random',
-  approvedAt = Date.now()
+  approvedAt = Date.now(), sourceUrl = null, verifiedAt = null, verifiedBy = null, verificationNote = null
 }) {
 
   const cleaned =
@@ -201,11 +208,12 @@ function saveApprovedFact({
 
   const normalized =
     normalizeFact(cleaned);
+  const validatedSource = require('./factSources').validateSourceUrl(sourceUrl);
 
-  if (!normalized) {
+  if (!normalized || cleaned.length < 20 || cleaned.length > 500) {
 
     throw new Error(
-      'Cannot approve an empty Daily Fact.'
+      'Daily Facts must contain between 20 and 500 characters.'
     );
   }
 
@@ -246,6 +254,10 @@ function saveApprovedFact({
     ]
   );
 
+  run(`UPDATE dailyfact_facts SET sourceUrl = ?, verifiedAt = ?, verifiedBy = ?, verificationNote = ?
+       WHERE normalizedFact = ?`, [validatedSource, validatedSource ? verifiedAt : null,
+    verifiedBy, verificationNote, normalized]);
+
   return get(
 
     `SELECT *
@@ -282,12 +294,14 @@ function buildDailyFactPools() {
       seenAll.add(normalized);
 
       allFacts.push({
+        sourceUrl: row.sourceUrl, verifiedAt: row.verifiedAt, id: row.id,
         fact: row.fact,
         category: isRealCategory(row.category)
           ? row.category
           : 'random',
         source: row.source,
-        factKey: row.factKey || `${row.source}:${normalized}`
+        factKey: row.factKey || `fact:${normalized}`,
+        legacyFactKeys: row.legacyFactKeys || []
       });
     }
 
@@ -299,22 +313,23 @@ function buildDailyFactPools() {
       seenByCategory[row.category].add(normalized);
 
       byCategory[row.category].push({
+        sourceUrl: row.sourceUrl, verifiedAt: row.verifiedAt, id: row.id,
         fact: row.fact,
         category: row.category,
         source: row.source,
-        factKey: row.factKey || `${row.source}:${normalized}`
+        factKey: row.factKey || `fact:${normalized}`,
+        legacyFactKeys: row.legacyFactKeys || []
       });
     }
   };
-
-  for (const row of codedFactRows()) {
-    addToPool(row);
-  }
 
   for (
     const row of
     approvedFactRows()
   ) {
+    addToPool(row);
+  }
+  for (const row of codedFactRows()) {
     addToPool(row);
   }
 

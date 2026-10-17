@@ -173,6 +173,9 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      return safeReply(interaction, 'Manage Server permission is required.');
+    }
 
     const guildId =
       interaction.guild.id;
@@ -187,6 +190,10 @@ module.exports = {
 
       const channel =
         interaction.options.getChannel('channel', true);
+      const permissions = channel.permissionsFor(interaction.guild.members.me);
+      if (!permissions?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
+        return safeReply(interaction, 'I need View Channel, Send Messages, and Embed Links in that channel.');
+      }
 
       run(
         `UPDATE dailyfact_config
@@ -304,7 +311,9 @@ module.exports = {
         'sent': 'Approved community fact posted.',
         'missing-channel': 'Set a Daily Fact channel first with `/dailyfact channel`.',
         'no-eligible-facts': 'There are no approved community facts available, or every one was shown in this server within the last 30 days.',
-        'already-delivered': 'That fact was just posted. Run `/dailyfact force` again.'
+        'already-delivered': 'That fact was just posted. Run `/dailyfact force` again.',
+        'missing-permissions': 'I need View Channel, Send Messages, and Embed Links in the Daily Fact channel.',
+        'pending': 'The selected approved fact is saved and queued for delivery.'
       };
 
       return safeReply(
@@ -325,6 +334,7 @@ module.exports = {
         `Category: **${categoryName(current.category || 'random')}**`,
         `Time: **${String(current.hour ?? 12).padStart(2, '0')}:${String(current.minute ?? 0).padStart(2, '0')}**`,
         `Timezone: **${current.timezone || DEFAULT_TIMEZONE}**`,
+        `Last delivery issue: **${current.lastDeliveryError || 'None'}**`,
         'Rotation: **Facts are not repeated in this server for 30 days.**'
       ].join('\n')
     );

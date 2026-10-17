@@ -200,7 +200,7 @@ test('member engagement tracks points and one streak update per local date', () 
     now: 3
   });
 
-  const stats = getMemberEngagementStats('guild-2', 'user-1');
+  const stats = getMemberEngagementStats('guild-2', 'user-1', { now: Date.UTC(2026, 7, 2) });
   assert.equal(stats.totalJoins, 2);
   assert.equal(stats.totalResponses, 2);
   assert.equal(stats.currentStreak, 2);

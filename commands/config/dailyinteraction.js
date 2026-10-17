@@ -7,6 +7,7 @@ const {
 
 const {
   DAY_NAMES,
+  ANSWER_PERMISSIONS,
   DEFAULT_TIMEZONE,
   DailyInteractionService,
   addCustomPrompt,
@@ -70,14 +71,15 @@ function statusEmbed(config, types) {
     .join('\n') || 'None. Enable at least one interaction type.';
 
   return new EmbedBuilder()
-    .setColor(Number(config?.color) || 0x5865F2)
+    .setColor(Number(config?.color ?? 0x5865F2))
     .setTitle(config?.titlePrefix || 'Daily Interaction')
     .addFields(
       { name: 'Status', value: config?.enabled ? 'Enabled' : 'Disabled', inline: true },
       { name: 'Channel', value: config?.channelId ? `<#${config.channelId}>` : 'Not set', inline: true },
       { name: 'Ping Role', value: config?.pingRoleId ? `<@&${config.pingRoleId}>` : 'No role ping', inline: true },
       { name: 'Schedule', value: config ? formatTime(config) : `12:00 (${DEFAULT_TIMEZONE})`, inline: true },
-      { name: 'Discussion Threads', value: Number(config?.discussionEnabled) === 1 ? 'Enabled' : 'Disabled', inline: true },
+      { name: 'Verified Answers', value: Number(config?.discussionEnabled) === 1 ? 'Enabled' : 'Disabled', inline: true },
+      { name: 'Last Delivery Issue', value: config?.lastDeliveryError || 'None' },
       { name: 'Enabled Activities', value: enabledTypes }
     )
     .setFooter({ text: 'Custom prompts and history are saved per server.' })
@@ -93,7 +95,7 @@ function themeEmbed(config, themes) {
   }).join('\n');
 
   return new EmbedBuilder()
-    .setColor(Number(config?.color) || 0x5865F2)
+    .setColor(Number(config?.color ?? 0x5865F2))
     .setTitle('Daily Interaction Weekly Themes')
     .setDescription(description)
     .setFooter({ text: 'Unassigned days use your enabled activity weights.' })
@@ -109,7 +111,7 @@ function leaderboardEmbed(config, entries) {
     : 'No one has joined a daily interaction yet.';
 
   return new EmbedBuilder()
-    .setColor(Number(config?.color) || 0x5865F2)
+    .setColor(Number(config?.color ?? 0x5865F2))
     .setTitle('Daily Interaction Leaderboard')
     .setDescription(description)
     .setFooter({ text: 'Answers are worth 2 points. Joining is worth 1 point.' })
@@ -122,7 +124,7 @@ function memberStatsEmbed(config, user, stats) {
   const points = joins + (responses * 2);
 
   return new EmbedBuilder()
-    .setColor(Number(config?.color) || 0x5865F2)
+    .setColor(Number(config?.color ?? 0x5865F2))
     .setTitle(`${user.tag}'s Daily Interaction Stats`)
     .addFields(
       { name: 'Points', value: String(points), inline: true },
@@ -143,7 +145,7 @@ function analyticsEmbed(config, analytics) {
     : 'No interactions posted in the last 30 days.';
 
   return new EmbedBuilder()
-    .setColor(Number(config?.color) || 0x5865F2)
+    .setColor(Number(config?.color ?? 0x5865F2))
     .setTitle('Daily Interaction Analytics')
     .setDescription('Last 30 days')
     .addFields(
@@ -233,10 +235,10 @@ module.exports = {
       .setDescription('Stop pinging a role for daily interactions'))
     .addSubcommand(subcommand => subcommand
       .setName('discussion')
-      .setDescription('Enable or disable discussion-thread buttons')
+      .setDescription('Enable or disable verified answer submission')
       .addBooleanOption(option => option
         .setName('enabled')
-        .setDescription('Whether members can open a discussion thread')
+        .setDescription('Whether supported activities accept verified answers')
         .setRequired(true)))
     .addSubcommand(subcommand => subcommand
       .setName('type-enable')
@@ -309,7 +311,9 @@ module.exports = {
       .addStringOption(option => option
         .setName('type')
         .setDescription('Optional activity type filter')
-        .addChoices(...typeChoices())))
+        .addChoices(...typeChoices()))
+      .addIntegerOption(option => option.setName('page').setDescription('Prompt list page')
+        .setMinValue(1)))
     .addSubcommand(subcommand => subcommand
       .setName('send-now')
       .setDescription('Post a real daily interaction now')
@@ -449,22 +453,22 @@ module.exports = {
         updatedBy: interaction.user.id
       });
 
-      const threadReady = permissions.has([
-        PermissionFlagsBits.CreatePublicThreads,
-        PermissionFlagsBits.SendMessagesInThreads
-      ]);
+      const threadReady = permissions.has(ANSWER_PERMISSIONS);
 
       return interaction.editReply({
         content: `Daily interactions will post in ${channel}. Use \`/dailyinteraction enable\` when you are ready.` +
           (threadReady
             ? ''
-            : '\nFor answer submission and discussion threads, also give me Create Public Threads and Send Messages in Threads there.')
+            : '\nFor verified answers, also grant Create Public Threads, Send Messages in Threads, Manage Threads, Manage Messages, and Read Message History there.')
       });
     }
 
     if (subcommand === 'enable') {
       if (!config?.channelId) {
         return interaction.editReply({ content: 'Set a channel first with `/dailyinteraction setup`.' });
+      }
+      if (!getInteractionTypes(guildId).some(row => Number(row.enabled) === 1)) {
+        return interaction.editReply({ content: 'Enable at least one activity type before enabling daily interactions.' });
       }
 
       updateDailyInteractionConfig(guildId, { enabled: 1, updatedBy: interaction.user.id });
@@ -545,12 +549,9 @@ module.exports = {
         const channel = await interaction.guild.channels.fetch(config.channelId).catch(() => null);
         const permissions = channel?.permissionsFor(interaction.guild.members.me);
 
-        if (!permissions?.has([
-          PermissionFlagsBits.CreatePublicThreads,
-          PermissionFlagsBits.SendMessagesInThreads
-        ])) {
+        if (!permissions?.has(ANSWER_PERMISSIONS)) {
           return interaction.editReply({
-            content: 'I need Create Public Threads and Send Messages in Threads in the configured channel before answer submission can be enabled.'
+            content: 'I need Create Public Threads, Send Messages in Threads, Manage Threads, Manage Messages, and Read Message History in the configured channel before verified answers can be enabled.'
           });
         }
       }
@@ -637,17 +638,20 @@ module.exports = {
 
     if (subcommand === 'prompt-list') {
       const type = interaction.options.getString('type');
-      const prompts = listCustomPrompts(guildId, type).slice(0, 25);
+      const allPrompts = listCustomPrompts(guildId, type);
+      const pageCount = Math.max(1, Math.ceil(allPrompts.length / 12));
+      const page = Math.min(pageCount, Math.max(1, interaction.options.getInteger('page') || 1));
+      const prompts = allPrompts.slice((page - 1) * 12, page * 12);
       const description = prompts.length
         ? prompts.map(prompt => `**#${prompt.id} | ${prompt.type} | ${prompt.enabled ? 'Enabled' : 'Disabled'}**\n${truncate(prompt.prompt)}`).join('\n\n')
         : 'No custom prompts have been added.';
 
       return interaction.editReply({
         embeds: [new EmbedBuilder()
-          .setColor(Number(config?.color) || 0x5865F2)
+          .setColor(Number(config?.color ?? 0x5865F2))
           .setTitle('Custom Daily Interaction Prompts')
           .setDescription(description)
-          .setFooter({ text: 'Showing up to 25 prompts' })
+          .setFooter({ text: `Page ${page}/${pageCount} | ${allPrompts.length} custom prompts` })
           .setTimestamp()]
       });
     }

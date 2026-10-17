@@ -45,6 +45,7 @@ const client = {
       isTextBased: () => true,
       send: async payload => {
         sent.push(payload);
+        return { id: `fact-${sent.length}` };
       }
     })
   }

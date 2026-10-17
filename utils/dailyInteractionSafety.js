@@ -19,16 +19,16 @@ const SUBMITTABLE_INTERACTION_TYPES = Object.freeze([
 ]);
 
 const TRIVIA_ANSWERS = Object.freeze({
-  'largest planet': ['jupiter'],
-  'largest on earth': ['pacific', 'pacific ocean'],
-  'sides does a hexagon': ['six', '6'],
-  'blue and yellow': ['green'],
-  'black and white stripes': ['zebra', 'a zebra'],
-  'capital city of japan': ['tokyo'],
-  'after summer in the uk': ['autumn', 'fall'],
-  'minutes are in one hour': ['sixty', '60'],
-  'tallest type of land animal': ['giraffe', 'a giraffe'],
-  'red planet': ['mars']
+  'what is the largest planet in our solar system': ['jupiter'],
+  'which ocean is the largest on earth': ['pacific', 'pacific ocean'],
+  'how many sides does a hexagon have': ['six', '6'],
+  'what colour do blue and yellow make when mixed': ['green'],
+  'which animal is famous for black and white stripes': ['zebra', 'a zebra'],
+  'what is the capital city of japan': ['tokyo'],
+  'which season comes after summer in the uk': ['autumn', 'fall'],
+  'how many minutes are in one hour': ['sixty', '60'],
+  'what is the tallest type of land animal': ['giraffe', 'a giraffe'],
+  'which planet is known as the red planet': ['mars']
 });
 
 const MENTION_PATTERN = /(?:@everyone|@here|<@!?\d+>|<@&\d+>|<#\d+>)/u;
@@ -99,6 +99,18 @@ const BUILT_IN_UNSAFE_VARIANTS = Object.freeze([
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+const UNSAFE_RULES = BUILT_IN_UNSAFE_TERMS.map(term => {
+  const body = term.split('').map(character => character === ' ' ? '\\s+'
+    : `${escapeRegExp(character)}+`).join('[^a-z]*');
+  return new RegExp(`(?:^|[^a-z])(?:${body})+(?:s|es|ed|ing|er|ers)?(?=$|[^a-z])`, 'u');
+});
+
+const EMOJI_GRAPHEME = /^(?:\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\uFE0F|\u200D\p{Extended_Pictographic})*|\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3)$/u;
+function countEmojis(value) {
+  const segments = [...new Intl.Segmenter('en', { granularity: 'grapheme' })
+    .segment(String(value).replace(/\s+/gu, ''))].map(item => item.segment);
+  return segments.length && segments.every(segment => EMOJI_GRAPHEME.test(segment)) ? segments.length : null;
+}
 
 function normaliseForSafety(value) {
   return String(value || '')
@@ -127,23 +139,13 @@ function normaliseForSafety(value) {
 
 function containsBuiltInUnsafeLanguage(value) {
   if (findRacistTerm(value)) return true;
-  const normalized = normaliseForSafety(value);
-  const spaced = normalized.replace(/[^a-z]+/g, ' ').trim();
-
-  const knownTerm = BUILT_IN_UNSAFE_TERMS.some(term => {
-    const termPattern = escapeRegExp(term).replace(/ /g, '\\s+');
-    const direct = new RegExp(`(?:^|\\s)${termPattern}(?=$|\\s)`, 'u');
-    if (direct.test(spaced)) return true;
-
-    const obfuscated = term
-      .split('')
-      .map(character => character === ' ' ? '\\s+' : escapeRegExp(character))
-      .join('[^a-z]*');
-
-    return new RegExp(`(?:^|[^a-z])${obfuscated}(?=$|[^a-z])`, 'u').test(normalized);
+  // Check punctuation both as separators and possible letter substitutions.
+  // A trailing exclamation mark must not erase a blocked word's boundary.
+  const variants = [normaliseForSafety(String(value).replace(/[!|@$]/g, ' ')), normaliseForSafety(value)];
+  return variants.some(normalized => {
+    return UNSAFE_RULES.some(pattern => pattern.test(normalized)) ||
+      BUILT_IN_UNSAFE_VARIANTS.some(pattern => pattern.test(normalized));
   });
-
-  return knownTerm || BUILT_IN_UNSAFE_VARIANTS.some(pattern => pattern.test(normalized));
 }
 
 function hasUnsupportedAlphabet(value) {
@@ -164,7 +166,7 @@ function promptText(post) {
 
 function normalizeAnswer(value) {
   return String(value || '')
-    .normalize('NFKC')
+    .normalize('NFKD').replace(/\p{M}/gu, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
@@ -220,24 +222,21 @@ function choiceMatchesAnswer(answer, choice) {
 }
 
 function triviaAnswersForPrompt(post) {
-  const prompt = normalizeAnswer(promptText(post));
-  const matchedQuestion = Object.keys(TRIVIA_ANSWERS)
-    .find(question => prompt.includes(question));
-
-  return matchedQuestion ? TRIVIA_ANSWERS[matchedQuestion] : [];
+  const question = normalizeAnswer(promptText(post)).replace(/^trivia\s+/, '');
+  return Object.hasOwn(TRIVIA_ANSWERS, question) ? TRIVIA_ANSWERS[question] : [];
 }
 
 function hasSupportedGameRule(post) {
   const prompt = promptText(post);
 
-  return /^Word chain:/iu.test(prompt) ||
-    /^Two truths and a lie:/iu.test(prompt) ||
-    /^Alphabet challenge:/iu.test(prompt) ||
-    /^Emoji story:/iu.test(prompt) ||
-    /^One-word story:/iu.test(prompt) ||
-    /^Rhyme round:/iu.test(prompt) ||
-    /^Five-letter round:/iu.test(prompt) ||
-    choicesFromPrompt(post).length > 0;
+  return /^Word chain: reply with a word beginning with the last letter of\s+\p{L}+\.?$/iu.test(prompt) ||
+    /^Two truths and a lie: post three statements about yourself and let people guess the lie\.?$/iu.test(prompt) ||
+    /^Alphabet challenge: name a game, film, or show beginning with the letter\s+[A-Za-z]\.?$/iu.test(prompt) ||
+    /^Emoji story: describe your day using exactly five emojis\.?$/iu.test(prompt) ||
+    /^One-word story: add one word to continue the community story in the thread\.?$/iu.test(prompt) ||
+    /^Rhyme round: name one word that rhymes with light\.?$/iu.test(prompt) ||
+    /^Five-letter round: share one ordinary word with exactly five letters\.?$/iu.test(prompt) ||
+    choicesFromPrompt(post).length > 1;
 }
 
 function supportsSubmittedAnswer(post) {
@@ -257,6 +256,9 @@ function answerInstruction(post) {
   if (String(post?.type || '').toUpperCase() === 'TRIVIA') {
     return 'Enter the trivia answer only.';
   }
+  const chain = promptText(post).match(/last letter of\s+([a-z]+)/i);
+  if (chain) return `One unused English word beginning with ${chain[1].at(-1).toUpperCase()}.`;
+  if (/^One-word story:/i.test(promptText(post))) return 'One English word to continue the story. Let another player go between your turns.';
 
   return 'Follow the game instructions exactly.';
 }
@@ -300,7 +302,8 @@ function validateGameAnswer(post, answer) {
     }
 
     if (!MEDIA_TITLES.has(normalizedAnswer)) {
-      return 'Choose a recognised game, film, or show beginning with the requested letter.';
+      const titles = [...MEDIA_TITLES].filter(title => firstLetter(title) === firstLetter(alphabetChallenge[1]));
+      return `This round uses verified titles. Choose one: ${titles.join(', ')}.`;
     }
   }
 
@@ -325,8 +328,7 @@ function validateGameAnswer(post, answer) {
   }
 
   if (/^Emoji story:/iu.test(prompt)) {
-    const emojiCount = (answer.match(/\p{Extended_Pictographic}/gu) || []).length;
-    if (/\p{L}|\p{N}/u.test(answer) || emojiCount !== 5) {
+    if (countEmojis(answer) !== 5) {
       return 'This game only accepts exactly five emojis.';
     }
   }
@@ -361,7 +363,8 @@ function validateDailyInteractionContent({ answer, censorTerms = [], maxLength =
     return { valid: false, message: `Keep this answer to ${maxLength} characters or fewer.` };
   }
 
-  if (INVISIBLE_OR_DIRECTIONAL_PATTERN.test(cleaned)) {
+  const checkedHidden = countEmojis(cleaned) ? cleaned.replace(/\u200D/g, '') : cleaned;
+  if (INVISIBLE_OR_DIRECTIONAL_PATTERN.test(checkedHidden)) {
     return { valid: false, message: 'Your answer contains unsupported hidden characters.' };
   }
 
@@ -471,6 +474,8 @@ module.exports = {
   SUBMITTABLE_INTERACTION_TYPES,
   answerInstruction,
   choicesFromPrompt,
+  normalizeAnswer,
+  triviaAnswersForPrompt,
   containsBuiltInUnsafeLanguage,
   hasUnsupportedAlphabet,
   hasSupportedGameRule,
