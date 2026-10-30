@@ -51,7 +51,7 @@ module.exports = {
       // ==========================================
       // 💾 CACHE INVITE
       // ==========================================
-      addInvite(
+      await addInvite(
 
         invite.guild.id,
 

@@ -429,19 +429,7 @@ module.exports = {
                 [interaction.guild.id, caseId]
               );
 
-              if (String(currentCase.action || '').toUpperCase() === 'WARN') {
-                run(
-                  `UPDATE warns
-                   SET count = MAX(count - 1, 0)
-                   WHERE guildId = ? AND userId = ?`,
-                  [interaction.guild.id, currentCase.userId]
-                );
-                run(
-                  `DELETE FROM warns
-                   WHERE guildId = ? AND userId = ? AND count <= 0`,
-                  [interaction.guild.id, currentCase.userId]
-                );
-              }
+              require('../../utils/warnings').revokeWarningCase(currentCase);
 
               run(
                 `INSERT INTO audit_logs (

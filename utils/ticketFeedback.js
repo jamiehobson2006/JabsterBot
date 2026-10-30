@@ -298,6 +298,7 @@ async function publishFeedback(client, record) {
       .catch(() => null);
 
   if (!channel?.isTextBased()) {
+    recordPublishFailure(current, 'The configured feedback channel is unavailable.');
     return false;
   }
 
@@ -344,15 +345,17 @@ async function publishFeedback(client, record) {
 async function publishPendingFeedback(client, limit = 25) {
   const retryBefore = Date.now() - PUBLISH_RETRY_MS;
   const records = all(
-    `SELECT *
-     FROM ticket_feedback
-     WHERE status = 'SUBMITTED'
-     AND publishedMessageId IS NULL
+    `SELECT feedback.*
+     FROM ticket_feedback AS feedback
+     INNER JOIN guild_settings AS settings ON settings.guildId=feedback.guildId
+     WHERE feedback.status = 'SUBMITTED'
+     AND feedback.publishedMessageId IS NULL
+     AND NULLIF(settings.ticketFeedbackChannelId,'') IS NOT NULL
      AND (
-       lastPublishAttemptAt IS NULL
-       OR lastPublishAttemptAt <= ?
+       feedback.lastPublishAttemptAt IS NULL
+       OR feedback.lastPublishAttemptAt <= ?
      )
-     ORDER BY completedAt ASC, createdAt ASC
+     ORDER BY COALESCE(feedback.lastPublishAttemptAt,0) ASC, feedback.completedAt ASC, feedback.createdAt ASC
      LIMIT ?`,
     [retryBefore, Math.min(Math.max(Number(limit) || 25, 1), 100)]
   );

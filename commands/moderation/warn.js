@@ -297,23 +297,8 @@ module.exports = {
       // ========================
       // 📊 FETCH PREVIOUS WARNS
       // ========================
-      const previousWarns =
-        all(
-
-          `SELECT *
-           FROM cases
-
-           WHERE guildId = ?
-           AND userId = ?
-           AND action = 'WARN'`,
-
-          [
-
-            interaction.guild.id,
-
-            user.id
-          ]
-        );
+      const previousWarningCount = Number(get('SELECT count FROM warns WHERE guildId=? AND userId=?',
+        [interaction.guild.id,user.id])?.count) || 0;
       const { caseId } = await performModerationAction(
         {
           guildId: interaction.guild.id,
@@ -580,7 +565,7 @@ module.exports = {
               name: '📊 Previous Warns',
 
               value:
-                `${previousWarns.length}`,
+                `${previousWarningCount}`,
 
               inline: true
             },

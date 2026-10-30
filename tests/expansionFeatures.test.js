@@ -79,7 +79,7 @@ test('new feature configuration is persisted and appears in setup status', () =>
   );
   run(
     `INSERT INTO ticket_settings (guildId, type, enabled, categoryId, roleId)
-     VALUES (?, 'SUPPORT', 1, 'ticket-category', 'staff-role')`,
+     VALUES (?, 'support', 1, 'ticket-category', 'staff-role')`,
     [guildId]
   );
 

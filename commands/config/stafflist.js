@@ -5,7 +5,8 @@ const {
 } = require('discord.js');
 
 const {
-  run
+  run,
+  get
 } = require('../../database');
 
 const StaffListService =
@@ -61,6 +62,7 @@ module.exports = {
 
     const subcommand =
       interaction.options.getSubcommand();
+    const previous = get('SELECT staffListChannelId,staffListRoleId,staffListMessageId,staffListMessageIds FROM guild_settings WHERE guildId=?', [interaction.guild.id]);
 
     if (subcommand === 'clear') {
       run(
@@ -74,7 +76,7 @@ module.exports = {
          ON CONFLICT(guildId)
          DO UPDATE SET staffListChannelId = NULL,
                        staffListRoleId = NULL,
-                       staffListMessageId = NULL`,
+                       staffListMessageId = NULL, staffListMessageIds = NULL`,
         [interaction.guild.id]
       );
 
@@ -123,7 +125,8 @@ module.exports = {
          ON CONFLICT(guildId)
          DO UPDATE SET staffListChannelId = excluded.staffListChannelId,
                        staffListRoleId = excluded.staffListRoleId,
-                       staffListMessageId = NULL`,
+                       staffListMessageId = CASE WHEN guild_settings.staffListChannelId=excluded.staffListChannelId THEN guild_settings.staffListMessageId ELSE NULL END,
+                       staffListMessageIds = CASE WHEN guild_settings.staffListChannelId=excluded.staffListChannelId THEN guild_settings.staffListMessageIds ELSE NULL END`,
         [
           interaction.guild.id,
           channel.id,
@@ -134,6 +137,14 @@ module.exports = {
 
     const refreshed =
       await StaffListService.refreshGuild(interaction.guild);
+
+    if (refreshed && subcommand === 'set' && previous?.staffListChannelId &&
+        previous.staffListChannelId !== interaction.options.getChannel('channel').id) {
+      const oldChannel = await interaction.guild.channels.fetch(previous.staffListChannelId).catch(() => null);
+      const { messageIds, removeEmbedPages } = require('../../utils/embedPages');
+      await removeEmbedPages(oldChannel, messageIds(previous.staffListMessageIds, previous.staffListMessageId), interaction.client.user.id)
+        .catch(error => console.error('Old staff directory cleanup:', error.message));
+    }
 
     return interaction.editReply({
       content: refreshed

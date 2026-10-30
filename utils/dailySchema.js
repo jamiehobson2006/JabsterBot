@@ -1,4 +1,8 @@
 function migrateDailyFeatures(run, ensureColumn) {
+  ensureColumn('daily_interaction_posts', 'controlsVersion', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('delivery_outbox', 'publicCleanedAt', 'INTEGER');
+  ensureColumn('free_game_announcements', 'publicCleanedAt', 'INTEGER');
+  ensureColumn('free_game_announcements', 'channelId', 'TEXT');
   ensureColumn('daily_interaction_prompts', 'triviaJson', 'TEXT');
   run(`CREATE TABLE IF NOT EXISTS daily_prompt_ratings (
     messageId TEXT NOT NULL, userId TEXT NOT NULL, guildId TEXT NOT NULL,
@@ -25,6 +29,7 @@ function migrateDailyFeatures(run, ensureColumn) {
   run(`CREATE TABLE IF NOT EXISTS daily_game_turns (
     messageId TEXT NOT NULL, turn INTEGER NOT NULL, userId TEXT NOT NULL,
     answer TEXT NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(messageId, turn))`);
+  ensureColumn('daily_game_turns', 'sourceMessageId', 'TEXT');
   run(`CREATE TABLE IF NOT EXISTS daily_trivia_attempts (
     messageId TEXT NOT NULL, userId TEXT NOT NULL, answer TEXT NOT NULL,
     correct INTEGER NOT NULL, submittedAt INTEGER NOT NULL, PRIMARY KEY(messageId, userId))`);

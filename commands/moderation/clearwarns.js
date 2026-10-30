@@ -5,11 +5,6 @@ const {
 } = require('discord.js');
 
 const {
-  get,
-  run
-} = require('../../database');
-
-const {
   createAuditEmbed,
   logAudit
 } = require('../../utils/logger');
@@ -97,20 +92,7 @@ module.exports = {
         });
       }
 
-      const warns =
-        get(
-          `SELECT COUNT(*) AS total
-           FROM warns
-           WHERE guildId = ?
-           AND userId = ?`,
-          [
-            interaction.guild.id,
-            user.id
-          ]
-        );
-
-      const warnCount =
-        warns?.total || 0;
+      const warnCount = require('../../utils/warnings').clearWarnings(interaction.guild.id, user.id);
 
       if (warnCount === 0) {
         return interaction.editReply({
@@ -118,16 +100,6 @@ module.exports = {
             `${user.tag} has no warnings to clear.`
         });
       }
-
-      run(
-        `DELETE FROM warns
-         WHERE guildId = ?
-         AND userId = ?`,
-        [
-          interaction.guild.id,
-          user.id
-        ]
-      );
 
       await user.send({
         embeds: [

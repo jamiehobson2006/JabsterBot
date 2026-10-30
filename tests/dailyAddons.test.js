@@ -53,7 +53,7 @@ function sandbox() {
         return messages.get(key);
       } }, send: async payload => {
         result.sent++;
-        const message = { id: `message-${++sequence}`, author: client.user, channel: result,
+        const message = { id: `message-${++sequence}`, createdTimestamp: Date.now(), author: client.user, channel: result,
           embeds: [], components: [], content: '',
           edit: async update => {
             if (update.embeds) message.embeds = update.embeds.map(embed => EmbedBuilder.from(embed));
@@ -87,12 +87,24 @@ async function postActivity(context, type = 'GAME', random = () => 0) {
 function request(context, post, userId, answer) {
   return { client: context.client, guild: context.guild, member: { id: userId },
     user: { id: userId, tag: userId, toString: () => `<@${userId}>` },
-    customId: `dailyinteraction_answer_${post.messageId}`, inGuild: () => true,
+    channelId: post.channelId, customId: `dailyinteraction_answer_${post.messageId}`, inGuild: () => true,
     isButton: () => false, isModalSubmit: () => true,
     fields: { getTextInputValue: () => answer },
     deferReply: async function () { this.deferred = true; },
     editReply: async function (payload) { this.response = payload; },
     reply: async function (payload) { this.response = payload; } };
+}
+
+async function runRequest(interaction) {
+  const id = interaction.customId || '';
+  const post = id.startsWith('dailyinteraction_answer_') ? get('SELECT * FROM daily_interaction_posts WHERE messageId = ?', [id.slice('dailyinteraction_answer_'.length)]) : null;
+  if (!interaction.isModalSubmit?.() || !post || post.type !== 'GAME') return events.execute(interaction);
+  const source = await (await interaction.client.channels.fetch(post.channelId)).messages.fetch(post.messageId);
+  const thread = await service.getOrCreateDiscussionThread({ guild: interaction.guild, message: source, post });
+  const validation = require('../utils/dailyDiscussion').recordDiscussionMessage({ id: `native-${Date.now()}-${Math.random()}`,
+    content: interaction.fields.getTextInputValue('response'), author: interaction.user, channel: thread, guild: interaction.guild }, post);
+  interaction.response = { content: validation.message || 'Member reply recorded without a bot message.' };
+  if (validation.valid) await activities.maintainActivities(interaction.client, Date.now(), post.messageId);
 }
 
 test('custom trivia saves safe answer aliases and explanation, and snapshots them into the posted round', async () => {
@@ -105,7 +117,7 @@ test('custom trivia saves safe answer aliases and explanation, and snapshots the
   assert.match(activity.explanation, /United Kingdom/);
   assert.equal(require('../utils/dailyInteractionSafety').supportsSubmittedAnswer(post), true);
   const interaction = request(context, post, 'member', 'City of London');
-  await events.execute(interaction);
+  await runRequest(interaction);
   assert.equal(get('SELECT correct FROM daily_trivia_attempts').correct, 1);
   run('DELETE FROM daily_interaction_prompts');
   assert.deepEqual(activities.activityFor(get('SELECT * FROM daily_interaction_posts')).answers, activity.answers);
@@ -156,11 +168,11 @@ test('rating interaction rejects copied controls and accepts the original activi
   const interaction = { ...request(context, post, 'member'), customId: 'dailyinteraction_rate',
     isModalSubmit: () => false, isStringSelectMenu: () => true, message: original, values: ['4'],
     channel: context.main, channelId: 'wrong-channel' };
-  await events.execute(interaction);
+  await runRequest(interaction);
   assert.match(interaction.response.content, /original/);
   assert.equal(all('SELECT * FROM daily_prompt_ratings').length, 0);
   interaction.channelId = 'main';
-  await events.execute(interaction);
+  await runRequest(interaction);
   assert.equal(get('SELECT rating FROM daily_prompt_ratings').rating, 4);
 });
 
@@ -271,21 +283,21 @@ test('Verify & Approve records the source, reviewer, date, and checklist complet
 test('word chains progress from the latest word, reject repeats, and require alternating players', async () => {
   const context = sandbox();
   const post = await postActivity(context);
-  await events.execute(request(context, post, 'one', 'earth'));
+  await runRequest(request(context, post, 'one', 'earth'));
   const wrong = request(context, post, 'two', 'eagle');
-  await events.execute(wrong);
+  await runRequest(wrong);
   assert.match(wrong.response.content, /letter H/);
   const same = request(context, post, 'one', 'house');
-  await events.execute(same);
+  await runRequest(same);
   assert.match(same.response.content, /another member/);
-  await events.execute(request(context, post, 'two', 'house'));
+  await runRequest(request(context, post, 'two', 'house'));
   const repeat = request(context, post, 'one', 'earth');
-  await events.execute(repeat);
+  await runRequest(repeat);
   assert.match(repeat.response.content, /already been used/);
   assert.equal(activities.gameState(post).lastWord, 'house');
   assert.equal(activities.gameState(post).version, 2);
   const source = await context.main.messages.fetch(post.messageId);
-  assert.match(source.embeds[0].data.fields.find(field => field.name === 'Current Game').value, /house/);
+  assert.doesNotMatch(source.embeds[0].data.fields.find(field => field.name === 'Current Game').value, /house/);
 });
 
 test('concurrent game turns cannot both advance from the same old word', async () => {
@@ -293,7 +305,7 @@ test('concurrent game turns cannot both advance from the same old word', async (
   const post = await postActivity(context);
   const one = request(context, post, 'one', 'earth');
   const two = request(context, post, 'two', 'eagle');
-  await Promise.all([events.execute(one), events.execute(two)]);
+  await Promise.all([runRequest(one), runRequest(two)]);
   assert.equal(activities.gameState(post).version, 1);
   assert.match(two.response.content, /letter H/);
 });
@@ -301,10 +313,10 @@ test('concurrent game turns cannot both advance from the same old word', async (
 test('extra turns do not farm response points or overwrite earlier turn messages', async () => {
   const context = sandbox();
   const post = await postActivity(context);
-  await events.execute(request(context, post, 'one', 'earth'));
-  await events.execute(request(context, post, 'two', 'house'));
-  await events.execute(request(context, post, 'one', 'eagle'));
-  assert.equal(context.channels.get(post.messageId).sent, 3);
+  await runRequest(request(context, post, 'one', 'earth'));
+  await runRequest(request(context, post, 'two', 'house'));
+  await runRequest(request(context, post, 'one', 'eagle'));
+  assert.equal(context.channels.get(post.messageId).sent, 0);
   assert.equal(get("SELECT SUM(points) AS score FROM daily_point_events WHERE userId = 'one'").score, 3);
   assert.equal(service.getMemberEngagementStats('guild', 'one').totalResponses, 1);
 });
@@ -313,17 +325,17 @@ test('one-word stories accumulate validated turns rather than replacing each mem
   const context = sandbox();
   const post = await postActivity(context, 'GAME', () => 0.45);
   assert.equal(activities.activityFor(post).mode, 'story');
-  await events.execute(request(context, post, 'one', 'Once'));
-  await events.execute(request(context, post, 'two', 'upon'));
-  await events.execute(request(context, post, 'one', 'time'));
+  await runRequest(request(context, post, 'one', 'Once'));
+  await runRequest(request(context, post, 'two', 'upon'));
+  await runRequest(request(context, post, 'one', 'time'));
   assert.equal(activities.gameState(post).story, 'Once upon time');
   const unsafe = request(context, post, 'two', '.fuck');
-  await events.execute(unsafe);
+  await runRequest(unsafe);
   assert.equal(activities.gameState(post).version, 3);
   assert.match(unsafe.response.content, /family-friendly/);
 });
 
-test('failed game turns reserve the next turn and advance only after confirmed delivery', async t => {
+test('native game turns do not depend on the bot being able to send a relay message', async t => {
   const context = sandbox();
   const post = await postActivity(context);
   const source = await context.main.messages.fetch(post.messageId);
@@ -331,17 +343,17 @@ test('failed game turns reserve the next turn and advance only after confirmed d
   const send = thread.send;
   thread.send = async () => { throw new Error('temporary'); };
   t.mock.method(console, 'error', () => {});
-  await events.execute(request(context, post, 'one', 'earth'));
-  assert.equal(activities.gameState(post).version, 0);
+  await runRequest(request(context, post, 'one', 'earth'));
+  assert.equal(activities.gameState(post).version, 1);
   const blocked = request(context, post, 'two', 'eagle');
-  await events.execute(blocked);
-  assert.match(blocked.response.content, /previous turn/);
+  await runRequest(blocked);
+  assert.match(blocked.response.content, /letter H/);
   thread.send = send;
   run('UPDATE delivery_outbox SET nextAttemptAt = 0');
   await delivery.recoverDailyDeliveries(context.client);
   assert.equal(activities.gameState(post).lastWord, 'earth');
   await delivery.recoverDailyDeliveries(context.client);
-  assert.equal(thread.sent, 1);
+  assert.equal(thread.sent, 0);
 });
 
 test('trivia accepts one private first attempt and reveals only after its persisted closing time', async () => {
@@ -350,13 +362,13 @@ test('trivia accepts one private first attempt and reveals only after its persis
   const post = await postActivity(context, 'TRIVIA');
   const right = request(context, post, 'one', 'Jupiter');
   const wrong = request(context, post, 'two', 'Mars');
-  await events.execute(right);
-  await events.execute(wrong);
+  await runRequest(right);
+  await runRequest(wrong);
   assert.equal(right.response.content, wrong.response.content);
   assert.equal(all('SELECT * FROM daily_trivia_attempts').length, 2);
   assert.equal(all('SELECT * FROM daily_interaction_responses').length, 0);
   assert.equal(context.channels.size, 1);
-  await events.execute(request(context, post, 'two', 'Jupiter'));
+  await runRequest(request(context, post, 'two', 'Jupiter'));
   assert.equal(get("SELECT correct FROM daily_trivia_attempts WHERE userId = 'two'").correct, 0);
   const source = await context.main.messages.fetch(post.messageId);
   await activities.maintainActivities(context.client, post.sentAt + 30_000);
@@ -373,7 +385,7 @@ test('closed trivia cannot accept a late modal even before its buttons are refre
   const post = await postActivity(context, 'TRIVIA');
   run('UPDATE daily_interaction_posts SET sentAt = ?', [Date.now() - 61_000]);
   const late = request(context, post, 'one', 'Jupiter');
-  await events.execute(late);
+  await runRequest(late);
   assert.match(late.response.content, /closed/);
   assert.equal(all('SELECT * FROM daily_trivia_attempts').length, 0);
 });
@@ -389,12 +401,12 @@ test('simple choices use buttons and can change votes without farming points or 
     const click = request(context, post, 'one');
     Object.assign(click, { customId: `dailyinteraction_choice_${index}`, message: source,
       isButton: () => true, isModalSubmit: () => false });
-    await events.execute(click);
+    await runRequest(click);
     const field = source.embeds[0].data.fields.find(field => field.name === 'Choice Results');
     const choices = activities.activityFor(post).choices;
     assert.ok(field.value.includes(`**${choices[index]}**: 1`), field.value);
   }
-  assert.equal(context.channels.get(post.messageId).sent, 1);
+  assert.equal(context.channels.has(post.messageId), false);
   assert.equal(get('SELECT SUM(points) AS points FROM daily_point_events').points, 3);
 });
 
@@ -404,7 +416,7 @@ test('larger choices use a dropdown and reject forged or unavailable indexes', a
   const source = await context.main.messages.fetch(post.messageId);
   const forged = request(context, post, 'one');
   Object.assign(forged, { customId: 'dailyinteraction_choice_999', message: source, isButton: () => true, isModalSubmit: () => false });
-  await events.execute(forged);
+  await runRequest(forged);
   assert.match(forged.response.content, /no longer available/);
   assert.equal(all('SELECT * FROM daily_interaction_participants').length, 0);
   const builder = service.buildInteractionComponents;
@@ -534,13 +546,13 @@ test('new command definitions serialize and configuration enforces runtime permi
 test('game turns, private attempts, opt-ins, settings, scores, and sources survive a fresh process', async () => {
   const context = sandbox();
   const post = await postActivity(context);
-  await events.execute(request(context, post, 'one', 'earth'));
+  await runRequest(request(context, post, 'one', 'earth'));
   engagement.configureEngagement('guild', { remindersEnabled: 1, triviaMinutes: 15 });
   engagement.setReminderPreference('guild', 'one', true);
   engagement.setQuietDay('guild', 2, true);
   facts.saveApprovedFact({ fact: 'A sourced fact should retain its source after a restart.', sourceUrl: 'https://science.nasa.gov/', verifiedAt: 1, verifiedBy: 'owner' });
   const trivia = await postActivity(context, 'TRIVIA');
-  await events.execute(request(context, trivia, 'one', 'Jupiter'));
+  await runRequest(request(context, trivia, 'one', 'Jupiter'));
   const child = spawnSync(process.execPath, ['-e', `
     const assert = require('node:assert/strict'); const {initDatabase, get, db} = require('./database'); initDatabase();
     const games = require('./utils/dailyActivities'); const settings = require('./utils/dailyEngagement');
@@ -567,13 +579,13 @@ test('stale Discord message objects cannot erase the latest game state during a 
     return snapshot;
   };
   const stale = await context.main.messages.fetch(post.messageId);
-  await events.execute(request(context, post, 'one', 'earth'));
-  await events.execute(request(context, post, 'two', 'house'));
+  await runRequest(request(context, post, 'one', 'earth'));
+  await runRequest(request(context, post, 'two', 'house'));
   const join = request(context, post, 'three');
   Object.assign(join, { message: stale, customId: 'dailyinteraction_join', isButton: () => true, isModalSubmit: () => false });
-  await events.execute(join);
+  await runRequest(join);
   const latest = await context.main.messages.fetch(post.messageId);
-  assert.match(latest.embeds[0].data.fields.find(field => field.name === 'Current Game').value, /house/);
+  assert.doesNotMatch(latest.embeds[0].data.fields.find(field => field.name === 'Current Game').value, /house/);
   assert.equal(latest.embeds[0].data.fields.find(field => field.name === 'Participants').value, '3');
 });
 
@@ -586,12 +598,12 @@ test('dropdown submissions use the same safe persisted voting flow as buttons', 
   const menu = request(context, post, 'one');
   Object.assign(menu, { message: await context.main.messages.fetch(post.messageId), customId: 'dailyinteraction_choice',
     isModalSubmit: () => false, isStringSelectMenu: () => true, values: ['1'] });
-  await events.execute(menu);
+  await runRequest(menu);
   assert.equal(get('SELECT response FROM daily_interaction_responses').response, 'Bananas');
   assert.equal(get('SELECT SUM(points) AS score FROM daily_point_events').score, 3);
 });
 
-test('a lost game-send response recovers the same turn and awards points only once', async t => {
+test('native game replies award points without ever calling the bot relay sender', async t => {
   const context = sandbox();
   const post = await postActivity(context);
   const source = await context.main.messages.fetch(post.messageId);
@@ -604,11 +616,11 @@ test('a lost game-send response recovers the same turn and awards points only on
     return message;
   };
   t.mock.method(console, 'error', () => {});
-  await events.execute(request(context, post, 'one', 'earth'));
-  assert.equal(activities.gameState(post).version, 0);
+  await runRequest(request(context, post, 'one', 'earth'));
+  assert.equal(activities.gameState(post).version, 1);
   run('UPDATE delivery_outbox SET nextAttemptAt = 0');
   await delivery.recoverDailyDeliveries(context.client);
-  assert.equal(thread.sent, 1);
+  assert.equal(thread.sent, 0);
   assert.equal(activities.gameState(post).version, 1);
   assert.equal(get('SELECT SUM(points) AS score FROM daily_point_events').score, 3);
 });
@@ -617,7 +629,7 @@ test('failed trivia reveals retry the same message and survive participant-count
   const context = sandbox();
   engagement.configureEngagement('guild', { triviaMinutes: 1 });
   const post = await postActivity(context, 'TRIVIA');
-  await events.execute(request(context, post, 'one', 'Jupiter'));
+  await runRequest(request(context, post, 'one', 'Jupiter'));
   const source = await context.main.messages.fetch(post.messageId);
   const edit = source.edit;
   let fail = true;
@@ -683,7 +695,7 @@ test('removing a reward while its member is being fetched prevents the grant', a
 test('private trivia responses contribute to aggregate answer analytics', async () => {
   const context = sandbox();
   const post = await postActivity(context, 'TRIVIA');
-  await events.execute(request(context, post, 'one', 'Jupiter'));
+  await runRequest(request(context, post, 'one', 'Jupiter'));
   assert.equal(service.getDailyInteractionAnalytics('guild').responses, 1);
 });
 
@@ -729,18 +741,18 @@ test('Daily Dilemma replaces server-planning polls with twenty safely answerable
   }
 });
 
-test('footer cleanup preserves its label, icon, and first reference without growing on repeated edits', () => {
+test('footer cleanup removes every reference while preserving the label and icon', () => {
   const { cleanDailyFooter } = require('../utils/dailyFooter');
   const first = 'Ref: 123456789012345678901234';
   const second = 'Ref: abcdefabcdefabcdefabcdef';
   let footer = { text: `Daily Interactions | ${first} | ${second}`, icon_url: 'https://example.com/icon.png' };
   for (let index = 0; index < 50; index++) footer = cleanDailyFooter(footer);
-  assert.equal(footer.text, `Daily Interactions | ${first}`);
+  assert.equal(footer.text, 'Daily Interactions');
   assert.equal(footer.icon_url, 'https://example.com/icon.png');
   assert.ok(cleanDailyFooter({ text: 'x'.repeat(3000) }, first).text.length <= 2048);
 });
 
-test('repeated choice changes keep exactly one stable delivery reference in the live footer', async () => {
+test('repeated choice changes never reintroduce delivery references into the live footer', async () => {
   const context = sandbox();
   const post = await postActivity(context, 'COMMUNITY_PICK');
   const source = await context.main.messages.fetch(post.messageId);
@@ -749,8 +761,8 @@ test('repeated choice changes keep exactly one stable delivery reference in the 
   for (const index of [0, 1, 2, 3, 0, 2, 1]) {
     const click = request(context, post, 'one');
     Object.assign(click, { message: source, customId: `dailyinteraction_choice_${index}`, isButton: () => true, isModalSubmit: () => false });
-    await events.execute(click);
-    assert.equal(source.embeds[0].data.footer.text.match(/Ref:/g).length, 1);
+    await runRequest(click);
+    assert.equal(source.embeds[0].data.footer.text.match(/Ref:/g), null);
     assert.equal(dailyReference(source.embeds[0].data.footer.text), initial);
   }
 });

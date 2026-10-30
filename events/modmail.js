@@ -91,12 +91,13 @@ async function resolveDestination(client, userId) {
   };
 }
 
-async function createThread(message, guild, settings) {
+async function createThread(message, guild, settings, assertLease) {
   const category = await guild.channels.fetch(settings.categoryId).catch(() => null);
   if (!category || category.type !== ChannelType.GuildCategory) {
     throw new Error('The configured modmail category is unavailable.');
   }
 
+  assertLease();
   const channel = await guild.channels.create({
     name: `modmail-${cleanChannelName(message.author)}`,
     type: ChannelType.GuildText,
@@ -131,6 +132,7 @@ async function createThread(message, guild, settings) {
 
   let thread = null;
   try {
+    assertLease();
     const result = run(
       `INSERT INTO modmail_threads (guildId, userId, channelId, status, createdAt)
        VALUES (?, ?, ?, 'OPEN', ?)`,
@@ -170,7 +172,18 @@ async function createThread(message, guild, settings) {
   }
 }
 
-async function forwardUserMessage(message, client) {
+const memberQueues = new Map();
+
+function forwardUserMessage(message, client) {
+  const key = message.author.id;
+  const previous = memberQueues.get(key) || Promise.resolve();
+  const work = previous.catch(() => null).then(() => require('../utils/workLeases')
+    .withWorkLease(`modmail:${key}`, assertLease => forwardUserMessageUnlocked(message, client, assertLease)));
+  memberQueues.set(key, work);
+  return work.finally(() => { if (memberQueues.get(key) === work) memberQueues.delete(key); });
+}
+
+async function forwardUserMessageUnlocked(message, client, assertLease) {
   const destination = await resolveDestination(client, message.author.id);
   if (!destination.selected) {
     if (!destination.alternatives) {
@@ -201,7 +214,10 @@ async function forwardUserMessage(message, client) {
     [guild.id, message.author.id]
   );
   let channel = thread
-    ? await guild.channels.fetch(thread.channelId).catch(() => null)
+    ? await guild.channels.fetch(thread.channelId).catch(error => {
+      if (Number(error.code) === 10003) return null;
+      throw error;
+    })
     : null;
 
   if (thread && !channel) {
@@ -211,18 +227,19 @@ async function forwardUserMessage(message, client) {
     );
     thread = null;
   }
-  if (!thread) ({ thread, channel } = await createThread(message, guild, setting));
+  assertLease();
+  if (!thread) ({ thread, channel } = await createThread(message, guild, setting, assertLease));
 
   const description = [content || '*No text content*', attachmentText(attachments)]
-    .filter(Boolean).join('\n\n').slice(0, 4096);
-  await channel.send({
+    .filter(Boolean).join('\n\n');
+  for (const chunk of splitForDiscord(description, 4000)) await channel.send({
     embeds: [new EmbedBuilder()
       .setColor(0x5865F2)
       .setAuthor({
         name: `${message.author.tag} (${message.author.id})`,
         iconURL: message.author.displayAvatarURL({ size: 128 })
       })
-      .setDescription(description)
+      .setDescription(chunk)
       .setFooter({ text: 'Member to Staff' })
       .setTimestamp(message.createdTimestamp)],
     allowedMentions: { parse: [] }

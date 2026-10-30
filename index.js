@@ -24,6 +24,8 @@ const path =
 
 require('dotenv').config();
 
+require('./utils/safeLogging').installSafeLogging();
+
 const {
   initDatabase,
   startDatabaseCleanup,
@@ -479,7 +481,9 @@ function loadEvents() {
       }
 
       const invoke = (...args) => {
-        Promise.resolve(event.execute(...args, client)).catch(err => {
+        Promise.resolve(require('./utils/configurationContext').withConfigurationActor(
+          event.name === 'interactionCreate' ? args[0] : null,
+          () => event.execute(...args, client))).catch(err => {
           console.error(`Event error (${event.name} from ${file}):`, err);
         });
       };
@@ -561,7 +565,7 @@ client.once('clientReady', async () => {
   console.log(`Commands: ${client.commands.size}`);
   console.log('----------------------');
 
-  await new Promise(resolve => setTimeout(resolve, 3000));
+  await warmInviteCache();
 
   const startupTasks = [
     ['review recovery', () => {
@@ -575,10 +579,12 @@ client.once('clientReady', async () => {
         `${recoveredModeration} moderation action(s)`
       );
     }],
-    ['invite cache', warmInviteCache],
     ['giveaway loop', () => startGiveawayLoop(client)],
     ['social monitor', () => socialMonitor.start(client)],
     ['free game watch', () => freeGameMonitor.start(client)],
+    ['free game reminders', () => require('./utils/serviceRunner').startManagedLoop(
+      'free-game-reminders',()=>require('./utils/freeGameReminders').processReminders(client),60_000)],
+    ['fact source maintenance', () => require('./utils/factSourceMaintenance').start(client)],
     ['daily facts', () => DailyFactService.start(client)],
     ['daily interactions', () => DailyInteractionService.start(client)],
     ['ticket SLA', () => TicketSlaService.start(client)],

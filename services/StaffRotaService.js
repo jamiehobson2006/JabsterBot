@@ -102,24 +102,12 @@ function buildRotaEmbeds(guild, shifts, availability, now = new Date()) {
       value
     }))
   ];
-  const embeds = [];
-  for (let index = 0; index < fields.length; index += 20) {
-    const page = embeds.length;
-    const embed = new EmbedBuilder()
-      .setColor(page ? 0x5865F2 : (active.length ? 0x57F287 : 0x95A5A6))
-      .setTitle(page ? `${guild.name} Staff Rota (continued)` : `${guild.name} Staff Rota`)
-      .addFields(fields.slice(index, index + 20))
-      .setFooter({ text: 'Refreshes every 5 minutes | Availability resets after 24 hours' })
-      .setTimestamp(now);
-    if (!page) {
-      embed.setDescription(onCall
-        ? `**Current escalation contact:** <@${onCall.userId}>`
-        : 'No available staff member is currently scheduled.');
-    }
-    embeds.push(embed);
-  }
-
-  return embeds.slice(0, 10);
+  const embed = new EmbedBuilder().setColor(active.length ? 0x57F287 : 0x95A5A6)
+    .setTitle(`${guild.name} Staff Rota`)
+    .setFooter({ text: 'Refreshes every 5 minutes | Availability resets after 24 hours' })
+    .setTimestamp(now).setDescription(onCall
+      ? `**Current escalation contact:** <@${onCall.userId}>` : 'No available staff member is currently scheduled.');
+  return require('../utils/embedPages').fieldPages(embed, fields);
 }
 
 function buildRotaEmbed(guild, shifts, availability, now = new Date()) {
@@ -143,19 +131,11 @@ async function updateGuild(client, settings) {
     `DELETE FROM staff_availability WHERE guildId = ? AND updatedAt < ?`,
     [guild.id, Date.now() - AVAILABILITY_TTL_MS]
   );
-  const payload = { embeds: buildRotaEmbeds(guild, shifts, availability) };
-  let message = settings.messageId
-    ? await channel.messages.fetch(settings.messageId).catch(() => null)
-    : null;
-  if (message) {
-    await message.edit(payload);
-  } else {
-    message = await channel.send(payload);
-    run(
-      `UPDATE staff_rota_settings SET messageId = ? WHERE guildId = ?`,
-      [message.id, guild.id]
-    );
-  }
+  const { messageIds, syncEmbedPages } = require('../utils/embedPages');
+  await require('../utils/workLeases').withWorkLease(`staff-rota:${guild.id}`, () => syncEmbedPages({
+    channel, embeds: buildRotaEmbeds(guild, shifts, availability), ids: messageIds(settings.messageIds, settings.messageId), botId: client.user.id,
+    save: ids => run('UPDATE staff_rota_settings SET messageId=?,messageIds=? WHERE guildId=?', [ids[0] || null,JSON.stringify(ids),guild.id])
+  }));
   return true;
 }
 

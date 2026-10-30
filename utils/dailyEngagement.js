@@ -1,15 +1,9 @@
 const crypto = require('node:crypto');
 const { all, get, run, transaction } = require('../database');
 const { automaticRoleSafetyError } = require('./roleSafety');
-const { PermissionFlagsBits } = require('discord.js');
 
 function rewardRoleError(guild, role) {
-  const base = automaticRoleSafetyError(guild, role);
-  if (base) return base;
-  const extra = ['ManageMessages', 'ManageThreads', 'ManageNicknames', 'ManageEvents',
-    'ManageGuildExpressions', 'ViewAuditLog', 'MuteMembers', 'DeafenMembers', 'MoveMembers'];
-  return extra.some(name => PermissionFlagsBits[name] && role.permissions.has(PermissionFlagsBits[name]))
-    ? 'Roles with staff permissions cannot be milestone rewards.' : null;
+  return automaticRoleSafetyError(guild, role);
 }
 
 function engagementSettings(guildId) {

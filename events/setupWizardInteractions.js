@@ -22,7 +22,7 @@ function supportUpsert(guild, column, value) {
   const otherColumn = column === 'categoryId' ? 'roleId' : 'categoryId';
   run(
     `INSERT INTO ticket_settings (guildId, type, enabled, ${column})
-     VALUES (?, 'SUPPORT', 0, ?)
+     VALUES (?, 'support', 0, ?)
      ON CONFLICT(guildId, type) DO UPDATE SET
        ${column} = excluded.${column},
        ${otherColumn} = ticket_settings.${otherColumn}`,
@@ -31,7 +31,7 @@ function supportUpsert(guild, column, value) {
 
   const settings = get(
     `SELECT categoryId, roleId FROM ticket_settings
-     WHERE guildId = ? AND type = 'SUPPORT'`,
+     WHERE guildId = ? AND type = 'support'`,
     [guildId]
   );
   const category = settings?.categoryId
@@ -42,7 +42,7 @@ function supportUpsert(guild, column, value) {
     : null;
   run(
     `UPDATE ticket_settings SET enabled = ?
-     WHERE guildId = ? AND type = 'SUPPORT'`,
+     WHERE guildId = ? AND type = 'support'`,
     [
       category?.type === ChannelType.GuildCategory &&
       role && role.id !== guild.roles.everyone.id && !role.managed

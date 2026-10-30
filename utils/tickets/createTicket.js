@@ -103,7 +103,16 @@ async function createTicketUnlocked({
   // 🧠 VALIDATE TYPE
   // ==========================================
   const safeType =
-    safeString(type);
+    safeString(type).toLowerCase();
+
+  if (application?.draftId) {
+    const existing = get('SELECT id,channelId,userId,guildId FROM tickets WHERE applicationDraftId=?', [application.draftId]);
+    if (existing) {
+      if (existing.guildId !== interaction.guild.id || existing.userId !== interaction.user.id) throw new Error('This application belongs to another member.');
+      const channel = await interaction.guild.channels.fetch(existing.channelId).catch(() => null);
+      return { success: true, recovered: true, ticketId: existing.id, channel: channel || { id: existing.channelId, toString: () => `<#${existing.channelId}>` } };
+    }
+  }
 
   const config =
     ticketTypes[safeType];
@@ -591,11 +600,12 @@ async function createTicketUnlocked({
          userId,
          type,
          applicationFormId,
+         applicationDraftId,
          responseRoleId,
          fingerprint,
          createdAt,
          status
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         interaction.guild.id,
         channel.id,
@@ -603,6 +613,7 @@ async function createTicketUnlocked({
         interaction.user.id,
         safeType,
         application?.form?.id || null,
+        application?.draftId || null,
         staffRole.id,
         fingerprint,
         Date.now(),

@@ -114,7 +114,8 @@ test('a retry recovers a Discord message by nonce instead of posting again', asy
   const deliveryKey = 'sent-before-crash';
   const nonce = outbox.deliveryNonce(deliveryKey);
   const result = await outbox.sendQueuedMessage({
-    messages: { fetch: async () => [{ id: 'existing', nonce }] },
+    client: { user: { id: 'bot' } },
+    messages: { fetch: async () => [{ id: 'existing', nonce, author: { id: 'bot' } }] },
     send: async () => { sends += 1; }
   }, { deliveryKey, attempts: 2 }, { content: 'Message' });
   assert.equal(result.id, 'existing');

@@ -119,11 +119,11 @@ test('invite attribution schema records confidence and event history', () => {
   assert.equal(get('SELECT COUNT(*) AS count FROM invite_events WHERE guildId = ?', ['guild-invites']).count, 1);
 });
 
-test('invite cache usage updates persist with their refresh timestamp', () => {
+test('invite cache usage updates persist with their refresh timestamp', async () => {
   initDatabase();
   cache.invites.clear();
 
-  addInvite('guild-cache', {
+  await addInvite('guild-cache', {
     code: 'CACHE1',
     uses: 0,
     inviter: { id: 'inviter-cache', tag: 'Inviter' }

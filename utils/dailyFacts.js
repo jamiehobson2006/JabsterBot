@@ -7,6 +7,7 @@ const {
 const codedFacts =
   require('../data/dailyFacts.json');
 const catalogueReview = require('../data/dailyFactReview.json');
+const catalogueReferences = require('../data/dailyFactReferences.json');
 
 const FACT_CATEGORIES = [
   {
@@ -103,10 +104,11 @@ function codedFactRows() {
       const entry = typeof fact === 'string' ? { fact } : fact;
       if (!entry || typeof entry.fact !== 'string') continue;
       const review = catalogueReview.entries.find(item => item.category === category && entry.fact.startsWith(item.startsWith));
+      const reference = Object.values(catalogueReferences[category] || {}).find(item => item.originalFact === entry.fact);
       if (review?.status === 'RETIRED') continue;
 
       const cleaned =
-        cleanFact(review?.replacement || entry.fact);
+        cleanFact(review?.replacement || reference?.replacement || entry.fact);
 
       if (!cleaned) {
         continue;
@@ -114,7 +116,7 @@ function codedFactRows() {
 
       rows.push({
         fact: cleaned,
-        sourceUrl: review?.sourceUrl || entry.sourceUrl || null,
+        sourceUrl: review?.sourceUrl || entry.sourceUrl || reference?.sourceUrl || null,
         verifiedAt: review?.status === 'VERIFIED' ? Date.parse(`${catalogueReview.reviewedAt}T00:00:00Z`)
           : entry.sourceUrl && entry.checkedAt ? Date.parse(`${entry.checkedAt}T00:00:00Z`) || null : null,
         reviewStatus: review?.status || (entry.sourceUrl && entry.checkedAt ? 'VERIFIED' : 'UNVERIFIED'),
@@ -282,6 +284,7 @@ function buildDailyFactPools() {
   const allFacts = [];
   const seenByCategory = {};
   const seenAll = new Set();
+  const sourceReviews=new Map(all('SELECT factKey,sourceUrl,reviewedAt FROM fact_source_health').map(row=>[row.factKey,row]));
 
   for (const category of FACT_CATEGORIES) {
 
@@ -290,6 +293,8 @@ function buildDailyFactPools() {
   }
 
   const addToPool = row => {
+    const reviewed=sourceReviews.get(row.factKey);
+    if(reviewed?.sourceUrl===row.sourceUrl && reviewed.reviewedAt) row={...row,verifiedAt:Math.max(Number(row.verifiedAt)||0,reviewed.reviewedAt)};
 
     const normalized =
       normalizeFact(row.fact);
@@ -376,6 +381,7 @@ function getFactsForCategory(category) {
 }
 
 module.exports = {
+  codedFactRows,
   FACT_CATEGORIES,
   normalizeFact,
   cleanFact,

@@ -111,6 +111,8 @@ async function attemptDailyDelivery(client, row) {
   if (row.status === 'SENT') return finalizeDailyDelivery(row);
   const metadata = dailyMetadata(row);
   if (!metadata || row.status === 'CANCELLED') return row;
+  // Never replay user-authored answers through the bot, including old queued replies.
+  if (row.type === 'DAILY_INTERACTION_RESPONSE') return cancelDailyDelivery(row);
   if (row.type === 'DAILY_FACT_POST' && metadata.selection?.source === 'coded') {
     const selection = metadata.selection;
     const review = require('../data/dailyFactReview.json').entries.find(item => item.category === selection.category &&
@@ -135,19 +137,6 @@ async function attemptDailyDelivery(client, row) {
       return cancelDailyDelivery(row);
     }
   }
-  if (row.type === 'DAILY_INTERACTION_RESPONSE') {
-    const post = get('SELECT * FROM daily_interaction_posts WHERE messageId = ? AND guildId = ?',
-      [metadata.postId, row.guildId]);
-    const service = require('../services/DailyInteractionService');
-    const config = service.getDailyInteractionConfig(row.guildId);
-    const terms = require('./censor').listCensorTerms(row.guildId);
-    const safe = metadata.gameVersion && post
-      ? require('./dailyActivities').validateGameTurn(post, metadata.userId, metadata.answer, terms)
-      : require('./dailyInteractionSafety').validateDailyInteractionAnswer({ post, answer: metadata.answer, censorTerms: terms });
-    if (!service.isDailyInteractionOpen(post) || !Number(config?.discussionEnabled) || !safe.valid) {
-      return cancelDailyDelivery(row);
-    }
-  }
   if (metadata.dateKey) {
     const table = row.type === 'DAILY_FACT_POST' ? 'dailyfact_config' : 'daily_interaction_config';
     const config = get(`SELECT * FROM ${table} WHERE guildId = ?`, [row.guildId]);
@@ -168,8 +157,18 @@ async function attemptDailyDelivery(client, row) {
   try {
     const delivered = await deliverOnce(row.deliveryKey, async claimed => {
       const payload = claimed.parsedPayload;
-      if (payload.message.embeds?.[0]) {
-        payload.message.embeds[0].footer = cleanDailyFooter(payload.message.embeds[0].footer, metadata.marker);
+      if (row.type === 'DAILY_ACTIVITY_UPDATE' && metadata.gameVersion != null) {
+        const post = get('SELECT * FROM daily_interaction_posts WHERE messageId = ?', [metadata.postId]);
+        const activities = require('./dailyActivities');
+        const state = activities.gameState(post);
+        const activity = activities.activityFor(post);
+        const value = activity?.mode === 'chain'
+          ? `Turn ${state.version}\nNext word starts with **${state.lastWord.at(-1).toUpperCase()}**. Read the members' original replies in the thread.`
+          : `Turn ${state.version}\nRead the story in the members' original replies in the thread.`;
+        payload.message.embeds[0].fields = payload.message.embeds[0].fields.map(field => field.name === 'Current Game' ? { ...field, value } : field);
+      }
+      if (payload.message.embeds?.[0]?.footer) {
+        payload.message.embeds[0].footer = cleanDailyFooter(payload.message.embeds[0].footer);
       }
       let target;
       if (row.type === 'DAILY_FACT_DM' || row.type === 'DAILY_REMINDER') {
@@ -204,9 +203,10 @@ async function attemptDailyDelivery(client, row) {
         if ((claimed.attempts > 1 || metadata.recoverExisting) && target.messages?.fetch) {
           const history = await target.messages.fetch({ limit: 100 });
           const existing = history.find(item => item.author?.id === client.user?.id &&
-            item.embeds?.some(embed => (embed.footer?.text || embed.data?.footer?.text || '').includes(metadata.marker) ||
+            ((require('./messageRecovery').isRecentDelivery(item, claimed) && require('./messageRecovery').sameMessage(item, payload.message)) ||
+            item.embeds?.some(embed => (metadata.marker && (embed.footer?.text || embed.data?.footer?.text || '').includes(metadata.marker)) ||
               (row.type === 'DAILY_FACT_REVIEW' && (embed.fields || embed.data?.fields || [])
-                .some(field => field.name === 'Submission ID' && field.value === `#${metadata.submissionId}`))));
+                .some(field => field.name === 'Submission ID' && field.value === `#${metadata.submissionId}`)))));
           if (existing) return existing;
         }
         return target.send({ ...payload.message, nonce: deliveryNonce(row.deliveryKey), enforceNonce: true });
@@ -252,10 +252,9 @@ function queueDailyDelivery({ deliveryKey, type, guildId, channelId = null, mess
   const existing = getDailyDelivery(deliveryKey);
   if (existing && existing.status !== 'CANCELLED') return existing;
   const payload = JSON.parse(JSON.stringify(message));
-  payload.embeds ||= [{ footer: { text: 'Jabster Studios Daily Interactions' } }];
-  const marker = (metadata.editMessageId && dailyReference(payload.embeds[0].footer?.text))
+  const marker = (metadata.editMessageId && dailyReference(payload.embeds?.[0]?.footer?.text))
     || `Ref: ${deliveryNonce(deliveryKey)}`;
-  payload.embeds[0].footer = cleanDailyFooter(payload.embeds[0].footer, marker);
+  if (payload.embeds?.[0]?.footer) payload.embeds[0].footer = cleanDailyFooter(payload.embeds[0].footer);
   const row = enqueueDelivery({ deliveryKey, type, guildId, channelId,
     payload: { message: payload, daily: { ...metadata, marker } } });
   if (existing?.status === 'CANCELLED') {

@@ -14,6 +14,8 @@ const databasePath =
 const db =
   new Database(databasePath);
 
+require('./utils/configurationContext').registerConfigurationFunctions(db);
+
 // ==================================================
 // ? SQLITE PRAGMAS
 // ==================================================
@@ -1279,7 +1281,7 @@ function createCensorTables() {
     `UPDATE guild_settings
      SET censorEnabled = 1
      WHERE modlogChannelId IS NOT NULL
-     AND COALESCE(censorEnabled, 0) = 0`
+     AND censorEnabled IS NULL`
   );
 }
 
@@ -3018,6 +3020,12 @@ function createPollTables() {
 }
 
 function createInviteTables() {
+  rawRun(`CREATE TABLE IF NOT EXISTS invite_use_credits (
+    guildId TEXT NOT NULL, inviteCode TEXT NOT NULL, inviterId TEXT,
+    remaining INTEGER NOT NULL, uses INTEGER NOT NULL, source TEXT NOT NULL,
+    confidence TEXT NOT NULL, observedAt INTEGER NOT NULL, expiresAt INTEGER NOT NULL,
+    PRIMARY KEY(guildId, inviteCode))`);
+  ensureColumn('invite_use_credits', 'membersJson', "TEXT NOT NULL DEFAULT '[]'");
 
   rawRun(`
 
@@ -3188,45 +3196,6 @@ function createInviteTables() {
     `CREATE INDEX IF NOT EXISTS idx_invite_stats
      ON invite_stats(guildId, invites)`
   );
-}
-
-function reconcileInviteStatsFromEvents() {
-  rawRun(`
-    UPDATE invite_stats AS stats
-    SET invites = (
-          SELECT COUNT(*) FROM invite_events AS event
-          WHERE event.guildId = stats.guildId
-            AND event.inviterId = stats.userId
-            AND event.eventType = 'JOIN'
-            AND event.confidence = 'EXACT'
-            AND event.source = 'INVITE'
-        ),
-        fake = (
-          SELECT COUNT(*) FROM invite_events AS event
-          WHERE event.guildId = stats.guildId
-            AND event.inviterId = stats.userId
-            AND event.eventType = 'JOIN'
-            AND event.confidence = 'EXACT'
-            AND event.source = 'INVITE'
-            AND event.fake = 1
-        ),
-        leaves = (
-          SELECT COUNT(*) FROM invite_events AS event
-          WHERE event.guildId = stats.guildId
-            AND event.inviterId = stats.userId
-            AND event.eventType = 'LEAVE'
-            AND event.confidence = 'EXACT'
-            AND event.source = 'INVITE'
-            AND event.fake = 0
-        )
-    WHERE EXISTS (
-      SELECT 1 FROM invite_events AS event
-      WHERE event.guildId = stats.guildId
-        AND event.inviterId = stats.userId
-        AND event.confidence = 'EXACT'
-        AND event.source = 'INVITE'
-    )
-  `);
 }
 
 function createGiveawayTables() {
@@ -4103,7 +4072,8 @@ function initDatabase() {
 
 createInviteTables();
 
-reconcileInviteStatsFromEvents();
+// Invite events may not include legacy history; live tracking updates totals
+// transactionally, so startup must not replace them with partial ledger counts.
 
 createGiveawayTables();
 
@@ -4122,6 +4092,9 @@ createExpansionFeatureTables();
 createReliabilityTables();
 
 require('./utils/dailySchema').migrateDailyFeatures(rawRun, ensureColumn);
+require('./utils/auditSchema').migrateAuditFixes(rawRun, ensureColumn, rawGet, rawAll);
+require('./utils/communityFeaturesSchema').migrateCommunityFeatures(rawRun, ensureColumn);
+require('./utils/configurationTables').installConfigurationHistory(db, rawAll);
 
   });
 
@@ -4192,7 +4165,8 @@ function startDatabaseCleanup() {
       run(
 
         `DELETE FROM free_game_announcements
-         WHERE announcedAt < ?`,
+         WHERE announcedAt < ? AND NOT EXISTS (SELECT 1 FROM free_game_observations
+           WHERE receiptKey=free_game_announcements.offerKey AND isFree=1)`,
 
         [ninetyDaysAgo]
       );

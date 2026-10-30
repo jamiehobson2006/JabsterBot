@@ -125,7 +125,7 @@ module.exports = {
       `INSERT INTO invite_events (
          guildId, memberId, inviterId, inviteCode, eventType,
          confidence, source, fake, timestamp, metadata
-       ) VALUES (?, ?, ?, 'MANUAL', 'MANUAL', 'ADMIN', 0, ?, ?)`,
+       ) VALUES (?, ?, ?, 'MANUAL', 'MANUAL', 'MANUAL', 'ADMIN', 0, ?, ?)`,
       [
         interaction.guild.id,
         user.id,

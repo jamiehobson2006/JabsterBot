@@ -242,6 +242,7 @@ module.exports = {
             Date.now();
 
           const entry = (
+            `**${c.warningActive === 1 ? 'Active' : 'Cleared'}**\n` +
 
             `**#${c.id}** • ` +
 

@@ -12,6 +12,7 @@ const {
 
 let pollInterval =
   null;
+const displayQueues = new Map();
 
 function cleanText(value, maxLength) {
   return String(value || '')
@@ -278,8 +279,8 @@ async function getPollMessage(client, poll) {
   }
 }
 
-async function refreshPollMessage(client, messageId, ended = false) {
-  const poll =
+async function refreshPollMessageUnlocked(client, messageId, ended = false) {
+  let poll =
     getPoll(messageId);
 
   if (!poll) {
@@ -297,6 +298,8 @@ async function refreshPollMessage(client, messageId, ended = false) {
     await getPollMessage(client, poll);
 
   const message = result.message;
+  poll = getPoll(messageId);
+  if (!poll) return null;
 
   if (!message) {
     if (result.missing && (ended || !poll.active)) {
@@ -343,6 +346,13 @@ async function refreshPollMessage(client, messageId, ended = false) {
     counts,
     message
   };
+}
+
+function refreshPollMessage(client, messageId, ended = false) {
+  const previous = displayQueues.get(messageId) || Promise.resolve();
+  const work = previous.catch(() => null).then(() => refreshPollMessageUnlocked(client, messageId, ended));
+  displayQueues.set(messageId, work);
+  return work.finally(() => { if (displayQueues.get(messageId) === work) displayQueues.delete(messageId); });
 }
 
 async function endPoll(client, messageId) {

@@ -96,10 +96,11 @@ async function disableTicketButtons(channel, client) {
   await ticketMessage.edit({ components });
 }
 
-async function closeTicket({
+async function closeTicketUnlocked({
   interaction,
   reason,
-  starterMessageId = null
+  starterMessageId = null,
+  assertLease = () => {}
 }) {
   if (!interaction?.guild || !interaction.channel) {
     throw new Error('Invalid ticket interaction.');
@@ -200,6 +201,7 @@ async function closeTicket({
       .setTimestamp(closedAt);
 
   try {
+    assertLease();
     if (!closingTicket.closeNoticeSentAt) {
       await interaction.channel.send({ embeds: [closeEmbed] });
 
@@ -242,6 +244,7 @@ async function closeTicket({
       closeReason: effectiveReason
     });
 
+    assertLease();
     const transcript = await generateTranscript({
       client: interaction.client,
       channel: interaction.channel,
@@ -249,6 +252,7 @@ async function closeTicket({
       closedBy: interaction.user
     });
 
+    assertLease();
     const feedbackSent = Boolean(feedback.dmSent) || await sendFeedbackPrompt({
       client: interaction.client,
       feedback,
@@ -290,6 +294,7 @@ async function closeTicket({
       );
     });
 
+    assertLease();
     finalize();
 
     await disableTicketButtons(interaction.channel, interaction.client)
@@ -321,6 +326,12 @@ async function closeTicket({
     );
     throw error;
   }
+}
+
+function closeTicket(options) {
+  const channelId = options?.interaction?.channel?.id;
+  if (!channelId) return Promise.reject(new Error('Invalid ticket interaction.'));
+  return require('../workLeases').withWorkLease(`ticket-close:${channelId}`, assertLease => closeTicketUnlocked({ ...options, assertLease }));
 }
 
 module.exports = {

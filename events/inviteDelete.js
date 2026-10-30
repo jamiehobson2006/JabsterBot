@@ -51,7 +51,7 @@ module.exports = {
       // ==========================================
       // 🗑 REMOVE FROM CACHE
       // ==========================================
-      removeInvite(
+      await removeInvite(
 
         invite.guild.id,
 

@@ -66,12 +66,15 @@ async function updateGiveawayMessage(message, winners) {
   await message.edit({ embeds: [embed], components: [] });
 }
 
-async function findExistingAnnouncement(channel, marker) {
+async function findExistingAnnouncement(channel, marker, botId, originalId, content) {
+  if (!botId) return null;
   let before;
   for (let page = 0; page < 10; page += 1) {
     const messages = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
     if (!messages?.size) break;
-    const match = messages.find(item => String(item.content || '').includes(marker));
+    const match = messages.find(item => item.author?.id === botId &&
+      (String(item.content || '').split(/\r?\n/).some(line => line.trim() === `-# ${marker}`) ||
+        item.reference?.messageId === originalId && item.content === content));
     if (match) return match;
     before = messages.last()?.id;
     if (!before || messages.size < 100) break;
@@ -79,7 +82,7 @@ async function findExistingAnnouncement(channel, marker) {
   return null;
 }
 
-async function finishGiveaway({ giveaway, message, winners, outcome = null }) {
+async function finishGiveaway({ giveaway, message, winners, outcome = null, botId = message.client?.user?.id }) {
   let state = get(
     `SELECT * FROM giveaways WHERE messageId = ?`,
     [giveaway.messageId]
@@ -102,9 +105,13 @@ async function finishGiveaway({ giveaway, message, winners, outcome = null }) {
 
   if (!state.announcementMessageId) {
     const marker = `Giveaway result ID: ${giveaway.messageId}`;
-    const existing = await findExistingAnnouncement(message.channel, marker);
+    const content = resultContent(giveaway, winners, outcome);
+    const existing = await findExistingAnnouncement(message.channel, marker, botId, giveaway.messageId, content);
     const announcement = existing || await message.channel.send({
-      content: `${resultContent(giveaway, winners, outcome)}\n-# ${marker}`
+      content,
+      reply: { messageReference: giveaway.messageId, failIfNotExists: false },
+      allowedMentions: { parse: [], users: winners, repliedUser: false },
+      nonce: require('../deliveryOutbox').deliveryNonce(`giveaway-result:${giveaway.messageId}`), enforceNonce: true
     });
 
     run(
@@ -214,7 +221,7 @@ async function performEndGiveaway(client, giveaway) {
 
     const savedWinners = getSavedWinners(giveaway.messageId);
     if (savedWinners.length) {
-      return finishGiveaway({ giveaway, message, winners: savedWinners });
+      return finishGiveaway({ giveaway, message, winners: savedWinners, botId: client.user?.id });
     }
 
     const entries = all(
@@ -223,6 +230,7 @@ async function performEndGiveaway(client, giveaway) {
     );
     if (!entries.length) {
       return finishGiveaway({
+        botId: client.user?.id,
         giveaway,
         message,
         winners: [],
@@ -233,6 +241,7 @@ async function performEndGiveaway(client, giveaway) {
     const pool = await buildEligiblePool(message, giveaway, entries);
     if (!pool.length) {
       return finishGiveaway({
+        botId: client.user?.id,
         giveaway,
         message,
         winners: [],
@@ -245,7 +254,7 @@ async function performEndGiveaway(client, giveaway) {
       Math.max(Number(giveaway.winners || 1), 1)
     );
     const winners = saveWinners(giveaway, selected);
-    return finishGiveaway({ giveaway, message, winners });
+    return finishGiveaway({ giveaway, message, winners, botId: client.user?.id });
   } catch (error) {
     const terminal = [10003, 10008].includes(Number(error?.code)) ||
       error?.code === 'GIVEAWAY_RESOURCE_GONE';
@@ -299,6 +308,7 @@ function endGiveaway(client, giveaway) {
 module.exports = {
   endGiveaway,
   finishGiveaway,
+  findExistingAnnouncement,
   getSavedWinners,
   pickWeightedWinners
 };

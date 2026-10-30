@@ -6,9 +6,12 @@ const MUTATING_COMMANDS = new Set([
   'changelog',
   'clearwarns',
   'commandcontrol',
+  'configuration',
+  'suggestions',
   'dailyfact',
   'dailyinteraction',
   'dailysettings',
+  'delivery',
   'freegames',
   'gblacklist',
   'gdelete',
@@ -94,6 +97,9 @@ function getSubcommand(interaction) {
 }
 
 function shouldLogCommand(command, interaction) {
+  if (interaction.commandName === 'factsources') return getSubcommand(interaction) === 'verify';
+  if (interaction.commandName === 'configuration') return getSubcommand(interaction) === 'apply';
+  if (interaction.commandName === 'suggestions') return ['link','unlink'].includes(getSubcommand(interaction));
   if (command.auditLog === true) return true;
   if (command.auditLog === false) return false;
 

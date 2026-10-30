@@ -9,20 +9,23 @@ function validateSourceUrl(value) {
       !url.hostname.includes('.') || /(?:^|\.)(?:localhost|local|internal)$/i.test(url.hostname)) {
     throw new Error('Use a public HTTPS source link without credentials or a custom port.');
   }
-  // Links are stored, never fetched by the bot. Verification is a human review decision.
+  // Fetches additionally require the pinned public-DNS checks in publicSourceCheck.
   return url.href;
 }
 
 function sourceFields(fact) {
   const fields = [];
+  let hasSource = false;
   if (fact.sourceUrl) {
     try {
       const url = validateSourceUrl(fact.sourceUrl);
-      fields.push({ name: 'Source Link', value: `<${url}>` });
+      fields.push({ name: 'Source Link', value: `[${fact.verifiedAt ? 'Read supporting source' : 'Read reference'}](<${url}>)` });
+      hasSource = true;
     } catch { /* Invalid legacy links must not break daily delivery. */ }
   }
-  fields.push({ name: 'Source Verification', value: fact.verifiedAt && fact.sourceUrl
+  fields.push({ name: 'Source Verification', value: fact.verifiedAt && hasSource
     ? `Reviewed <t:${Math.floor(fact.verifiedAt / 1000)}:D>` : 'Not source-verified' });
+  if (!hasSource) fields.push({name:'Source Warning',value:'No supporting source has been provided. This approved community fact has not been source-verified.'});
   return fields;
 }
 

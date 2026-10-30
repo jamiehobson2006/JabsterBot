@@ -38,7 +38,9 @@ module.exports = {
           .setDescription('Your suggestion')
           .setRequired(true)
           .setMaxLength(500)
-      ),
+      )
+      .addBooleanOption(option => option.setName('submit_anyway')
+        .setDescription('Submit a distinct idea after reviewing similar suggestions')),
 
   async execute(interaction) {
     let suggestionId = null;
@@ -135,6 +137,17 @@ module.exports = {
           content:
             'I am missing permissions in the suggestion channel.'
         });
+      }
+
+      if (!channel.permissionsFor(interaction.member)?.has(PermissionsBitField.Flags.ViewChannel)) {
+        return interaction.editReply({content:'You cannot submit to a suggestion channel you cannot view.'});
+      }
+      const related = require('../../utils/suggestions/similarity');
+      const matches = related.relatedSuggestions(interaction.guild.id,text,{limit:3,threshold:0.65,channelId:channel.id});
+      if (matches.length && !interaction.options.getBoolean('submit_anyway')) {
+        return interaction.editReply({content:'These suggestions may cover the same idea:\n' +
+          matches.map(row=>`[#${row.id}](${related.suggestionUrl(interaction.guild.id,channel.id,row)}) - ${row.status}`).join('\n') +
+          '\nVote on an existing post, or use `submit_anyway:True` if your idea is different.',allowedMentions:{parse:[]} });
       }
 
       const recent =
@@ -245,10 +258,11 @@ module.exports = {
 
       run(
         `UPDATE suggestions
-         SET messageId = ?
+         SET messageId = ?, sourceChannelId = ?
          WHERE id = ?`,
         [
           message.id,
+          channel.id,
           suggestionId
         ]
       );

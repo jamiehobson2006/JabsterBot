@@ -224,21 +224,19 @@ async function handleLinkBlock(
 async function handleDailyInteractionThreadSafety(message, client) {
   if (!message.guild || !message.author || message.author.id === client.user?.id) return false;
   const post = get(
-    `SELECT messageId, type
+    `SELECT *
      FROM daily_interaction_posts
      WHERE guildId = ?
      AND threadId = ?`,
     [message.guild.id, message.channel.id]
   );
 
-  // Only a thread created for a daily interaction is read-only. The configured
-  // parent channel may also be a normal community channel and must stay usable.
+  // Apply this protection only to tracked threads, never the parent channel.
   if (!post) return false;
 
-  const validation = {
-    valid: false,
-    message: 'Direct discussion messages are disabled. Use Submit Answer on the original daily interaction.'
-  };
+  if (message.author.bot) return false;
+  const validation = require('../utils/dailyDiscussion').recordDiscussionMessage(message, post);
+  if (validation.valid) return false;
 
   suppressMessageDelete(message.id);
   try {

@@ -100,6 +100,8 @@ module.exports = {
         )
     )
 
+    .addSubcommand(subcommand => subcommand.setName('retry')
+      .setDescription('Retry pending or failed level rewards after fixing permissions'))
     .addSubcommand(subcommand =>
 
       subcommand
@@ -124,6 +126,12 @@ module.exports = {
 
     const subcommand =
       interaction.options.getSubcommand();
+
+    if (subcommand === 'retry') {
+      run("UPDATE leveling_reward_grants SET status='PENDING', nextAttemptAt=0 WHERE guildId=? AND status IN ('PENDING','FAILED','CANCELLED')", [guildId]);
+      await require('../../utils/LevelingService').processPending(interaction.client, guildId);
+      return interaction.editReply({ content: 'Level rewards were rechecked. Unsafe roles remain blocked; temporary failures will retry automatically.' });
+    }
 
     if (
       subcommand === 'add'

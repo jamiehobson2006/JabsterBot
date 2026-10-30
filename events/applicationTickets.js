@@ -75,8 +75,44 @@ function getDraftContext(interaction, draftId) {
   return {
     draft,
     form,
-    questions: getQuestions(form.id)
+    questions: draft.questions
   };
+}
+
+function submitButton(draftId) {
+  return new ActionRowBuilder().addComponents(new ButtonBuilder()
+    .setCustomId(`application_submit_${draftId}`).setLabel('Submit application').setStyle(ButtonStyle.Success));
+}
+
+async function submitApplication(interaction, draftId) {
+  if (!isDirectMessage(interaction)) return replyPrivate(interaction, 'Please submit this application in my DMs.');
+  if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
+  return require('../utils/workLeases').withWorkLease(`application-submit:${draftId}`, async () => {
+    const context = getDraftContext(interaction, draftId);
+    if (!context) return replyPrivate(interaction, 'This application session has expired. Please start again.');
+    const { draft, form, questions } = context;
+    if (draft.submissionStatus === 'SUBMITTED') return replyPrivate(interaction, `Your application was already submitted: <#${draft.submissionChannelId}>`);
+    const answersById = new Map(draft.answers.map(answer => [answer.questionId, answer]));
+    if (!questions.length || questions.some(question => !answersById.has(question.id) ||
+        question.required && !answersById.get(question.id)?.answer?.trim())) {
+      return replyPrivate(interaction, 'Please complete every required question before submitting.');
+    }
+    const { run } = require('../database');
+    run("UPDATE application_drafts SET submissionStatus='SUBMITTING' WHERE id=?", [draft.id]);
+    try {
+      const guild = await interaction.client.guilds.fetch(draft.guildId);
+      const member = await guild.members.fetch(interaction.user.id);
+      if (!member) throw new Error('You are no longer a member of that server.');
+      const answers = questions.map(question => ({ ...answersById.get(question.id), question: question.question, required: Boolean(question.required) }));
+      const result = await createTicket({ interaction: { client: interaction.client, guild, user: interaction.user },
+        type: 'application', reason: form.name, application: { form, answers, draftId: draft.id } });
+      run("UPDATE application_drafts SET submissionStatus='SUBMITTED',submissionChannelId=?,updatedAt=? WHERE id=?", [result.channel.id,Date.now(),draft.id]);
+      return replyPrivate(interaction, `Your application has been submitted: ${result.channel}`);
+    } catch (error) {
+      run("UPDATE application_drafts SET submissionStatus='READY',updatedAt=? WHERE id=?", [Date.now(),draft.id]);
+      return replyPrivate(interaction, `${error.message || 'I could not create the ticket.'} Your answers are saved. You can retry below.`, [submitButton(draft.id)]);
+    }
+  });
 }
 
 function buildApplicationPreview(form, questions, pageNumber, pageCount) {
@@ -117,7 +153,9 @@ async function showApplicationPreview(interaction, draftId) {
   const pageQuestions = questions.slice(start, start + QUESTIONS_PER_MODAL);
 
   if (!pageQuestions.length) {
-    return replyPrivate(interaction, 'This application has no remaining questions.');
+    return replyPrivate(interaction, draft.submissionStatus === 'SUBMITTED'
+      ? `Your application was already submitted: <#${draft.submissionChannelId}>`
+      : 'Your answers are saved and ready to submit.', draft.submissionStatus === 'SUBMITTED' ? [] : [submitButton(draft.id)]);
   }
 
   const pageNumber = Math.floor(start / QUESTIONS_PER_MODAL) + 1;
@@ -145,7 +183,7 @@ async function showApplicationModal(interaction, draftId) {
   const pageQuestions = questions.slice(start, start + QUESTIONS_PER_MODAL);
 
   if (!pageQuestions.length) {
-    return replyPrivate(interaction, 'This application has no remaining questions.');
+    return replyPrivate(interaction, 'Your answers are ready to submit.', [submitButton(draft.id)]);
   }
 
   const pageNumber = Math.floor(start / QUESTIONS_PER_MODAL) + 1;
@@ -301,33 +339,8 @@ async function handleApplicationPage(interaction) {
     );
   }
 
-  await interaction.deferReply();
-
-  try {
-    const guild = await interaction.client.guilds.fetch(draft.guildId).catch(() => null);
-    if (!guild) throw new Error('That server is no longer available.');
-
-    const member = await guild.members.fetch(interaction.user.id).catch(() => null);
-    if (!member) throw new Error('You are no longer a member of that server.');
-
-    const result = await createTicket({
-      interaction: {
-        client: interaction.client,
-        guild,
-        user: interaction.user
-      },
-      type: 'application',
-      reason: form.name,
-      application: { form, answers }
-    });
-
-    deleteDraft(draft.id);
-    return interaction.editReply({ content: `Your application has been submitted: ${result.channel}` });
-  } catch (err) {
-    return interaction.editReply({
-      content: err.message || 'Failed to create your application ticket. Your answers are saved; please start the application again from the ticket panel.'
-    });
-  }
+  require('../database').run("UPDATE application_drafts SET submissionStatus='READY' WHERE id=?", [draft.id]);
+  return submitApplication(interaction, draft.id);
 }
 
 async function handleApplicationContinue(interaction) {
@@ -347,27 +360,33 @@ module.exports = {
   buildApplicationPreview,
   cleanAnswer,
   modalQuestionLabel,
+  submitApplication,
 
   async execute(interaction) {
     try {
+      if (interaction.isButton() && interaction.customId.startsWith('application_submit_')) {
+        const draftId = getDraftId(interaction.customId, 'application_submit_');
+        if (!draftId) return replyPrivate(interaction, 'This application session is invalid.');
+        return await submitApplication(interaction, draftId);
+      }
       if (interaction.isStringSelectMenu() && interaction.customId === 'application_select') {
-        return handleApplicationSelect(interaction);
+        return await handleApplicationSelect(interaction);
       }
 
       if (interaction.isButton() && interaction.customId.startsWith('application_start_')) {
-        return handleApplicationStart(interaction);
+        return await handleApplicationStart(interaction);
       }
 
       if (interaction.isButton() && interaction.customId.startsWith('application_open_')) {
-        return handleApplicationOpen(interaction);
+        return await handleApplicationOpen(interaction);
       }
 
       if (interaction.isButton() && interaction.customId.startsWith('application_continue_')) {
-        return handleApplicationContinue(interaction);
+        return await handleApplicationContinue(interaction);
       }
 
       if (interaction.isModalSubmit() && interaction.customId.startsWith('application_page_')) {
-        return handleApplicationPage(interaction);
+        return await handleApplicationPage(interaction);
       }
 
       return null;

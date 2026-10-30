@@ -311,7 +311,8 @@ function createDraft({
 
   if (existingRow) {
     const existing = getDraft(existingRow.id);
-    if (existing) {
+    if (existing?.submissionStatus === 'SUBMITTED') deleteDraft(existing.id);
+    else if (existing) {
       const now = Date.now();
       run(
         `UPDATE application_drafts
@@ -337,16 +338,18 @@ function createDraft({
        formId,
        userId,
        answersJson,
+       questionsJson,
        nextQuestionIndex,
        createdAt,
        updatedAt,
        expiresAt
-     ) VALUES (?, ?, ?, ?, '[]', 0, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, '[]', ?, 0, ?, ?, ?)`,
     [
       id,
       guildId,
       formId,
       userId,
+      JSON.stringify(getQuestions(formId)),
       now,
       now,
       now + DRAFT_LIFETIME_MS
@@ -380,9 +383,22 @@ function getDraft(
     return null;
   }
 
+  const answers = parseDraftAnswers(draft.answersJson);
+  if (!draft.questionsJson) {
+    const current = getQuestions(draft.formId);
+    const answeredIds = new Set(answers.map(answer => answer.questionId));
+    const questions = [...answers.map((answer, index) => current.find(question => question.id === answer.questionId) || {
+      id: answer.questionId, question: answer.question || 'Previously answered question', position: index + 1, required: Boolean(answer.required)
+    }), ...current.filter(question => !answeredIds.has(question.id))];
+    draft.questionsJson = JSON.stringify(questions);
+    draft.nextQuestionIndex = answers.length;
+    run('UPDATE application_drafts SET questionsJson=?,nextQuestionIndex=? WHERE id=?', [draft.questionsJson,draft.nextQuestionIndex,id]);
+  }
+
   return {
     ...draft,
-    answers: parseDraftAnswers(draft.answersJson)
+    answers,
+    questions: parseDraftAnswers(draft.questionsJson)
   };
 }
 

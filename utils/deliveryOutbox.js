@@ -11,7 +11,7 @@ const MAX_BACKOFF_MS = 60 * 60 * 1000;
 const running = new Set();
 
 function cleanError(error) {
-  return String(error?.message || error || 'Unknown delivery error').slice(0, 1500);
+  return require('./safeLogging').redactText(error?.message || error || 'Unknown delivery error').slice(0, 1500);
 }
 
 function enqueueDelivery({
@@ -32,11 +32,11 @@ function enqueueDelivery({
      ) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?)
      ON CONFLICT(deliveryKey) DO UPDATE SET
        payload = CASE
-         WHEN delivery_outbox.status = 'SENT' THEN delivery_outbox.payload
+         WHEN delivery_outbox.status IN ('SENT','PROCESSING','UNCERTAIN') OR delivery_outbox.uncertainSince IS NOT NULL THEN delivery_outbox.payload
          ELSE excluded.payload
        END,
        channelId = CASE
-         WHEN delivery_outbox.status = 'SENT' THEN delivery_outbox.channelId
+         WHEN delivery_outbox.status IN ('SENT','PROCESSING','UNCERTAIN') OR delivery_outbox.uncertainSince IS NOT NULL THEN delivery_outbox.channelId
          ELSE excluded.channelId
        END,
        updatedAt = CASE
@@ -73,7 +73,8 @@ function claimDelivery(deliveryKey, leaseMs = DEFAULT_LEASE_MS) {
 
     run(
       `UPDATE delivery_outbox
-       SET status = 'PROCESSING', leaseUntil = ?, attempts = attempts + 1, updatedAt = ?
+       SET uncertainSince = CASE WHEN status='PROCESSING' THEN COALESCE(uncertainSince,updatedAt) ELSE uncertainSince END,
+           status = 'PROCESSING', leaseUntil = ?, attempts = attempts + 1, updatedAt = ?
        WHERE deliveryKey = ?`,
       [now + Math.max(5_000, Number(leaseMs) || DEFAULT_LEASE_MS), now, row.deliveryKey]
     );
@@ -101,13 +102,14 @@ function markDeliveryFailed(deliveryKey, error) {
   const attempts = Math.max(1, Number(row?.attempts) || 1);
   const backoff = Math.min(MAX_BACKOFF_MS, 5_000 * (2 ** Math.min(attempts - 1, 8)));
   const now = Date.now();
+  const uncertain = error?.deliveryMayHaveBeenSent === true;
 
   run(
     `UPDATE delivery_outbox
-     SET status = 'FAILED', leaseUntil = NULL, nextAttemptAt = ?,
-         lastError = ?, updatedAt = ?
+     SET status = ?, leaseUntil = NULL, nextAttemptAt = ?,
+         lastError = ?, updatedAt = ?, uncertainSince = CASE WHEN ? THEN COALESCE(uncertainSince,?) ELSE uncertainSince END
      WHERE deliveryKey = ?`,
-    [now + backoff, cleanError(error), now, String(deliveryKey)]
+    [error?.code === 'DELIVERY_UNCERTAIN' ? 'UNCERTAIN' : 'FAILED', now + backoff, cleanError(error), now, uncertain ? 1 : 0, now, String(deliveryKey)]
   );
 }
 
@@ -162,17 +164,41 @@ function deliveryNonce(deliveryKey) {
   return crypto.createHash('sha256').update(String(deliveryKey)).digest('hex').slice(0, 24);
 }
 
-async function sendQueuedMessage(channel, delivery, payload) {
+async function sendQueuedMessage(channel, delivery, payload, { beforeSend = null } = {}) {
+  if (delivery.attempts > 1) payload = delivery.parsedPayload?.message || payload;
   const nonce = deliveryNonce(delivery.deliveryKey);
+  const botId = channel.client?.user?.id || channel.guild?.members?.me?.id;
   if (delivery.attempts > 1 && channel.messages?.fetch) {
-    const recent = await channel.messages.fetch({ limit: 100 });
-    const existing = recent.find(message => String(message.nonce) === nonce);
-    if (existing) return existing;
+    let before;
+    const { sameMessage, isRecentDelivery } = require('./messageRecovery');
+    for (let page = 0; page < 10; page += 1) {
+      const recent = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+      const existing = recent.find(message => botId && message.author?.id === botId &&
+        (String(message.nonce) === nonce || isRecentDelivery(message, delivery) && sameMessage(message, payload)));
+      if (existing) return existing;
+      if (recent.size < 100 || recent.some(message => !isRecentDelivery(message, delivery))) break;
+      before = recent.last()?.id;
+      if (!before) break;
+    }
   }
-  return channel.send({ ...payload, nonce, enforceNonce: true });
+  // A lost HTTP response is not proof of a failed send. After the short nonce
+  // window, pause uncertain work instead of posting a duplicate blindly.
+  if (delivery.uncertainSince && Date.now() - Number(delivery.uncertainSince) > 120_000) {
+    throw Object.assign(new Error('Delivery outcome could not be verified. Administrator review is required before resending.'), { code: 'DELIVERY_UNCERTAIN' });
+  }
+  try {
+    if (beforeSend) await beforeSend();
+    return await channel.send({ ...payload, nonce, enforceNonce: true });
+  }
+  catch (error) {
+    const status = Number(error.status || error.response?.status);
+    error.deliveryMayHaveBeenSent = !status || status >= 500;
+    throw error;
+  }
 }
 
 async function retryChannelDeliveries(client) {
+  await require('./publicMessageCleanup').cleanupPublicReferences(client).catch(error => console.error('Public display cleanup:', error.message));
   let sent = 0;
   for (const row of pendingDeliveries()) {
     if (row.type === 'LOG_BURST') {

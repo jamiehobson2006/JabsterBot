@@ -118,22 +118,22 @@ module.exports = {
         ? settings.messageId
         : null;
       run(
-        `INSERT INTO staff_rota_settings (guildId, enabled, channelId, staffRoleId, messageId, updatedBy, updatedAt)
-         VALUES (?, 1, ?, ?, ?, ?, ?)
+        `INSERT INTO staff_rota_settings (guildId, enabled, channelId, staffRoleId, messageId, updatedBy, updatedAt, messageIds)
+         VALUES (?, 1, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(guildId) DO UPDATE SET enabled = 1, channelId = excluded.channelId,
            staffRoleId = excluded.staffRoleId, messageId = excluded.messageId,
-           updatedBy = excluded.updatedBy, updatedAt = excluded.updatedAt`,
-        [guildId, channel.id, role.id, keepMessageId, interaction.user.id, Date.now()]
+           updatedBy = excluded.updatedBy, updatedAt = excluded.updatedAt, messageIds=excluded.messageIds`,
+        [guildId, channel.id, role.id, keepMessageId, interaction.user.id, Date.now(), settings?.channelId === channel.id ? settings.messageIds : null]
       );
       const refreshed = await StaffRotaService.refresh(interaction.client, guildId);
       if (!refreshed) {
         if (settings) {
           run(
             `UPDATE staff_rota_settings
-             SET enabled = ?, channelId = ?, staffRoleId = ?, messageId = ?, updatedBy = ?, updatedAt = ?
+             SET enabled = ?, channelId = ?, staffRoleId = ?, messageId = ?, updatedBy = ?, updatedAt = ?, messageIds=?
              WHERE guildId = ?`,
             [settings.enabled, settings.channelId, settings.staffRoleId, settings.messageId,
-              settings.updatedBy, settings.updatedAt, guildId]
+              settings.updatedBy, settings.updatedAt, settings.messageIds, guildId]
           );
         } else {
           run(`UPDATE staff_rota_settings SET enabled = 0 WHERE guildId = ?`, [guildId]);
@@ -143,8 +143,9 @@ module.exports = {
 
       if (settings?.channelId && settings.channelId !== channel.id && settings.messageId) {
         const oldChannel = await interaction.guild.channels.fetch(settings.channelId).catch(() => null);
-        const oldMessage = await oldChannel?.messages?.fetch(settings.messageId).catch(() => null);
-        await oldMessage?.delete().catch(() => null);
+        const { messageIds, removeEmbedPages } = require('../../utils/embedPages');
+        await removeEmbedPages(oldChannel, messageIds(settings.messageIds, settings.messageId), interaction.client.user.id)
+          .catch(error => console.error('Old rota cleanup:', error.message));
       }
       return interaction.editReply({ content: `Staff rota enabled in ${channel} for ${role}.` });
     }
@@ -204,11 +205,12 @@ module.exports = {
     }
     if (current) chunks.push(current);
     if (!chunks.length) chunks.push('No shifts configured.');
-    return interaction.editReply({
-      embeds: chunks.slice(0, 10).map((description, index) => new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle(index ? 'Staff Shifts (continued)' : 'Staff Shifts')
-        .setDescription(description))
-    });
+    for (let index = 0; index < chunks.length; index += 1) {
+      const payload = { embeds: [new EmbedBuilder().setColor(0x5865F2)
+        .setTitle(index ? 'Staff Shifts (continued)' : 'Staff Shifts').setDescription(chunks[index])],
+      allowedMentions: { parse: [] } };
+      if (index === 0) await interaction.editReply(payload);
+      else await interaction.followUp(payload);
+    }
   }
 };

@@ -395,21 +395,23 @@ async function checkEndedTwitchStreams(client) {
         continue;
       }
 
-      const channel =
-        await client.channels.fetch(
-          social.lastLiveChannelId || social.targetChannelId
-        ).catch(() => null);
+      const channel = await client.channels.fetch(social.lastLiveChannelId || social.targetChannelId).catch(error => {
+        if (Number(error.code) === 10003) return null;
+        throw error;
+      });
 
       if (!channel) {
+        clearEndedTwitchState(social);
         continue;
       }
 
-      const message =
-        await channel.messages.fetch(
-          social.lastLiveMessageId
-        );
+      const message = await channel.messages.fetch(social.lastLiveMessageId).catch(error => {
+        if (Number(error.code) === 10008) return null;
+        throw error;
+      });
 
       if (!message) {
+        clearEndedTwitchState(social);
         continue;
       }
 
@@ -531,6 +533,10 @@ async function checkEndedTwitchStreams(client) {
 
     } catch (err) {
 
+      if ([10003,10008].includes(Number(err.code))) {
+        clearEndedTwitchState(social);
+        continue;
+      }
       console.error(
 
         `Twitch Ended Error (${social.creatorName})`,
@@ -539,6 +545,13 @@ async function checkEndedTwitchStreams(client) {
       );
     }
   }
+}
+
+function clearEndedTwitchState(social) {
+  run(`UPDATE social_channels SET lastTwitchStreamId=NULL,lastLiveMessageId=NULL,
+    lastLiveChannelId=NULL,peakTwitchViewers=0,twitchStartTime=NULL
+    WHERE guildId=? AND platform=? AND creatorId=? AND contentType=? AND lastTwitchStreamId=?`,
+  [social.guildId,social.platform,social.creatorId,social.contentType,social.lastTwitchStreamId]);
 }
 
 async function checkTwitch(client) {
@@ -1284,5 +1297,6 @@ monitorInterval.unref?.();
 
 module.exports = {
   start,
+  checkEndedTwitchStreams,
   runMonitor
 };

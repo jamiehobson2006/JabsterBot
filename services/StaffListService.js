@@ -22,7 +22,7 @@ class StaffListService {
       .first() || null;
   }
 
-  static buildEmbed(guild, staffRole, members) {
+  static buildEmbeds(guild, staffRole, members) {
     const groups = new Map();
 
     for (const member of members) {
@@ -74,9 +74,6 @@ class StaffListService {
       }
     }
 
-    const visibleFields = fields.slice(0, 25);
-    const overflow = fields.length - visibleFields.length;
-
     const embed = new EmbedBuilder()
       .setColor(0x5865F2)
       .setAuthor({
@@ -93,22 +90,20 @@ class StaffListService {
           : `No members currently have the **${staffRole.name}** role.`
       )
       .setFooter({
-        text: overflow
-          ? `Refreshes every 24 hours | ${overflow} section(s) could not fit in this embed`
-          : 'Refreshes every 24 hours'
+        text: 'Refreshes every 24 hours'
       })
       .setTimestamp();
 
-    if (visibleFields.length) {
-      embed.addFields(visibleFields);
-    }
+    return require('../utils/embedPages').fieldPages(embed, fields);
+  }
 
-    return embed;
+  static buildEmbed(guild, staffRole, members) {
+    return StaffListService.buildEmbeds(guild, staffRole, members)[0];
   }
 
   static async refreshGuild(guild) {
     const settings = get(
-      `SELECT staffListChannelId, staffListRoleId, staffListMessageId
+      `SELECT staffListChannelId, staffListRoleId, staffListMessageId, staffListMessageIds
        FROM guild_settings
        WHERE guildId = ?`,
       [guild.id]
@@ -146,34 +141,17 @@ class StaffListService {
       !member.user.bot && member.roles.cache.has(staffRole.id)
     );
 
-    const embed = StaffListService.buildEmbed(
+    const embeds = StaffListService.buildEmbeds(
       guild,
       staffRole,
       [...staff.values()]
     );
 
-    let message = settings.staffListMessageId
-      ? await channel.messages.fetch(settings.staffListMessageId).catch(() => null)
-      : null;
-
-    if (message) {
-      await message.edit({
-        embeds: [embed],
-        allowedMentions: { parse: [] }
-      });
-    } else {
-      message = await channel.send({
-        embeds: [embed],
-        allowedMentions: { parse: [] }
-      });
-
-      run(
-        `UPDATE guild_settings
-         SET staffListMessageId = ?
-         WHERE guildId = ?`,
-        [message.id, guild.id]
-      );
-    }
+    const { messageIds, syncEmbedPages } = require('../utils/embedPages');
+    await require('../utils/workLeases').withWorkLease(`staff-list:${guild.id}`, () => syncEmbedPages({
+      channel, embeds, ids: messageIds(settings.staffListMessageIds, settings.staffListMessageId), botId: guild.members.me.id,
+      save: ids => run('UPDATE guild_settings SET staffListMessageId=?,staffListMessageIds=? WHERE guildId=?', [ids[0] || null,JSON.stringify(ids),guild.id])
+    }));
 
     return true;
   }

@@ -133,8 +133,8 @@ async function maintainActivities(client, now = Date.now(), onlyPostId = null) {
         if (chunk) fields.push({ name: 'Choice Results', value: chunk });
       } else {
         fields.push({ name: 'Current Game', value: activity.mode === 'chain'
-          ? `Turn ${state.version} | Latest word: **${state.lastWord}**\nNext word starts with **${state.lastWord.at(-1).toUpperCase()}**.`
-          : `Turn ${state.version}\n${state.story.slice(-900) || 'Add the opening word.'}` });
+          ? `Turn ${state.version}\nNext word starts with **${state.lastWord.at(-1).toUpperCase()}**. Read the member replies in the discussion.`
+          : `Turn ${state.version}\nThe story is in the members' original messages in the discussion.` });
       }
       embed.setFields(fields);
       const pendingChoice = votes && get(`SELECT deliveryKey FROM delivery_outbox WHERE type = 'DAILY_ACTIVITY_UPDATE'

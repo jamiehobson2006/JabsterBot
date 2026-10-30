@@ -28,7 +28,7 @@ function clientFixture() {
   const channel = { type: ChannelType.GuildText, guild: { members: { me: {} } },
     permissionsFor: () => ({ has: () => true }), messages: { fetch: async () => messages },
     send: async payload => { payloads.push(payload);
-      const msg = { id: `log-${payloads.length}`, author: { id: 'bot' }, embeds: payload.embeds };
+      const msg = { id: `log-${payloads.length}`, createdTimestamp: Date.now(), author: { id: 'bot' }, embeds: payload.embeds };
       messages.set(msg.id, msg); return msg; } };
   return { client: { user: { id: 'bot' }, channels: { fetch: async () => channel } }, channel, payloads };
 }

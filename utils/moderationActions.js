@@ -82,8 +82,8 @@ function completeModerationAction(recordId) {
     const result = run(
       `INSERT INTO cases (
          guildId, userId, moderatorId, action, reason, duration,
-         expiresAt, channelId, timestamp, createdAt, actionRecordId
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         expiresAt, channelId, timestamp, createdAt, actionRecordId, warningActive
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         row.guildId,
         row.userId,
@@ -95,7 +95,8 @@ function completeModerationAction(recordId) {
         row.channelId,
         actionAt,
         actionAt,
-        row.recordId
+        row.recordId,
+        row.action === 'WARN' ? 1 : null
       ]
     );
     const caseId = Number(result.lastInsertRowid);

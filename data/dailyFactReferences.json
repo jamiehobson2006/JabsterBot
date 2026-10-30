@@ -1,0 +1,1786 @@
+{
+  "random": {
+    "0": {
+      "originalFact": "If you shuffle a standard deck of 52 playing cards thoroughly, the order has almost certainly never existed before in the history of the universe.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Factorial#Applications",
+      "replacement": "A standard 52-card deck has 52 factorial possible orderings, approximately 8 followed by 67 zeros."
+    },
+    "1": {
+      "originalFact": "The shortest commercial flight in the world lasts around 90 seconds between two Scottish islands.",
+      "sourceUrl": "https://www.loganair.co.uk/interisles/"
+    },
+    "2": {
+      "originalFact": "The inventor of the Pringles can is buried in one—part of his ashes were placed inside a can after his death.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Fredric_Baur"
+    },
+    "3": {
+      "originalFact": "There are more possible games of chess than there are atoms in the observable universe.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Shannon_number"
+    },
+    "4": {
+      "originalFact": "The longest place name in Europe is a Welsh village officially named Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Llanfairpwllgwyngyll"
+    },
+    "5": {
+      "originalFact": "Your smartphone contains more computing power than the computers used to land astronauts on the Moon.",
+      "sourceUrl": "https://www.nasa.gov/history/afj/compessay.html"
+    },
+    "7": {
+      "originalFact": "LEGO is the world's largest tyre manufacturer by number of tyres produced each year, although they're tiny toy tyres.",
+      "sourceUrl": "https://www.guinnessworldrecords.com/world-records/most-tyres-manufactured-in-a-year"
+    },
+    "8": {
+      "originalFact": "There are more possible ways to arrange a Rubik's Cube than there are grains of sand on Earth.",
+      "sourceUrl": "https://www.ukca.org/parents-guide-how-does-speedcubing-work",
+      "replacement": "A standard 3-by-3 Rubik's Cube has about 43 quintillion reachable arrangements."
+    },
+    "9": {
+      "originalFact": "The Eiffel Tower can grow by around 15 centimetres during hot weather as the metal expands.",
+      "sourceUrl": "https://www.toureiffel.paris/en/news/7-things-you-may-not-know-about-eiffel-tower"
+    },
+    "10": {
+      "originalFact": "Some ancient Roman graffiti is still visible nearly 2,000 years after it was written.",
+      "sourceUrl": "https://ancientgraffiti.org/about/"
+    },
+    "11": {
+      "originalFact": "The world's oldest known customer complaint is a clay tablet written nearly 4,000 years ago.",
+      "sourceUrl": "https://www.britishmuseum.org/collection/object/W_1953-0411-71"
+    },
+    "12": {
+      "originalFact": "A cloud can weigh hundreds of tonnes while still floating in the sky.",
+      "sourceUrl": "https://www.usgs.gov/special-topics/water-science-school/science/how-much-does-a-cloud-weigh"
+    },
+    "13": {
+      "originalFact": "The dot above a lowercase 'i' or 'j' has its own name: a tittle.",
+      "sourceUrl": "https://www.merriam-webster.com/dictionary/tittle"
+    },
+    "14": {
+      "originalFact": "The inventor of the microwave oven discovered the idea after a chocolate bar melted in his pocket while he was working with radar equipment.",
+      "sourceUrl": "https://lemelson.mit.edu/resources/percy-spencer"
+    },
+    "16": {
+      "originalFact": "The longest recorded hiccuping episode lasted 68 years.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Charles_Osborne_(hiccups)"
+    },
+    "17": {
+      "originalFact": "Scotland's national animal is the unicorn.",
+      "sourceUrl": "https://www.rct.uk/resources/unicorns"
+    },
+    "18": {
+      "originalFact": "Some bridges are designed to move several metres in strong winds without being damaged.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Aeroelasticity"
+    },
+    "19": {
+      "originalFact": "The first recorded joke dates back almost 4,000 years to ancient Mesopotamia.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Joke#History"
+    },
+    "20": {
+      "originalFact": "A bolt of lightning is around five times hotter than the surface of the Sun.",
+      "sourceUrl": "https://www.weather.gov/safety/lightning-temperature"
+    },
+    "22": {
+      "originalFact": "There is enough DNA in the human body to stretch from Earth to the Sun and back many times if it were all unwound.",
+      "sourceUrl": "https://www.genome.gov/about-genomics/fact-sheets/Deoxyribonucleic-Acid-Fact-Sheet"
+    },
+    "24": {
+      "originalFact": "The world's quietest room is so silent that people can hear their own heartbeat, blinking and even their joints moving.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Anechoic_chamber"
+    },
+    "25": {
+      "originalFact": "Some airports use trained falcons to safely scare away birds from runways.",
+      "sourceUrl": "https://www.faa.gov/airports/airport_safety/wildlife"
+    },
+    "27": {
+      "originalFact": "The first photograph ever taken required an exposure time of several hours.",
+      "sourceUrl": "https://www.hrc.utexas.edu/niepce-heliograph/"
+    },
+    "28": {
+      "originalFact": "Bubble wrap was originally invented as wallpaper, not packaging.",
+      "sourceUrl": "https://www.sealedair.com/company/our-history"
+    },
+    "29": {
+      "originalFact": "The world's oldest hotel has reportedly been operating for over 1,300 years in Japan.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Nishiyama_Onsen_Keiunkan"
+    },
+    "31": {
+      "originalFact": "The first successful parachute jump from a hot air balloon took place in 1797.",
+      "sourceUrl": "https://www.fai.org/news/garnerin-1797",
+      "replacement": "In 1797, Andre-Jacques Garnerin made a successful frameless parachute descent from a balloon over Paris."
+    },
+    "33": {
+      "originalFact": "The inventor of the Super Soaker originally designed equipment for NASA before creating the famous water gun.",
+      "sourceUrl": "https://www.invent.org/inductees/lonnie-johnson"
+    },
+    "34": {
+      "originalFact": "There is a basketball court above the Supreme Court of the United States, nicknamed 'The Highest Court in the Land'.",
+      "sourceUrl": "https://www.supremecourt.gov/about/faq_general.aspx"
+    },
+    "35": {
+      "originalFact": "The word 'alphabet' comes from the first two letters of the ancient Greek alphabet: alpha and beta.",
+      "sourceUrl": "https://www.merriam-webster.com/dictionary/alphabet"
+    },
+    "37": {
+      "originalFact": "The world's largest living structure is the Great Barrier Reef, stretching over 2,300 kilometres.",
+      "sourceUrl": "https://www.gbrmpa.gov.au/the-reef/reef-facts"
+    },
+    "38": {
+      "originalFact": "Velcro was inspired by burrs sticking to a dog's fur during a walk.",
+      "sourceUrl": "https://www.velcro.com/original-thinking/our-timeline-of-innovation/"
+    },
+    "40": {
+      "originalFact": "The first traffic lights were powered by gas rather than electricity.",
+      "sourceUrl": "https://www.parliament.uk/about/living-heritage/building/palace/parliamentary-estate/traffic-lights/"
+    },
+    "41": {
+      "originalFact": "The world's largest mirror is a salt flat in Bolivia that forms after rainfall.",
+      "sourceUrl": "https://earthobservatory.nasa.gov/images/150729/salar-de-uyuni"
+    },
+    "42": {
+      "originalFact": "The first successful barcode scan was on a packet of chewing gum in 1974.",
+      "sourceUrl": "https://www.gs1.org/about/our-history"
+    },
+    "43": {
+      "originalFact": "An octillion is the number 1 followed by 27 zeros.",
+      "sourceUrl": "https://www.merriam-webster.com/dictionary/octillion"
+    },
+    "44": {
+      "originalFact": "The oldest continuously operating university in the world is the University of al-Qarawiyyin in Morocco, founded in 859.",
+      "sourceUrl": "https://whc.unesco.org/en/list/170/"
+    },
+    "49": {
+      "originalFact": "The human brain can recognise a familiar face in as little as a few hundred milliseconds.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/16866745/",
+      "replacement": "A 2006 experiment found that people formed impressions of unfamiliar faces after seeing them for just 100 milliseconds."
+    }
+  },
+  "space": {
+    "1": {
+      "originalFact": "Neutron stars can spin more than 700 times every second.",
+      "sourceUrl": "https://arxiv.org/abs/astro-ph/0601337"
+    },
+    "2": {
+      "originalFact": "If two pieces of the same metal touched in space, they could permanently bond together in a process called cold welding.",
+      "sourceUrl": "https://ntrs.nasa.gov/api/citations/19930007710/downloads/19930007710.pdf"
+    },
+    "3": {
+      "originalFact": "The Sun loses around 4 million tonnes of mass every second by converting it into energy.",
+      "sourceUrl": "https://cosmicopia.gsfc.nasa.gov/qa_sun.html"
+    },
+    "4": {
+      "originalFact": "There are planets where it is thought molten iron may rain from the sky.",
+      "sourceUrl": "https://www.eso.org/public/news/eso2005/"
+    },
+    "5": {
+      "originalFact": "The footprints left by Apollo astronauts could remain on the Moon for millions of years because there is virtually no wind.",
+      "sourceUrl": "https://science.nasa.gov/moon/facts/"
+    },
+    "6": {
+      "originalFact": "One teaspoon of neutron star material would weigh around a billion tonnes on Earth.",
+      "sourceUrl": "https://www.energy.gov/science/doe-explainsneutron-stars",
+      "replacement": "Neutron star matter is extraordinarily dense: the US Department of Energy estimates that a teaspoon would weigh about 10 million tons."
+    },
+    "7": {
+      "originalFact": "Saturn's moon Titan has rivers, lakes and seas—but they are made of liquid methane and ethane instead of water.",
+      "sourceUrl": "https://science.nasa.gov/saturn/moons/titan/facts/"
+    },
+    "8": {
+      "originalFact": "The International Space Station circles Earth roughly every 90 minutes.",
+      "sourceUrl": "https://www.nasa.gov/international-space-station/space-station-facts-and-figures/"
+    },
+    "9": {
+      "originalFact": "Olympus Mons on Mars is about 22 kilometres tall, making it the tallest known volcano in the Solar System.",
+      "sourceUrl": "https://science.nasa.gov/mars/facts/"
+    },
+    "12": {
+      "originalFact": "Light from the Sun takes about 8 minutes and 20 seconds to reach Earth.",
+      "sourceUrl": "https://science.nasa.gov/sun/facts/"
+    },
+    "13": {
+      "originalFact": "Jupiter is so massive that all of the other planets in the Solar System could fit inside it with room to spare.",
+      "sourceUrl": "https://science.nasa.gov/jupiter/jupiter-facts/"
+    },
+    "15": {
+      "originalFact": "Astronauts grow slightly taller in space because their spines expand without Earth's gravity compressing them.",
+      "sourceUrl": "https://www.nasa.gov/reference/risk-of-spaceflight-induced-bone-changes/"
+    },
+    "16": {
+      "originalFact": "The Milky Way galaxy is estimated to contain between 100 and 400 billion stars.",
+      "sourceUrl": "https://science.nasa.gov/universe/exoplanets/our-milky-way-galaxy-how-big-is-space/"
+    },
+    "17": {
+      "originalFact": "Black holes do not suck everything in like giant vacuum cleaners—objects must get extremely close before gravity becomes overwhelming.",
+      "sourceUrl": "https://science.nasa.gov/universe/black-holes/"
+    },
+    "18": {
+      "originalFact": "The Moon is slowly drifting away from Earth by about 3.8 centimetres every year.",
+      "sourceUrl": "https://science.nasa.gov/moon/facts/"
+    },
+    "20": {
+      "originalFact": "Some exoplanets orbit two stars, giving them two sunsets similar to those seen in science fiction.",
+      "sourceUrl": "https://science.nasa.gov/exoplanet-catalog/kepler-16b/"
+    },
+    "21": {
+      "originalFact": "The largest canyon in the Solar System is Valles Marineris on Mars, stretching over 4,000 kilometres.",
+      "sourceUrl": "https://science.nasa.gov/mars/facts/"
+    },
+    "22": {
+      "originalFact": "Jupiter's Great Red Spot is a storm that has been raging for at least 190 years and possibly much longer.",
+      "sourceUrl": "https://science.nasa.gov/jupiter/jupiter-facts/"
+    },
+    "23": {
+      "originalFact": "There are rogue planets that travel through space without orbiting any star.",
+      "sourceUrl": "https://science.nasa.gov/resource/rogue-planet-valentine/"
+    },
+    "24": {
+      "originalFact": "The Sun is about halfway through its estimated 10-billion-year lifetime.",
+      "sourceUrl": "https://science.nasa.gov/sun/facts/"
+    },
+    "25": {
+      "originalFact": "The rings of Saturn are thought to be made mostly of water ice.",
+      "sourceUrl": "https://science.nasa.gov/saturn/facts/"
+    },
+    "26": {
+      "originalFact": "A single lightning storm on Jupiter can release far more energy than lightning on Earth.",
+      "sourceUrl": "https://science.nasa.gov/jupiter/jupiter-facts/"
+    },
+    "27": {
+      "originalFact": "The Moon has moonquakes caused by tidal forces from Earth.",
+      "sourceUrl": "https://science.nasa.gov/moon/facts/"
+    },
+    "28": {
+      "originalFact": "If Earth were the size of a grape, Jupiter would be about the size of a basketball.",
+      "sourceUrl": "https://nssdc.gsfc.nasa.gov/planetary/factsheet/"
+    },
+    "29": {
+      "originalFact": "The closest known star system to the Sun is Alpha Centauri, about 4.37 light-years away.",
+      "sourceUrl": "https://www.jpl.nasa.gov/infographics/the-nearest-star-system/"
+    },
+    "30": {
+      "originalFact": "A light-year measures distance, not time, and equals about 9.46 trillion kilometres.",
+      "sourceUrl": "https://science.nasa.gov/exoplanets/what-is-a-light-year/"
+    },
+    "31": {
+      "originalFact": "The coldest known place in the universe is the Boomerang Nebula, which is even colder than the natural temperature of space.",
+      "sourceUrl": "https://www.eso.org/public/images/eso1238a/"
+    },
+    "33": {
+      "originalFact": "Mars has blue sunsets because of the way its dusty atmosphere scatters light.",
+      "sourceUrl": "https://svs.gsfc.nasa.gov/11875"
+    },
+    "34": {
+      "originalFact": "The dwarf planet Pluto takes 248 Earth years to complete one orbit of the Sun.",
+      "sourceUrl": "https://science.nasa.gov/dwarf-planets/pluto/facts/"
+    },
+    "35": {
+      "originalFact": "There are more trees on Earth than stars in the Milky Way, but far fewer than stars in the observable universe.",
+      "sourceUrl": "https://www.nature.com/articles/nature14967"
+    },
+    "36": {
+      "originalFact": "The escape velocity from Earth is about 40,270 kilometres per hour.",
+      "sourceUrl": "https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html"
+    },
+    "37": {
+      "originalFact": "The Moon has no atmosphere capable of producing weather.",
+      "sourceUrl": "https://science.nasa.gov/moon/facts/"
+    },
+    "38": {
+      "originalFact": "The Hubble Space Telescope travels at around 27,000 kilometres per hour while orbiting Earth.",
+      "sourceUrl": "https://science.nasa.gov/mission/hubble/observatory/"
+    },
+    "39": {
+      "originalFact": "The centre of the Milky Way contains a supermassive black hole called Sagittarius A*.",
+      "sourceUrl": "https://science.nasa.gov/universe/black-holes/"
+    },
+    "42": {
+      "originalFact": "Uranus rotates on its side, making its seasons unlike those of any other major planet.",
+      "sourceUrl": "https://science.nasa.gov/uranus/facts/"
+    },
+    "43": {
+      "originalFact": "Some stars end their lives in explosions so bright they can briefly outshine entire galaxies.",
+      "sourceUrl": "https://science.nasa.gov/universe/stars/types/"
+    },
+    "44": {
+      "originalFact": "Astronauts aboard the ISS see around 16 sunrises and sunsets every day.",
+      "sourceUrl": "https://www.nasa.gov/international-space-station/space-station-facts-and-figures/"
+    },
+    "45": {
+      "originalFact": "The observable universe is estimated to be around 93 billion light-years across.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Observable_universe"
+    },
+    "46": {
+      "originalFact": "The James Webb Space Telescope can observe galaxies whose light has travelled for over 13 billion years.",
+      "sourceUrl": "https://science.nasa.gov/mission/webb/early-universe/"
+    },
+    "47": {
+      "originalFact": "The Solar System takes roughly 230 million years to complete one orbit around the Milky Way.",
+      "sourceUrl": "https://science.nasa.gov/solar-system/solar-system-facts/"
+    }
+  },
+  "animals": {
+    "1": {
+      "originalFact": "Ravens can remember individual human faces for years and warn other ravens about people they consider dangerous.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7609869/"
+    },
+    "2": {
+      "originalFact": "The mantis shrimp can punch with such speed that it briefly creates temperatures almost as hot as the surface of the Sun.",
+      "sourceUrl": "https://www.nature.com/articles/428819a"
+    },
+    "3": {
+      "originalFact": "Elephants can detect vibrations through the ground using sensitive cells in their feet.",
+      "sourceUrl": "https://news.stanford.edu/stories/2001/03/elephants-communicate-long-distance-seismic-waves"
+    },
+    "4": {
+      "originalFact": "Some parrots give their chicks unique calls that function like names.",
+      "sourceUrl": "https://doi.org/10.1098/rspb.2011.0932"
+    },
+    "5": {
+      "originalFact": "Orcas have different dialects depending on their family group.",
+      "sourceUrl": "https://www.fisheries.noaa.gov/species/killer-whale"
+    },
+    "6": {
+      "originalFact": "A peregrine falcon can exceed 320 km/h during a hunting dive, making it the fastest animal on Earth.",
+      "sourceUrl": "https://www.allaboutbirds.org/guide/Peregrine_Falcon/overview"
+    },
+    "7": {
+      "originalFact": "Male seahorses become pregnant and give birth to their young.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/seahorse.html"
+    },
+    "8": {
+      "originalFact": "A giraffe's tongue is dark blue-black, helping protect it from sunburn while feeding.",
+      "sourceUrl": "https://animals.sandiegozoo.org/animals/giraffe"
+    },
+    "9": {
+      "originalFact": "Crows have been observed making and using tools to solve complex problems.",
+      "sourceUrl": "https://www.nature.com/articles/379249a0"
+    },
+    "10": {
+      "originalFact": "Some species of jellyfish can regenerate their bodies after injury instead of simply healing wounds.",
+      "sourceUrl": "https://doi.org/10.1073/pnas.1502497112"
+    },
+    "11": {
+      "originalFact": "Owls can rotate their heads up to 270 degrees thanks to specially adapted vertebrae.",
+      "sourceUrl": "https://www.hopkinsmedicine.org/news/media/releases/scientists_explain_how_birds_rotate_their_heads_without_cutting_off_blood_supply_to_brain"
+    },
+    "12": {
+      "originalFact": "Sloths grow algae in their fur, helping them camouflage in rainforest trees.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Sloth#Ecology"
+    },
+    "13": {
+      "originalFact": "Archerfish can accurately shoot jets of water to knock insects off branches several metres away.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Archerfish"
+    },
+    "14": {
+      "originalFact": "Leafcutter ants don't eat the leaves they collect—they use them to grow fungus for food.",
+      "sourceUrl": "https://animals.sandiegozoo.org/animals/ant"
+    },
+    "15": {
+      "originalFact": "Pistol shrimp create a bubble with their claw that collapses with enough force to stun prey.",
+      "sourceUrl": "https://doi.org/10.1126/science.289.5487.2114"
+    },
+    "16": {
+      "originalFact": "A kangaroo cannot move backwards efficiently because of its large tail and leg structure.",
+      "sourceUrl": "https://animals.sandiegozoo.org/animals/kangaroo-and-wallaby"
+    },
+    "17": {
+      "originalFact": "Some frogs survive freezing winters by allowing ice to form around their organs while protecting their cells.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Wood_frog"
+    },
+    "18": {
+      "originalFact": "The mimic octopus can imitate several different sea creatures, including lionfish and sea snakes.",
+      "sourceUrl": "https://doi.org/10.1098/rspb.2001.1708"
+    },
+    "19": {
+      "originalFact": "Honeybees can communicate the direction and distance of flowers using a waggle dance.",
+      "sourceUrl": "https://www.nobelprize.org/prizes/medicine/1973/frisch/facts/"
+    },
+    "20": {
+      "originalFact": "A cheetah's claws are only partly retractable, giving it extra grip while running.",
+      "sourceUrl": "https://animals.sandiegozoo.org/animals/cheetah"
+    },
+    "21": {
+      "originalFact": "Sea otters use rocks as tools to crack open shellfish.",
+      "sourceUrl": "https://www.montereybayaquarium.org/animals/animals-a-to-z/sea-otter"
+    },
+    "22": {
+      "originalFact": "Emperor penguins huddle together and constantly rotate positions so every bird gets a chance to warm up.",
+      "sourceUrl": "https://www.bas.ac.uk/about/antarctica/wildlife/penguins/emperor-penguin/"
+    },
+    "23": {
+      "originalFact": "Some spiders use electricity in the atmosphere to help launch themselves into the air on strands of silk.",
+      "sourceUrl": "https://doi.org/10.1016/j.cub.2018.05.057"
+    },
+    "24": {
+      "originalFact": "Dolphins have been observed calling each other using unique whistle patterns similar to names.",
+      "sourceUrl": "https://doi.org/10.1073/pnas.1304459110"
+    },
+    "26": {
+      "originalFact": "The axolotl can regrow entire limbs, parts of its heart and even sections of its brain.",
+      "sourceUrl": "https://www.nature.com/articles/nature25458"
+    },
+    "27": {
+      "originalFact": "Bats are the only mammals capable of true powered flight.",
+      "sourceUrl": "https://www.nps.gov/subjects/bats/index.htm"
+    },
+    "28": {
+      "originalFact": "Some turtles navigate across oceans using Earth's magnetic field.",
+      "sourceUrl": "https://doi.org/10.1016/j.cub.2014.12.035"
+    },
+    "29": {
+      "originalFact": "An ostrich's eye is larger than its brain.",
+      "sourceUrl": "https://animals.sandiegozoo.org/animals/ostrich"
+    },
+    "30": {
+      "originalFact": "Snow leopards cannot roar like lions because of differences in their vocal anatomy.",
+      "sourceUrl": "https://animals.sandiegozoo.org/animals/snow-leopard"
+    },
+    "31": {
+      "originalFact": "Flamingos are born with grey feathers and turn pink from pigments in their diet.",
+      "sourceUrl": "https://nationalzoo.si.edu/animals/american-flamingo"
+    },
+    "32": {
+      "originalFact": "The giant squid has eyes up to 27 centimetres across—the largest known in the animal kingdom.",
+      "sourceUrl": "https://ocean.si.edu/ocean-life/invertebrates/giant-squid"
+    },
+    "33": {
+      "originalFact": "Some species of ants farm aphids by protecting them in exchange for sugary honeydew.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Aphid#Ant_mutualism"
+    },
+    "34": {
+      "originalFact": "A narwhal's tusk is actually a specialised tooth that can detect changes in the surrounding water.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/24639076/"
+    },
+    "35": {
+      "originalFact": "Koalas sleep for up to 20 hours a day because eucalyptus leaves provide very little energy.",
+      "sourceUrl": "https://animals.sandiegozoo.org/animals/koala"
+    },
+    "36": {
+      "originalFact": "The lyrebird can imitate chainsaws, camera shutters and even human voices.",
+      "sourceUrl": "https://australian.museum/learn/animals/birds/superb-lyrebird/"
+    },
+    "37": {
+      "originalFact": "Wolves communicate using facial expressions, body language, scent and vocalisations.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Wolf#Behavior"
+    },
+    "38": {
+      "originalFact": "A camel's hump stores fat, not water.",
+      "sourceUrl": "https://animals.sandiegozoo.org/animals/camel"
+    },
+    "39": {
+      "originalFact": "Some butterflies can taste using sensors on their feet.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Butterfly#Feeding"
+    },
+    "40": {
+      "originalFact": "Electric eels can produce shocks of up to around 860 volts.",
+      "sourceUrl": "https://doi.org/10.1038/s41467-019-11690-z"
+    },
+    "41": {
+      "originalFact": "Meerkats assign specific group members to act as lookouts while others search for food.",
+      "sourceUrl": "https://animals.sandiegozoo.org/animals/meerkat"
+    },
+    "42": {
+      "originalFact": "The coconut crab is the largest land-living arthropod in the world.",
+      "sourceUrl": "https://www.nhm.ac.uk/discover/coconut-crabs-bird-eating-giants-on-tropical-islands.html"
+    },
+    "43": {
+      "originalFact": "Hummingbirds are the only birds capable of sustained backwards flight.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Hummingbird#Flight"
+    },
+    "46": {
+      "originalFact": "Polar bear fur appears white but is actually made of transparent hairs.",
+      "sourceUrl": "https://www.polarbearsinternational.org/polar-bears-changing-arctic/polar-bear-facts/"
+    },
+    "47": {
+      "originalFact": "The shoebill stork can remain perfectly still for long periods before striking prey with incredible speed.",
+      "sourceUrl": "https://animals.sandiegozoo.org/animals/shoebill"
+    },
+    "48": {
+      "originalFact": "Puffins carry multiple fish at once by holding earlier catches in place with specialised spines inside their beaks.",
+      "sourceUrl": "https://www.audubon.org/field-guide/bird/atlantic-puffin"
+    },
+    "49": {
+      "originalFact": "The Australian lungfish can breathe air using a single lung when oxygen levels in water become too low.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Australian_lungfish"
+    }
+  },
+  "science": {
+    "0": {
+      "originalFact": "A teaspoon of neutron star material would weigh around a billion tonnes on Earth.",
+      "sourceUrl": "https://www.energy.gov/science/doe-explainsneutron-stars",
+      "replacement": "The US Department of Energy estimates that a teaspoon of neutron star matter would weigh about 10 million tons."
+    },
+    "1": {
+      "originalFact": "There are more possible ways to shuffle a deck of 52 cards than there are atoms on Earth.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Factorial#Applications",
+      "replacement": "There are 52 factorial possible orderings of a standard deck of cards, approximately 8 times 10 to the power of 67."
+    },
+    "2": {
+      "originalFact": "Glass is technically an amorphous solid because its atoms are not arranged in a regular crystal pattern.",
+      "sourceUrl": "https://www.cmog.org/article/does-glass-flow"
+    },
+    "3": {
+      "originalFact": "Lightning heats the surrounding air to roughly 30,000°C, about five times hotter than the Sun's surface.",
+      "sourceUrl": "https://www.weather.gov/safety/lightning-temperature"
+    },
+    "4": {
+      "originalFact": "Water can exist as a solid, liquid and gas at the same time under very specific conditions called the triple point.",
+      "sourceUrl": "https://www.nist.gov/video/triple-point-cell"
+    },
+    "5": {
+      "originalFact": "Every atom of gold on Earth was created during ancient neutron star collisions or supernova explosions.",
+      "sourceUrl": "https://www.nasa.gov/press-release/nasa-missions-catch-first-light-from-a-gravitational-wave-event/"
+    },
+    "6": {
+      "originalFact": "The DNA inside a single human cell is about 2 metres long if fully stretched out.",
+      "sourceUrl": "https://www.genome.gov/about-genomics/fact-sheets/Deoxyribonucleic-Acid-Fact-Sheet"
+    },
+    "7": {
+      "originalFact": "The speed of light is so fast that it could travel around Earth's equator about 7.5 times in one second.",
+      "sourceUrl": "https://www.nist.gov/si-redefinition/meet-constants"
+    },
+    "8": {
+      "originalFact": "A single bolt of lightning can contain over a billion joules of energy.",
+      "sourceUrl": "https://www.weather.gov/safety/lightning-science-scienceintro"
+    },
+    "9": {
+      "originalFact": "The human brain generates enough electrical activity to power a small LED light bulb.",
+      "sourceUrl": "https://www.ninds.nih.gov/health-information/public-education/brain-basics/brain-basics-know-your-brain"
+    },
+    "10": {
+      "originalFact": "The coldest temperature ever created in a laboratory is just a tiny fraction of a degree above absolute zero.",
+      "sourceUrl": "https://doi.org/10.1103/PhysRevLett.127.100401"
+    },
+    "11": {
+      "originalFact": "Scientists have found bacteria living more than 2 kilometres beneath Earth's surface.",
+      "sourceUrl": "https://doi.org/10.1126/science.aaa6882"
+    },
+    "12": {
+      "originalFact": "Carbon atoms constantly move between the atmosphere, oceans, soil and living organisms in a process called the carbon cycle.",
+      "sourceUrl": "https://earthobservatory.nasa.gov/features/CarbonCycle"
+    },
+    "13": {
+      "originalFact": "The International System of Units defines a second using vibrations produced by caesium atoms.",
+      "sourceUrl": "https://www.nist.gov/si-redefinition/definitions-si-base-units"
+    },
+    "14": {
+      "originalFact": "Diamonds are made from the same element as pencil lead—carbon—but their atoms are arranged differently.",
+      "sourceUrl": "https://www.rsc.org/periodic-table/element/6/carbon"
+    },
+    "15": {
+      "originalFact": "Some metals, including gallium, can melt in the palm of your hand.",
+      "sourceUrl": "https://www.rsc.org/periodic-table/element/31/gallium"
+    },
+    "16": {
+      "originalFact": "The ozone layer is only a few millimetres thick if compressed to sea-level pressure.",
+      "sourceUrl": "https://ozonewatch.gsfc.nasa.gov/facts/dobson_SH.html"
+    },
+    "17": {
+      "originalFact": "Sound cannot travel through the vacuum of space because there are no particles to carry the vibrations.",
+      "sourceUrl": "https://imagine.gsfc.nasa.gov/ask_astro/space_travel.html"
+    },
+    "18": {
+      "originalFact": "The average human body contains around 37 trillion cells.",
+      "sourceUrl": "https://doi.org/10.1073/pnas.2303077120"
+    },
+    "19": {
+      "originalFact": "Ice is less dense than liquid water, which is why it floats.",
+      "sourceUrl": "https://www.usgs.gov/special-topics/water-science-school/science/water-density"
+    },
+    "20": {
+      "originalFact": "Scientists estimate that every breath you take contains molecules once breathed by dinosaurs.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atmospheric_circulation"
+    },
+    "21": {
+      "originalFact": "The Earth's magnetic field is generated by the movement of molten iron deep inside its outer core.",
+      "sourceUrl": "https://www.usgs.gov/programs/geomagnetism/science/introduction-geomagnetism"
+    },
+    "22": {
+      "originalFact": "Helium was discovered in the Sun before it was discovered on Earth.",
+      "sourceUrl": "https://www.rsc.org/periodic-table/element/2/helium"
+    },
+    "23": {
+      "originalFact": "A single gram of DNA can theoretically store hundreds of petabytes of digital data.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3672958/",
+      "replacement": "A 2013 DNA-storage study described a coding scheme with an information-storage density exceeding two petabytes per gram."
+    },
+    "24": {
+      "originalFact": "The oldest known crystals on Earth are around 4.4 billion years old.",
+      "sourceUrl": "https://doi.org/10.1038/ngeo2075"
+    },
+    "25": {
+      "originalFact": "Some radioactive elements naturally glow because they excite the air around them.",
+      "sourceUrl": "https://www.rsc.org/periodic-table/element/88/radium"
+    },
+    "27": {
+      "originalFact": "The average cloud can weigh hundreds of tonnes despite appearing weightless.",
+      "sourceUrl": "https://www.usgs.gov/special-topics/water-science-school/science/how-much-does-a-cloud-weigh"
+    },
+    "28": {
+      "originalFact": "Scientists can estimate the age of ancient objects using radioactive decay in a process called radiometric dating.",
+      "sourceUrl": "https://www.usgs.gov/programs/energy-and-minerals/science/radiometric-age-dating"
+    },
+    "29": {
+      "originalFact": "A vacuum is not completely empty—it contains fluctuating quantum fields.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Quantum_fluctuation"
+    },
+    "30": {
+      "originalFact": "The Earth's inner core is nearly as hot as the surface of the Sun.",
+      "sourceUrl": "https://doi.org/10.1126/science.1233514"
+    },
+    "32": {
+      "originalFact": "A rainbow is actually a complete circle, but from the ground you usually only see the upper part.",
+      "sourceUrl": "https://www.metoffice.gov.uk/weather/learn-about/weather/optical-effects/rainbows"
+    },
+    "33": {
+      "originalFact": "Hydrogen is the most abundant element in the universe.",
+      "sourceUrl": "https://www.rsc.org/periodic-table/element/1/hydrogen"
+    },
+    "34": {
+      "originalFact": "The air around you is roughly 78% nitrogen and only about 21% oxygen.",
+      "sourceUrl": "https://science.nasa.gov/earth/facts/"
+    },
+    "36": {
+      "originalFact": "Scientists have discovered microbes that survive by feeding on naturally occurring radioactive minerals.",
+      "sourceUrl": "https://doi.org/10.1126/science.1155495"
+    },
+    "37": {
+      "originalFact": "The first synthetic plastic, Bakelite, was invented in 1907.",
+      "sourceUrl": "https://www.acs.org/education/whatischemistry/landmarks/bakelite.html"
+    },
+    "38": {
+      "originalFact": "Some crystals generate electricity when squeezed, an effect known as piezoelectricity.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Piezoelectricity"
+    },
+    "39": {
+      "originalFact": "DNA from every person on Earth is more than 99.9% identical.",
+      "sourceUrl": "https://www.genome.gov/about-genomics/educational-resources/fact-sheets/human-genomic-variation"
+    },
+    "40": {
+      "originalFact": "The deepest humans have drilled into Earth is just over 12 kilometres, barely scratching the planet's crust.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Kola_Superdeep_Borehole"
+    },
+    "41": {
+      "originalFact": "The human eye can detect incredibly small amounts of light—under ideal conditions, just a few photons.",
+      "sourceUrl": "https://doi.org/10.1038/ncomms12172"
+    },
+    "42": {
+      "originalFact": "Mercury is the only metal that is naturally liquid at normal room temperature.",
+      "sourceUrl": "https://www.rsc.org/periodic-table/element/80/mercury"
+    },
+    "43": {
+      "originalFact": "Scientists use lasers to cool atoms to temperatures close to absolute zero.",
+      "sourceUrl": "https://www.nobelprize.org/prizes/physics/1997/summary/"
+    },
+    "44": {
+      "originalFact": "An atom is mostly empty space, with nearly all of its mass concentrated in its nucleus.",
+      "sourceUrl": "https://www.energy.gov/science/doe-explainselectrons"
+    },
+    "45": {
+      "originalFact": "The pressure at the bottom of the Mariana Trench is more than 1,000 times greater than at sea level.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/pressure.html"
+    },
+    "46": {
+      "originalFact": "Plants convert sunlight into chemical energy with an efficiency that scientists are still trying to improve upon artificially.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Photosynthesis"
+    },
+    "47": {
+      "originalFact": "Some fungi can survive the intense radiation found inside damaged nuclear reactors.",
+      "sourceUrl": "https://doi.org/10.1371/journal.pone.0000457"
+    },
+    "48": {
+      "originalFact": "The universe has no known centre because space itself is expanding in every direction.",
+      "sourceUrl": "https://imagine.gsfc.nasa.gov/ask_astro/cosmology.html"
+    },
+    "49": {
+      "originalFact": "Every second, your body carries out trillions of chemical reactions to keep you alive.",
+      "sourceUrl": "https://www.ncbi.nlm.nih.gov/books/NBK26882/"
+    }
+  },
+  "history": {
+    "1": {
+      "originalFact": "The shortest war in recorded history was the Anglo-Zanzibar War of 1896, lasting around 38 minutes.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Anglo-Zanzibar_War"
+    },
+    "2": {
+      "originalFact": "Oxford University was already teaching students before the Aztec Empire was founded.",
+      "sourceUrl": "https://www.ox.ac.uk/about/organisation/history"
+    },
+    "3": {
+      "originalFact": "The Great Pyramid of Giza remained the tallest human-made structure in the world for over 3,800 years.",
+      "sourceUrl": "https://www.britannica.com/topic/Great-Pyramid-of-Giza"
+    },
+    "4": {
+      "originalFact": "The ancient city of Pompeii was so well preserved by volcanic ash that archaeologists have discovered loaves of bread still inside ovens.",
+      "sourceUrl": "https://www.britishmuseum.org/blog/pompeii-and-herculaneum-how-romans-ate"
+    },
+    "5": {
+      "originalFact": "Julius Caesar was once kidnapped by pirates and jokingly promised he would return to crucify them—which he later did.",
+      "sourceUrl": "https://penelope.uchicago.edu/Thayer/E/Roman/Texts/Plutarch/Lives/Caesar*.html"
+    },
+    "6": {
+      "originalFact": "The Rosetta Stone was the key that allowed scholars to decipher ancient Egyptian hieroglyphics.",
+      "sourceUrl": "https://www.britishmuseum.org/collection/egypt/explore-rosetta-stone"
+    },
+    "7": {
+      "originalFact": "Ancient Egyptians kept a wide variety of pets, including monkeys, baboons and even lions.",
+      "sourceUrl": "https://www.metmuseum.org/essays/animals-in-ancient-egypt"
+    },
+    "8": {
+      "originalFact": "The first vending machine was invented in the 1st century AD to dispense holy water in ancient Egypt.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Hero_of_Alexandria"
+    },
+    "9": {
+      "originalFact": "The Library of Alexandria is believed to have contained hundreds of thousands of scrolls at its peak.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Library_of_Alexandria"
+    },
+    "10": {
+      "originalFact": "The Black Death is estimated to have killed between 30% and 60% of Europe's population in the 14th century.",
+      "sourceUrl": "https://www.britannica.com/event/Black-Death"
+    },
+    "11": {
+      "originalFact": "The first known peace treaty was signed between the Egyptians and Hittites over 3,200 years ago.",
+      "sourceUrl": "https://www.un.org/en/observances/unalignment/treaty"
+    },
+    "12": {
+      "originalFact": "The Magna Carta of 1215 helped establish the principle that even kings must obey the law.",
+      "sourceUrl": "https://www.parliament.uk/about/living-heritage/evolutionofparliament/originsofparliament/birthofparliament/overview/magnacarta/"
+    },
+    "13": {
+      "originalFact": "Paper money was first widely used in China centuries before it became common elsewhere.",
+      "sourceUrl": "https://www.britishmuseum.org/collection/object/C_1913-1011-67"
+    },
+    "14": {
+      "originalFact": "The Terracotta Army of China contains thousands of life-sized soldiers, and no two faces are exactly alike.",
+      "sourceUrl": "https://whc.unesco.org/en/list/441/"
+    },
+    "15": {
+      "originalFact": "The ancient Romans built over 400,000 kilometres of roads, many of which influenced modern routes.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Roman_roads"
+    },
+    "16": {
+      "originalFact": "The Colosseum in Rome could hold around 50,000 spectators.",
+      "sourceUrl": "https://colosseo.it/en/area/the-colosseum/"
+    },
+    "17": {
+      "originalFact": "The first modern Olympic Games took place in Athens in 1896 with just 14 participating nations.",
+      "sourceUrl": "https://www.olympics.com/en/olympic-games/athens-1896"
+    },
+    "18": {
+      "originalFact": "Ancient Maya astronomers calculated the length of the year with remarkable accuracy.",
+      "sourceUrl": "https://maya.nmai.si.edu/calendar/calendar-system"
+    },
+    "19": {
+      "originalFact": "Vikings reached North America nearly 500 years before Christopher Columbus.",
+      "sourceUrl": "https://whc.unesco.org/en/list/4/"
+    },
+    "20": {
+      "originalFact": "The Leaning Tower of Pisa began leaning while it was still being built because of unstable ground.",
+      "sourceUrl": "https://www.opapisa.it/en/square-of-miracles/tower/"
+    },
+    "21": {
+      "originalFact": "Ancient Greek engineers built an early analogue computer called the Antikythera Mechanism to predict astronomical events.",
+      "sourceUrl": "https://www.antikythera-mechanism.gr/"
+    },
+    "22": {
+      "originalFact": "The first recorded postal service was established in ancient Persia.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Chapar_Khaneh"
+    },
+    "23": {
+      "originalFact": "The world's oldest known recipe is over 3,700 years old and comes from ancient Mesopotamia.",
+      "sourceUrl": "https://macmillan.yale.edu/stories/what-did-ancient-babylonians-eat-yale-harvard-team-tested-their-recipes"
+    },
+    "24": {
+      "originalFact": "Medieval castles often had spiral staircases designed to favour right-handed defenders.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Spiral_stairs#History"
+    },
+    "25": {
+      "originalFact": "The city of Constantinople was protected by massive walls that stood for over 1,000 years.",
+      "sourceUrl": "https://whc.unesco.org/en/list/356/"
+    },
+    "26": {
+      "originalFact": "During World War II, inflatable tanks were used to trick enemy reconnaissance aircraft.",
+      "sourceUrl": "https://www.nationalww2museum.org/war/articles/wwii-museum-exhibit-ghost-army"
+    },
+    "27": {
+      "originalFact": "The first successful powered flight by the Wright brothers lasted just 12 seconds.",
+      "sourceUrl": "https://www.nps.gov/wrbr/learn/historyculture/thefirstflight.htm"
+    },
+    "28": {
+      "originalFact": "Ancient Roman concrete can survive underwater for thousands of years and is still being studied today.",
+      "sourceUrl": "https://news.mit.edu/2023/roman-concrete-durability-lime-casts-0106"
+    },
+    "29": {
+      "originalFact": "The Statue of Liberty was originally a dull brown colour but turned green naturally over time.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Statue_of_Liberty#Color"
+    },
+    "30": {
+      "originalFact": "The Eiffel Tower was originally intended to stand for only 20 years before being dismantled.",
+      "sourceUrl": "https://www.toureiffel.paris/en/the-monument/history"
+    },
+    "31": {
+      "originalFact": "The first successful circumnavigation of the Earth took nearly three years to complete.",
+      "sourceUrl": "https://www.rmg.co.uk/stories/topics/ferdinand-magellan"
+    },
+    "32": {
+      "originalFact": "During the California Gold Rush, selling equipment often made people richer than mining for gold.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/California_Gold_Rush#Economic_effects"
+    },
+    "33": {
+      "originalFact": "Ancient Inca engineers built stone structures so precisely that many joints cannot fit a knife blade between them.",
+      "sourceUrl": "https://whc.unesco.org/en/list/274/"
+    },
+    "34": {
+      "originalFact": "The world's oldest continuously inhabited city is believed to be Jericho, with evidence of settlement dating back thousands of years.",
+      "sourceUrl": "https://whc.unesco.org/en/list/1687/"
+    },
+    "35": {
+      "originalFact": "The Dead Sea Scrolls include some of the oldest surviving biblical manuscripts ever discovered.",
+      "sourceUrl": "https://www.deadseascrolls.org.il/learn-about-the-scrolls/introduction"
+    },
+    "37": {
+      "originalFact": "The first photograph of a person was taken accidentally in Paris in 1838 because the exposure lasted several minutes.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Boulevard_du_Temple_(photograph)"
+    },
+    "38": {
+      "originalFact": "The Berlin Wall stood for 28 years before falling in 1989.",
+      "sourceUrl": "https://www.stiftung-berliner-mauer.de/de/themen/die-berliner-mauer"
+    },
+    "39": {
+      "originalFact": "The first successful heart transplant took place in South Africa in 1967.",
+      "sourceUrl": "https://www.heartofcapetown.co.za/"
+    },
+    "40": {
+      "originalFact": "The ancient city of Petra was carved directly into sandstone cliffs over 2,000 years ago.",
+      "sourceUrl": "https://whc.unesco.org/en/list/326/"
+    },
+    "41": {
+      "originalFact": "Some medieval books were chained to library shelves to prevent theft because they were so valuable.",
+      "sourceUrl": "https://www.herefordcathedral.org/chained-library"
+    },
+    "42": {
+      "originalFact": "The Titanic carried enough lifeboats for only about half the people on board because regulations were outdated.",
+      "sourceUrl": "https://www.britannica.com/topic/Titanic/Lifeboats-and-the-California-incident"
+    },
+    "43": {
+      "originalFact": "The first successful vaccine, developed by Edward Jenner in 1796, protected against smallpox.",
+      "sourceUrl": "https://www.who.int/news-room/spotlight/history-of-vaccination/history-of-smallpox-vaccination"
+    },
+    "44": {
+      "originalFact": "Ancient Chinese inventors created paper, gunpowder, the compass and printing centuries before they spread across Europe.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Four_Great_Inventions"
+    },
+    "45": {
+      "originalFact": "The first successful transatlantic telegraph cable dramatically reduced communication time between Europe and North America from weeks to minutes.",
+      "sourceUrl": "https://americanhistory.si.edu/explore/stories/transatlantic-cable"
+    },
+    "46": {
+      "originalFact": "During World War I, a temporary Christmas Truce saw soldiers from opposing sides meet peacefully in parts of the front line.",
+      "sourceUrl": "https://www.iwm.org.uk/history/the-real-story-of-the-christmas-truce"
+    },
+    "47": {
+      "originalFact": "The world's oldest known wooden wheel is over 5,000 years old.",
+      "sourceUrl": "https://mgml.si/en/city-museum/exhibitions/211/the-wheel-5200-years/"
+    },
+    "48": {
+      "originalFact": "The Panama Canal uses a system of locks to lift ships approximately 26 metres above sea level before lowering them again.",
+      "sourceUrl": "https://pancanal.com/en/the-canal/"
+    },
+    "49": {
+      "originalFact": "The first successful ascent of Mount Everest was achieved by Edmund Hillary and Tenzing Norgay in 1953.",
+      "sourceUrl": "https://www.rgs.org/schools/resources-for-schools/mountains-volcanoes-and-earthquakes/mount-everest"
+    }
+  },
+  "technology": {
+    "0": {
+      "originalFact": "The first webcam was created at the University of Cambridge to monitor a coffee pot so researchers wouldn't make unnecessary trips.",
+      "sourceUrl": "https://www.cl.cam.ac.uk/coffee/coffee.html"
+    },
+    "1": {
+      "originalFact": "The first hard disk drive, introduced by IBM in 1956, weighed over a tonne and stored just 5 megabytes of data.",
+      "sourceUrl": "https://www.ibm.com/history/ramac"
+    },
+    "2": {
+      "originalFact": "The '@' symbol in email addresses was chosen because it was rarely used in people's names.",
+      "sourceUrl": "https://www.internethalloffame.org/inductee/raymond-tomlinson/"
+    },
+    "3": {
+      "originalFact": "The first domain name ever registered was symbolics.com on March 15, 1985.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Symbolics#Symbolics.com"
+    },
+    "5": {
+      "originalFact": "The first mobile phone call was made in 1973 by Motorola engineer Martin Cooper while walking through New York City.",
+      "sourceUrl": "https://www.motorola.com/us/about/motorola-history-milestones"
+    },
+    "6": {
+      "originalFact": "Modern smartphones contain millions of times more computing power than the computers used during the Apollo Moon missions.",
+      "sourceUrl": "https://www.nasa.gov/history/afj/compessay.html"
+    },
+    "8": {
+      "originalFact": "USB stands for Universal Serial Bus.",
+      "sourceUrl": "https://www.usb.org/about"
+    },
+    "9": {
+      "originalFact": "The first YouTube video, 'Me at the zoo', was uploaded on April 23, 2005.",
+      "sourceUrl": "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+    },
+    "10": {
+      "originalFact": "QR codes were originally invented to help track car parts during manufacturing.",
+      "sourceUrl": "https://www.qrcode.com/en/history/"
+    },
+    "11": {
+      "originalFact": "The original PlayStation was initially planned as a collaboration between Sony and Nintendo.",
+      "sourceUrl": "https://www.playstation.com/en-us/playstation-history/"
+    },
+    "12": {
+      "originalFact": "The first digital camera was built by Kodak engineer Steven Sasson in 1975 and took over 20 seconds to capture one image.",
+      "sourceUrl": "https://www.invent.org/inductees/steven-sasson"
+    },
+    "13": {
+      "originalFact": "Bluetooth is named after Viking king Harald Bluetooth because he united Denmark and Norway, just as the technology united different devices.",
+      "sourceUrl": "https://www.bluetooth.com/about-us/bluetooth-origin/"
+    },
+    "14": {
+      "originalFact": "The world's longest undersea internet cable stretches for tens of thousands of kilometres across the ocean floor.",
+      "sourceUrl": "https://www.submarinecablemap.com/"
+    },
+    "15": {
+      "originalFact": "Most international internet traffic travels through fibre-optic cables under the sea rather than satellites.",
+      "sourceUrl": "https://www.iscpc.org/information/learn-about-submarine-cables/"
+    },
+    "16": {
+      "originalFact": "The first SMS text message simply read 'Merry Christmas.'",
+      "sourceUrl": "https://www.vodafone.com/news/technology/25-anniversary-text-message"
+    },
+    "17": {
+      "originalFact": "Google's first storage system was built using LEGO bricks to hold hard drives.",
+      "sourceUrl": "https://engineering100.stanford.edu/stories/the-future-firmly-in-sight"
+    },
+    "18": {
+      "originalFact": "The first version of Windows was released in 1985.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Windows_1.0"
+    },
+    "19": {
+      "originalFact": "The CAPTCHA test gets its name from 'Completely Automated Public Turing test to tell Computers and Humans Apart.'",
+      "sourceUrl": "https://www.captcha.net/"
+    },
+    "20": {
+      "originalFact": "The first computer virus for personal computers appeared in the 1980s.",
+      "sourceUrl": "https://www.computerhistory.org/timeline/1986/"
+    },
+    "21": {
+      "originalFact": "Solid-state drives have no moving parts, making them much faster and more durable than traditional hard drives.",
+      "sourceUrl": "https://www.ibm.com/think/topics/solid-state-drives"
+    },
+    "23": {
+      "originalFact": "The internet has no single owner or headquarters.",
+      "sourceUrl": "https://www.internetsociety.org/internet/how-it-works/"
+    },
+    "25": {
+      "originalFact": "A modern graphics card can perform trillions of calculations every second.",
+      "sourceUrl": "https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5090/"
+    },
+    "26": {
+      "originalFact": "The first commercial microprocessor, the Intel 4004, contained just 2,300 transistors.",
+      "sourceUrl": "https://www.intel.com/content/www/us/en/history/museum-story-of-intel-4004.html"
+    },
+    "27": {
+      "originalFact": "Today's high-end computer processors contain tens of billions of transistors.",
+      "sourceUrl": "https://www.apple.com/newsroom/2023/10/apple-unveils-m3-m3-pro-and-m3-max-the-most-advanced-chips-for-a-personal-computer/"
+    },
+    "28": {
+      "originalFact": "Wi-Fi doesn't actually stand for 'Wireless Fidelity'—it's simply a brand name.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Wi-Fi#Etymology_and_terminology"
+    },
+    "29": {
+      "originalFact": "The first computer programmer is widely considered to be Ada Lovelace, who wrote an algorithm in the 1840s.",
+      "sourceUrl": "https://www.hsm.ox.ac.uk/imagining-ai"
+    },
+    "30": {
+      "originalFact": "The original name for Windows 1.0 was planned to be 'Interface Manager'.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Windows_1.0#Development"
+    },
+    "31": {
+      "originalFact": "The first Apple logo showed Isaac Newton sitting beneath an apple tree.",
+      "sourceUrl": "https://www.computerhistory.org/collections/catalog/102633211"
+    },
+    "32": {
+      "originalFact": "Laser printers work by using static electricity to attract toner onto paper.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Laser_printing#Printing_process"
+    },
+    "33": {
+      "originalFact": "The first commercially available GPS receiver cost thousands of pounds and was much larger than today's devices.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/GPS_navigation_device#History"
+    },
+    "35": {
+      "originalFact": "Cloud storage doesn't store data in the sky—it stores it in large data centres around the world.",
+      "sourceUrl": "https://aws.amazon.com/what-is/cloud-storage/"
+    },
+    "38": {
+      "originalFact": "Touchscreens were invented decades before smartphones became popular.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Touchscreen#History"
+    },
+    "39": {
+      "originalFact": "Modern fibre-optic cables transmit information using pulses of light rather than electricity.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Optical_fiber#Principle_of_operation"
+    },
+    "41": {
+      "originalFact": "Artificial intelligence has existed as an academic field since the 1950s.",
+      "sourceUrl": "https://home.dartmouth.edu/about/artificial-intelligence-ai-coined-dartmouth"
+    },
+    "42": {
+      "originalFact": "The first commercially successful video game was Pong, released in 1972.",
+      "sourceUrl": "https://www.museumofplay.org/games/pong/"
+    },
+    "43": {
+      "originalFact": "A single data centre can contain hundreds of thousands of servers.",
+      "sourceUrl": "https://aws.amazon.com/what-is/data-center/"
+    },
+    "44": {
+      "originalFact": "The first computer password system was developed at MIT in the early 1960s.",
+      "sourceUrl": "https://multicians.org/thvv/7094.html"
+    },
+    "45": {
+      "originalFact": "Computer chips are manufactured in extremely clean rooms where the air contains fewer particles than a hospital operating theatre.",
+      "sourceUrl": "https://www.intel.com/content/www/us/en/newsroom/resources/press-kits-intel-overview.html"
+    },
+    "46": {
+      "originalFact": "Modern CPUs perform billions of clock cycles every second.",
+      "sourceUrl": "https://www.intel.com/content/www/us/en/gaming/resources/cpu-clock-speed.html"
+    },
+    "47": {
+      "originalFact": "The first robot used in a factory began work in 1961 at a General Motors production line.",
+      "sourceUrl": "https://www.automate.org/robotics/engelberger/unimate-the-first-industrial-robot"
+    },
+    "48": {
+      "originalFact": "The World Wide Web and the internet are different—the web is just one service that runs on the internet.",
+      "sourceUrl": "https://home.cern/science/computing/the-birth-of-the-web/short-history-web/"
+    },
+    "49": {
+      "originalFact": "Many websites are hosted on servers that run the Linux operating system rather than Windows.",
+      "sourceUrl": "https://w3techs.com/technologies/overview/operating_system"
+    }
+  },
+  "geography": {
+    "0": {
+      "originalFact": "Canada has the longest coastline of any country, stretching over 202,000 kilometres.",
+      "sourceUrl": "https://www150.statcan.gc.ca/n1/pub/11-402-x/2011000/chap/geo/geo-eng.htm"
+    },
+    "1": {
+      "originalFact": "Africa is the only continent that lies in all four hemispheres.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Geography_of_Africa"
+    },
+    "3": {
+      "originalFact": "Mount Everest grows by a few millimetres each year as the Indian and Eurasian tectonic plates continue to collide.",
+      "sourceUrl": "https://www.usgs.gov/programs/earthquake-hazards/science/himalaya"
+    },
+    "4": {
+      "originalFact": "The Dead Sea is so salty that most people can float on its surface with little effort.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Dead_Sea"
+    },
+    "5": {
+      "originalFact": "The Amazon River releases more water into the ocean than the next seven largest rivers combined.",
+      "sourceUrl": "https://earthobservatory.nasa.gov/images/147116/the-amazon-river"
+    },
+    "6": {
+      "originalFact": "Iceland has no native species of reptiles or amphibians.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Wildlife_of_Iceland"
+    },
+    "7": {
+      "originalFact": "Australia is wider than the Moon, measuring about 4,000 km across compared to the Moon's 3,474 km diameter.",
+      "sourceUrl": "https://www.ga.gov.au/scientific-topics/national-location-information/dimensions"
+    },
+    "8": {
+      "originalFact": "The Sahara Desert was once home to rivers, lakes and grasslands thousands of years ago.",
+      "sourceUrl": "https://www.nature.com/scitable/knowledge/library/african-humid-period-14759843/"
+    },
+    "9": {
+      "originalFact": "Greenland is the world's largest island that is not considered a continent.",
+      "sourceUrl": "https://www.britannica.com/place/Greenland"
+    },
+    "11": {
+      "originalFact": "Antarctica is the driest, coldest and windiest continent on Earth.",
+      "sourceUrl": "https://www.bas.ac.uk/about/antarctica/geography/"
+    },
+    "13": {
+      "originalFact": "Chile is over 4,300 kilometres long but averages only around 180 kilometres wide.",
+      "sourceUrl": "https://www.britannica.com/place/Chile"
+    },
+    "14": {
+      "originalFact": "The highest waterfall on Earth is Angel Falls in Venezuela, dropping 979 metres.",
+      "sourceUrl": "https://www.britannica.com/place/Angel-Falls"
+    },
+    "15": {
+      "originalFact": "Turkey is located on two continents: Europe and Asia.",
+      "sourceUrl": "https://www.britannica.com/place/Turkey"
+    },
+    "16": {
+      "originalFact": "Lake Baikal in Russia contains around 20% of the world's unfrozen fresh surface water.",
+      "sourceUrl": "https://whc.unesco.org/en/list/754/"
+    },
+    "17": {
+      "originalFact": "The Mariana Trench is deeper than Mount Everest is tall.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/oceandepth.html"
+    },
+    "18": {
+      "originalFact": "France has more time zones than any other country due to its overseas territories.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Time_in_France"
+    },
+    "19": {
+      "originalFact": "There are more than 17,000 islands in Indonesia.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Indonesia#Geography"
+    },
+    "20": {
+      "originalFact": "The Nile and the Amazon are both contenders for the title of the world's longest river.",
+      "sourceUrl": "https://www.britannica.com/place/Amazon-River"
+    },
+    "21": {
+      "originalFact": "The world's largest cave passage is Son Doong Cave in Vietnam.",
+      "sourceUrl": "https://whc.unesco.org/en/list/951/"
+    },
+    "22": {
+      "originalFact": "The Atacama Desert in Chile has places where no significant rainfall has ever been recorded.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atacama_Desert#Climate"
+    },
+    "23": {
+      "originalFact": "Mount Kilimanjaro is the tallest free-standing mountain in the world.",
+      "sourceUrl": "https://whc.unesco.org/en/list/403/"
+    },
+    "24": {
+      "originalFact": "The Arctic is an ocean surrounded by land, while Antarctica is land surrounded by ocean.",
+      "sourceUrl": "https://science.nasa.gov/earth/climate-change/arctic-and-antarctic-sea-ice-how-are-they-different/"
+    },
+    "25": {
+      "originalFact": "Nepal contains eight of the world's ten highest mountains.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Geography_of_Nepal"
+    },
+    "26": {
+      "originalFact": "The country of Kiribati is located in all four hemispheres.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Kiribati"
+    },
+    "27": {
+      "originalFact": "The Great Barrier Reef is the largest coral reef system on Earth and can be seen from space under the right conditions.",
+      "sourceUrl": "https://www.gbrmpa.gov.au/the-reef/reef-facts"
+    },
+    "28": {
+      "originalFact": "The Caspian Sea is actually the world's largest inland body of water despite its name.",
+      "sourceUrl": "https://www.britannica.com/place/Caspian-Sea"
+    },
+    "29": {
+      "originalFact": "The Himalayas were formed by the collision of the Indian and Eurasian tectonic plates, a process that is still happening today.",
+      "sourceUrl": "https://pubs.usgs.gov/gip/dynamic/himalaya.html"
+    },
+    "30": {
+      "originalFact": "Death Valley has recorded the highest reliably measured air temperature on Earth at 56.7°C.",
+      "sourceUrl": "https://wmo.asu.edu/content/world-highest-temperature"
+    },
+    "31": {
+      "originalFact": "More than half of the world's population lives in Asia.",
+      "sourceUrl": "https://population.un.org/wpp/"
+    },
+    "33": {
+      "originalFact": "The Strait of Gibraltar is only about 14 kilometres wide at its narrowest point.",
+      "sourceUrl": "https://www.britannica.com/place/Strait-of-Gibraltar"
+    },
+    "34": {
+      "originalFact": "Japan consists of more than 14,000 islands, although only a few hundred are inhabited.",
+      "sourceUrl": "https://www.gsi.go.jp/kihonjohochousa/pressrelease20230228.html"
+    },
+    "35": {
+      "originalFact": "Iceland is one of the few places where you can walk between the North American and Eurasian tectonic plates.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/%C3%9Eingvellir#Geography"
+    },
+    "36": {
+      "originalFact": "Botswana is home to the world's largest population of African elephants.",
+      "sourceUrl": "https://www.iucn.org/news/species/202103/african-elephant-species-now-endangered-and-critically-endangered-iucn-red-list"
+    },
+    "37": {
+      "originalFact": "The country of Nauru has no official capital city.",
+      "sourceUrl": "https://www.britannica.com/place/Nauru"
+    },
+    "38": {
+      "originalFact": "The world's largest salt flat, Salar de Uyuni in Bolivia, becomes a giant mirror after rainfall.",
+      "sourceUrl": "https://earthobservatory.nasa.gov/images/150729/salar-de-uyuni"
+    },
+    "39": {
+      "originalFact": "The Netherlands has reclaimed thousands of square kilometres of land from the sea.",
+      "sourceUrl": "https://whc.unesco.org/en/list/899/"
+    },
+    "40": {
+      "originalFact": "The longest mountain range on Earth is actually underwater: the Mid-Ocean Ridge stretches for about 65,000 kilometres.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/midoceanridge.html"
+    },
+    "41": {
+      "originalFact": "Papua New Guinea is home to over 800 spoken languages, more than any other country.",
+      "sourceUrl": "https://www.ethnologue.com/country/PG/"
+    },
+    "42": {
+      "originalFact": "The Danube River flows through more countries than any other river in the world.",
+      "sourceUrl": "https://www.icpdr.org/danube-basin"
+    },
+    "43": {
+      "originalFact": "More than 90% of Egypt's population lives near the Nile River.",
+      "sourceUrl": "https://www.britannica.com/place/Egypt/Settlement-patterns"
+    },
+    "44": {
+      "originalFact": "Mongolia is the least densely populated independent country in the world.",
+      "sourceUrl": "https://data.worldbank.org/indicator/EN.POP.DNST?locations=MN"
+    },
+    "45": {
+      "originalFact": "The Maldives is the world's lowest country, with an average elevation of just over 1 metre above sea level.",
+      "sourceUrl": "https://www.worldbank.org/en/country/maldives/overview"
+    },
+    "47": {
+      "originalFact": "The Equator passes through 13 countries.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Equator"
+    },
+    "48": {
+      "originalFact": "The Grand Canyon was carved over millions of years, mainly by the Colorado River.",
+      "sourceUrl": "https://www.nps.gov/grca/learn/nature/geologicformations.htm"
+    },
+    "49": {
+      "originalFact": "The Earth's continents move by a few centimetres every year due to plate tectonics.",
+      "sourceUrl": "https://pubs.usgs.gov/gip/dynamic/understanding.html"
+    }
+  },
+  "nature": {
+    "0": {
+      "originalFact": "A single mature oak tree can support more than 2,000 different species of plants, fungi and animals.",
+      "sourceUrl": "https://www.woodlandtrust.org.uk/trees-woods-and-wildlife/british-trees/a-z-of-british-trees/english-oak/"
+    },
+    "2": {
+      "originalFact": "The Amazon Rainforest produces much of its own rainfall by releasing water vapour from billions of trees.",
+      "sourceUrl": "https://doi.org/10.1038/nature11390"
+    },
+    "3": {
+      "originalFact": "Some giant sequoia trees were already over 1,000 years old when the Vikings reached North America.",
+      "sourceUrl": "https://www.nps.gov/seki/learn/nature/bigtrees.htm"
+    },
+    "5": {
+      "originalFact": "Bamboo is one of the fastest-growing plants on Earth, with some species growing nearly a metre in a single day.",
+      "sourceUrl": "https://www.guinnessworldrecords.com/world-records/fastest-growing-plant"
+    },
+    "6": {
+      "originalFact": "Wildfires can actually help some forests by clearing dead vegetation and triggering certain seeds to germinate.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Fire_ecology"
+    },
+    "7": {
+      "originalFact": "Some pinecones only open after being exposed to the intense heat of a forest fire.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Pinus_contorta#Ecology"
+    },
+    "8": {
+      "originalFact": "A single bolt of lightning can create glass when it melts sand into structures called fulgurites.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Fulgurite"
+    },
+    "9": {
+      "originalFact": "The oldest known living tree is a Great Basin bristlecone pine over 4,800 years old.",
+      "sourceUrl": "https://www.fs.usda.gov/detail/inyo/specialplaces/?cid=stelprdb5129900"
+    },
+    "10": {
+      "originalFact": "Some deserts become covered in colourful wildflowers after rare heavy rainfall.",
+      "sourceUrl": "https://www.nps.gov/deva/learn/nature/wildflowers.htm"
+    },
+    "11": {
+      "originalFact": "Raindrops are not tear-shaped—they're actually rounded and flatten as they fall.",
+      "sourceUrl": "https://www.usgs.gov/special-topics/water-science-school/science/are-raindrops-shaped-teardrops"
+    },
+    "12": {
+      "originalFact": "The tallest trees on Earth are coast redwoods, with some exceeding 115 metres in height.",
+      "sourceUrl": "https://www.nps.gov/redw/faqs.htm"
+    },
+    "13": {
+      "originalFact": "Mangrove forests protect coastlines by reducing wave energy and preventing erosion.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/mangroves.html"
+    },
+    "14": {
+      "originalFact": "Volcanic ash is often extremely fertile, making land around volcanoes ideal for farming.",
+      "sourceUrl": "https://www.usgs.gov/programs/VHP/volcanic-ash"
+    },
+    "16": {
+      "originalFact": "Some plants can detect when neighbouring plants are being eaten and increase their own chemical defences.",
+      "sourceUrl": "https://doi.org/10.1073/pnas.0308037100"
+    },
+    "17": {
+      "originalFact": "Morning dew forms when surfaces cool enough for water vapour in the air to condense.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Dew"
+    },
+    "18": {
+      "originalFact": "The Earth's atmosphere extends hundreds of kilometres into space, gradually becoming thinner with altitude.",
+      "sourceUrl": "https://science.nasa.gov/earth/earth-atmosphere/earths-atmosphere-a-multi-layered-cake/"
+    },
+    "19": {
+      "originalFact": "Peat bogs store enormous amounts of carbon, helping slow climate change.",
+      "sourceUrl": "https://www.iucn.org/resources/issues-brief/peatlands-and-climate-change"
+    },
+    "20": {
+      "originalFact": "Some cactus species can survive for over a year without rainfall.",
+      "sourceUrl": "https://www.nps.gov/sagu/learn/nature/saguaro.htm"
+    },
+    "21": {
+      "originalFact": "Lichens are partnerships between fungi and algae or cyanobacteria rather than single organisms.",
+      "sourceUrl": "https://www.fs.usda.gov/wildflowers/beauty/lichens/biology.shtml"
+    },
+    "22": {
+      "originalFact": "Many seeds can remain dormant for decades before finally germinating under the right conditions.",
+      "sourceUrl": "https://www.kew.org/read-and-watch/seed-banks-saving-seeds"
+    },
+    "23": {
+      "originalFact": "Volcanoes have created entire islands, including Surtsey, which appeared off Iceland in 1963.",
+      "sourceUrl": "https://whc.unesco.org/en/list/1267/"
+    },
+    "24": {
+      "originalFact": "Clouds are made of billions of tiny water droplets or ice crystals rather than water vapour itself.",
+      "sourceUrl": "https://www.weather.gov/jetstream/clouds_intro"
+    },
+    "25": {
+      "originalFact": "The largest hailstone officially recorded weighed over 1 kilogram.",
+      "sourceUrl": "https://wmo.asu.edu/content/world-heaviest-hailstone"
+    },
+    "26": {
+      "originalFact": "Some plants can generate enough heat to melt surrounding snow while flowering.",
+      "sourceUrl": "https://www.fs.usda.gov/wildflowers/plant-of-the-week/symplocarpus_foetidus.shtml"
+    },
+    "27": {
+      "originalFact": "Trees absorb carbon dioxide from the atmosphere and store the carbon in their trunks, branches and roots.",
+      "sourceUrl": "https://www.fs.usda.gov/ccrc/topics/forest-carbon"
+    },
+    "28": {
+      "originalFact": "The smell after rain is partly caused by a substance called geosmin, released by soil-dwelling bacteria.",
+      "sourceUrl": "https://doi.org/10.1038/ncomms7083"
+    },
+    "29": {
+      "originalFact": "Ancient forests can take centuries to develop and support species found nowhere else.",
+      "sourceUrl": "https://www.woodlandtrust.org.uk/trees-woods-and-wildlife/habitats/ancient-woodland/"
+    },
+    "30": {
+      "originalFact": "Waterfalls slowly move upstream over thousands of years as erosion wears away the rock beneath them.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Waterfall#Formation"
+    },
+    "31": {
+      "originalFact": "Some flowers can change colour after being pollinated to signal insects that they have already been visited.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Floral_color_change"
+    },
+    "32": {
+      "originalFact": "Mosses can survive complete dehydration and return to life when water becomes available again.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9314017/"
+    },
+    "33": {
+      "originalFact": "Earth is the only known planet confirmed to have liquid water covering most of its surface.",
+      "sourceUrl": "https://science.nasa.gov/earth/facts/"
+    },
+    "34": {
+      "originalFact": "Certain orchids mimic female insects so closely that males attempt to mate with the flowers, spreading pollen.",
+      "sourceUrl": "https://www.kew.org/read-and-watch/plant-pollination"
+    },
+    "35": {
+      "originalFact": "The largest flower in the world, Rafflesia arnoldii, can grow over 1 metre across.",
+      "sourceUrl": "https://www.kew.org/read-and-watch/rafflesia-corpse-flower"
+    },
+    "36": {
+      "originalFact": "Trees release oxygen as a by-product of photosynthesis rather than because they need to.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Photosynthesis"
+    },
+    "37": {
+      "originalFact": "The Giant's Causeway in Northern Ireland consists of thousands of hexagonal basalt columns formed by cooling lava.",
+      "sourceUrl": "https://whc.unesco.org/en/list/369/"
+    },
+    "38": {
+      "originalFact": "Some lakes naturally change colour throughout the year because of algae and mineral concentrations.",
+      "sourceUrl": "https://earthobservatory.nasa.gov/images/150142/a-lake-of-different-colors"
+    },
+    "40": {
+      "originalFact": "Glaciers store around 69% of the world's freshwater.",
+      "sourceUrl": "https://www.usgs.gov/special-topics/water-science-school/science/ice-snow-and-glaciers-and-water-cycle"
+    },
+    "41": {
+      "originalFact": "Some mushrooms can glow in the dark through a process known as bioluminescence.",
+      "sourceUrl": "https://doi.org/10.1016/j.cub.2015.02.021"
+    },
+    "42": {
+      "originalFact": "A mature beech tree can produce thousands of seeds in a single year.",
+      "sourceUrl": "https://www.woodlandtrust.org.uk/trees-woods-and-wildlife/british-trees/a-z-of-british-trees/common-beech/"
+    },
+    "43": {
+      "originalFact": "The Earth's oldest known rocks are over 4 billion years old.",
+      "sourceUrl": "https://www.nps.gov/subjects/geology/oldest-rocks.htm"
+    },
+    "44": {
+      "originalFact": "Natural hot springs are heated by geothermal energy from beneath Earth's surface.",
+      "sourceUrl": "https://www.usgs.gov/special-topics/water-science-school/science/hot-springs"
+    },
+    "45": {
+      "originalFact": "Some vines can grow more than 20 centimetres in a single day during peak growing conditions.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Kudzu"
+    },
+    "46": {
+      "originalFact": "Avalanches can travel faster than 300 kilometres per hour.",
+      "sourceUrl": "https://www.slf.ch/en/avalanches/avalanche-science-and-prevention/avalanche-types/"
+    },
+    "47": {
+      "originalFact": "The Antarctic ice sheet contains enough frozen water to raise global sea levels by around 58 metres if it completely melted.",
+      "sourceUrl": "https://www.bas.ac.uk/about/antarctica/geography/ice/"
+    },
+    "48": {
+      "originalFact": "Many tropical rainforests contain more species of trees in a single hectare than are found across entire countries in cooler climates.",
+      "sourceUrl": "https://www.si.edu/spotlight/biodiversity/biodiversity-facts"
+    },
+    "49": {
+      "originalFact": "The aurora borealis is created when charged particles from the Sun collide with gases high in Earth's atmosphere.",
+      "sourceUrl": "https://spaceplace.nasa.gov/aurora/en/"
+    }
+  },
+  "humanbody": {
+    "0": {
+      "originalFact": "Your brain uses around 20% of your body's total energy despite making up only about 2% of your body weight.",
+      "sourceUrl": "https://doi.org/10.1073/pnas.172399499"
+    },
+    "1": {
+      "originalFact": "The human eye can distinguish millions of different colours.",
+      "sourceUrl": "https://www.nei.nih.gov/learn-about-eye-health/healthy-vision/how-eyes-work"
+    },
+    "2": {
+      "originalFact": "Your stomach completely replaces its inner lining every few days to prevent it from digesting itself.",
+      "sourceUrl": "https://www.ncbi.nlm.nih.gov/books/NBK6600/"
+    },
+    "3": {
+      "originalFact": "Your bones are constantly being broken down and rebuilt throughout your life.",
+      "sourceUrl": "https://www.niams.nih.gov/health-topics/bone-health-and-osteoporosis"
+    },
+    "4": {
+      "originalFact": "The smallest bone in your body, the stapes, is only about 3 millimetres long.",
+      "sourceUrl": "https://www.nidcd.nih.gov/health/how-do-we-hear"
+    },
+    "5": {
+      "originalFact": "Your heart beats roughly 100,000 times every day.",
+      "sourceUrl": "https://www.nhlbi.nih.gov/health/heart/anatomy"
+    },
+    "6": {
+      "originalFact": "An adult's blood vessels would stretch over 100,000 kilometres if laid end to end.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Blood_vessel"
+    },
+    "7": {
+      "originalFact": "Your skin completely renews itself approximately every month.",
+      "sourceUrl": "https://www.ncbi.nlm.nih.gov/books/NBK470464/"
+    },
+    "8": {
+      "originalFact": "Your liver is the only major internal organ capable of regenerating much of its lost tissue.",
+      "sourceUrl": "https://www.niddk.nih.gov/health-information/liver-disease"
+    },
+    "9": {
+      "originalFact": "The human brain contains around 86 billion neurons.",
+      "sourceUrl": "https://doi.org/10.1002/cne.21974"
+    },
+    "10": {
+      "originalFact": "Your nose can remember thousands of different scents.",
+      "sourceUrl": "https://www.nidcd.nih.gov/health/smell-disorders"
+    },
+    "13": {
+      "originalFact": "Red blood cells travel around your body in about one minute.",
+      "sourceUrl": "https://www.nhlbi.nih.gov/health/heart/blood-flow"
+    },
+    "14": {
+      "originalFact": "Your fingernails grow about three times faster than your toenails.",
+      "sourceUrl": "https://doi.org/10.1111/j.1468-3083.2009.03426.x"
+    },
+    "15": {
+      "originalFact": "Goosebumps are a leftover survival response from our distant ancestors with much thicker body hair.",
+      "sourceUrl": "https://www.nih.gov/news-events/nih-research-matters/what-goosebumps-are"
+    },
+    "17": {
+      "originalFact": "Your ears never stop detecting sound, even while you're asleep—your brain simply filters most of it out.",
+      "sourceUrl": "https://www.nidcd.nih.gov/health/how-do-we-hear"
+    },
+    "18": {
+      "originalFact": "The average person blinks around 15 to 20 times every minute.",
+      "sourceUrl": "https://www.aao.org/eye-health/tips-prevention/blinking-eye-health"
+    },
+    "19": {
+      "originalFact": "Your tongue is covered in thousands of tiny taste buds that are replaced every one to two weeks.",
+      "sourceUrl": "https://www.nidcd.nih.gov/health/taste-disorders"
+    },
+    "20": {
+      "originalFact": "Your pupils can change size in less than a second to adjust to different light levels.",
+      "sourceUrl": "https://www.nei.nih.gov/learn-about-eye-health/healthy-vision/how-eyes-work"
+    },
+    "22": {
+      "originalFact": "Your body contains enough iron to make a small nail.",
+      "sourceUrl": "https://ods.od.nih.gov/factsheets/Iron-HealthProfessional/"
+    },
+    "23": {
+      "originalFact": "Each of your kidneys contains around one million tiny filtering units called nephrons.",
+      "sourceUrl": "https://www.niddk.nih.gov/health-information/kidney-disease/kidneys-how-they-work"
+    },
+    "24": {
+      "originalFact": "The average adult breathes around 20,000 times every day.",
+      "sourceUrl": "https://www.nhlbi.nih.gov/health/lungs"
+    },
+    "25": {
+      "originalFact": "Your brain continues developing until your mid-to-late twenties.",
+      "sourceUrl": "https://www.nimh.nih.gov/health/publications/the-teen-brain-7-things-to-know"
+    },
+    "26": {
+      "originalFact": "The enamel on your teeth is the hardest substance produced by the human body.",
+      "sourceUrl": "https://www.nidcr.nih.gov/health-info/tooth-decay/more-info/tooth-decay-process"
+    },
+    "27": {
+      "originalFact": "Your immune system creates millions of different antibodies capable of recognising countless threats.",
+      "sourceUrl": "https://www.niaid.nih.gov/research/immune-system-overview"
+    },
+    "28": {
+      "originalFact": "You naturally shed around 30,000 to 40,000 skin cells every minute.",
+      "sourceUrl": "https://kidshealth.org/en/kids/skin.html"
+    },
+    "30": {
+      "originalFact": "The human body contains more bacterial cells than many people realise, most of which are harmless or beneficial.",
+      "sourceUrl": "https://doi.org/10.1371/journal.pbio.1002533"
+    },
+    "31": {
+      "originalFact": "Your lungs contain around 480 million tiny air sacs called alveoli.",
+      "sourceUrl": "https://doi.org/10.1164/rccm.200308-1107OC"
+    },
+    "32": {
+      "originalFact": "The average human heart pumps around 7,500 litres of blood every day.",
+      "sourceUrl": "https://www.nhlbi.nih.gov/health/heart/blood-flow"
+    },
+    "34": {
+      "originalFact": "Babies are born with around 270 bones, many of which fuse together as they grow.",
+      "sourceUrl": "https://medlineplus.gov/ency/article/002062.htm"
+    },
+    "35": {
+      "originalFact": "Your sense of smell is closely linked to the part of the brain responsible for memory.",
+      "sourceUrl": "https://www.nidcd.nih.gov/health/smell-disorders"
+    },
+    "37": {
+      "originalFact": "Your body produces vitamin D when your skin is exposed to sunlight.",
+      "sourceUrl": "https://ods.od.nih.gov/factsheets/VitaminD-HealthProfessional/"
+    },
+    "39": {
+      "originalFact": "Your body loses heat fastest through areas with lots of blood flow, such as your head and neck, when they are uncovered.",
+      "sourceUrl": "https://www.cdc.gov/winter-weather/about/index.html"
+    },
+    "40": {
+      "originalFact": "The human brain can process visual information in as little as 13 milliseconds.",
+      "sourceUrl": "https://news.mit.edu/2014/in-the-blink-of-an-eye-0116"
+    },
+    "41": {
+      "originalFact": "Your muscles make up around 40% of your body weight.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Muscle"
+    },
+    "42": {
+      "originalFact": "The average person has around 5 litres of blood circulating through their body.",
+      "sourceUrl": "https://www.nhlbi.nih.gov/health/heart/blood-flow"
+    },
+    "43": {
+      "originalFact": "Every second, your bone marrow produces around 2 million new red blood cells.",
+      "sourceUrl": "https://www.hematology.org/education/patients/blood-basics"
+    },
+    "44": {
+      "originalFact": "Your heartbeat naturally speeds up when you inhale and slows slightly when you exhale.",
+      "sourceUrl": "https://doi.org/10.1161/01.CIR.94.4.842"
+    },
+    "45": {
+      "originalFact": "The tiny hairs inside your ears help maintain your sense of balance.",
+      "sourceUrl": "https://www.nidcd.nih.gov/health/balance-disorders"
+    },
+    "46": {
+      "originalFact": "Your fingerprints begin forming before you are born and remain unique throughout your life.",
+      "sourceUrl": "https://medlineplus.gov/genetics/understanding/traits/fingerprints/"
+    },
+    "47": {
+      "originalFact": "Even identical twins have different fingerprints.",
+      "sourceUrl": "https://medlineplus.gov/genetics/understanding/traits/fingerprints/"
+    },
+    "48": {
+      "originalFact": "The average human jaw can exert a bite force of over 700 newtons using the back teeth.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10705987/"
+    },
+    "49": {
+      "originalFact": "Your body is constantly repairing DNA damage that occurs naturally inside your cells every day.",
+      "sourceUrl": "https://www.nobelprize.org/prizes/chemistry/2015/press-release/"
+    }
+  },
+  "ocean": {
+    "1": {
+      "originalFact": "The Mariana Trench is so deep that Mount Everest could fit inside it with over 2 kilometres of water above its peak.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/oceandepth.html"
+    },
+    "3": {
+      "originalFact": "Blue whales produce calls so powerful they can travel hundreds of kilometres underwater.",
+      "sourceUrl": "https://www.fisheries.noaa.gov/species/blue-whale"
+    },
+    "4": {
+      "originalFact": "The pressure at the bottom of the Mariana Trench is over 1,000 times greater than at sea level.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/pressure.html"
+    },
+    "5": {
+      "originalFact": "Some deep-sea fish create their own light using bioluminescent organs.",
+      "sourceUrl": "https://oceanexplorer.noaa.gov/ocean-fact/bioluminescence/"
+    },
+    "6": {
+      "originalFact": "Hydrothermal vents can reach temperatures above 400°C, yet the surrounding water doesn't boil because of the immense pressure.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/vents.html"
+    },
+    "7": {
+      "originalFact": "The giant siphonophore is one of the longest animals on Earth, with some colonies exceeding 40 metres in length.",
+      "sourceUrl": "https://schmidtocean.org/new-species-discovered-during-exploration-of-abyssal-deep-sea-canyons-off-ningaloo/"
+    },
+    "8": {
+      "originalFact": "The ocean absorbs about 90% of the excess heat trapped by greenhouse gases.",
+      "sourceUrl": "https://science.nasa.gov/earth/explore/earth-indicators/ocean-warming/"
+    },
+    "9": {
+      "originalFact": "Some jellyfish are effectively biologically immortal by reverting to an earlier stage of their life cycle.",
+      "sourceUrl": "https://www.amnh.org/explore/news-blogs/on-exhibit-posts/the-immortal-jellyfish"
+    },
+    "10": {
+      "originalFact": "The deepest fish ever recorded was found more than 8,000 metres below the ocean's surface.",
+      "sourceUrl": "https://www.uwa.edu.au/news/Article/2023/April/Scientists-break-new-record-after-finding-worlds-deepest-fish"
+    },
+    "11": {
+      "originalFact": "Octopuses have been observed collecting coconut shells to use as portable shelters.",
+      "sourceUrl": "https://doi.org/10.1016/j.cub.2009.10.052"
+    },
+    "12": {
+      "originalFact": "The ocean contains enough dissolved gold that, if it could be extracted economically, every person on Earth could theoretically receive a share.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/gold.html"
+    },
+    "13": {
+      "originalFact": "Whale sharks are the largest fish on Earth and can grow over 18 metres long.",
+      "sourceUrl": "https://www.floridamuseum.ufl.edu/discover-fish/species-profiles/rhincodon-typus/"
+    },
+    "14": {
+      "originalFact": "The deepest known shipwreck, the USS Samuel B. Roberts, lies nearly 7,000 metres below the surface.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/USS_Samuel_B._Roberts_(DE-413)#Wreck"
+    },
+    "15": {
+      "originalFact": "Some species of squid can instantly become almost completely transparent.",
+      "sourceUrl": "https://www.mbari.org/animal/glass-squid/"
+    },
+    "16": {
+      "originalFact": "Sea cucumbers can eject parts of their internal organs to distract predators before regenerating them.",
+      "sourceUrl": "https://ocean.si.edu/ocean-life/invertebrates/sea-cucumbers"
+    },
+    "17": {
+      "originalFact": "The Atlantic Ocean is slowly getting wider as tectonic plates continue to move apart.",
+      "sourceUrl": "https://pubs.usgs.gov/gip/dynamic/understanding.html"
+    },
+    "18": {
+      "originalFact": "Coral reefs occupy less than 1% of the ocean floor but support around 25% of all marine species.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/coral_biodiversity.html"
+    },
+    "19": {
+      "originalFact": "The largest migration on Earth happens every night in the ocean as billions of tiny animals swim towards the surface to feed.",
+      "sourceUrl": "https://oceanexplorer.noaa.gov/ocean-fact/vertical-migration/"
+    },
+    "20": {
+      "originalFact": "Sperm whales can dive for over an hour and reach depths exceeding 2,000 metres.",
+      "sourceUrl": "https://www.fisheries.noaa.gov/species/sperm-whale"
+    },
+    "21": {
+      "originalFact": "The ocean produces roughly half of the oxygen in Earth's atmosphere, mainly through microscopic marine organisms.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/ocean-oxygen.html"
+    },
+    "22": {
+      "originalFact": "Some deep-sea crabs farm bacteria on their bodies for food.",
+      "sourceUrl": "https://doi.org/10.1371/journal.pone.0026243"
+    },
+    "23": {
+      "originalFact": "The colossal squid has the largest eyes of any known animal, reaching up to 27 centimetres across.",
+      "sourceUrl": "https://www.tepapa.govt.nz/discover-collections/read-watch-play/science-and-nature/colossal-squid"
+    },
+    "24": {
+      "originalFact": "Brinicles, sometimes called 'ice fingers of death', form beneath sea ice and can freeze marine animals that move too slowly.",
+      "sourceUrl": "https://doi.org/10.1021/la4009703"
+    },
+    "25": {
+      "originalFact": "The deepest point in the ocean is Challenger Deep, reaching nearly 11 kilometres below sea level.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/oceandepth.html"
+    },
+    "26": {
+      "originalFact": "The ocean floor contains mountain ranges longer than any found on land.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/midoceanridge.html"
+    },
+    "27": {
+      "originalFact": "Some dolphins use marine sponges as tools to protect their noses while searching for food.",
+      "sourceUrl": "https://doi.org/10.1073/pnas.0500232102"
+    },
+    "28": {
+      "originalFact": "Sea turtles can travel thousands of kilometres before returning to the same beach where they hatched.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/turtle-migration.html"
+    },
+    "29": {
+      "originalFact": "The blue dragon sea slug feeds on venomous Portuguese man o' wars and stores their stinging cells for its own defence.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Glaucus_atlanticus"
+    },
+    "30": {
+      "originalFact": "Some sharks can detect electrical signals produced by the muscles of nearby animals.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Ampullae_of_Lorenzini"
+    },
+    "31": {
+      "originalFact": "Ocean currents transport enormous amounts of heat around the planet, helping regulate Earth's climate.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/currents.html"
+    },
+    "32": {
+      "originalFact": "Mantis shrimp can see types of light that humans cannot detect, including ultraviolet wavelengths.",
+      "sourceUrl": "https://doi.org/10.1126/science.1245824"
+    },
+    "33": {
+      "originalFact": "The vampire squid survives in parts of the ocean with extremely low oxygen levels.",
+      "sourceUrl": "https://www.mbari.org/animal/vampire-squid/"
+    },
+    "34": {
+      "originalFact": "Some deep-sea creatures spend their entire lives in complete darkness.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/light_travel.html"
+    },
+    "35": {
+      "originalFact": "The Greenland shark is one of the longest-living vertebrates, with some individuals estimated to be over 400 years old.",
+      "sourceUrl": "https://doi.org/10.1126/science.aaf1703"
+    },
+    "37": {
+      "originalFact": "The Bloop, a mysterious underwater sound detected in 1997, was later identified as ice cracking rather than an unknown creature.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/bloop.html"
+    },
+    "38": {
+      "originalFact": "The largest living coral reef system is Australia's Great Barrier Reef, stretching for over 2,300 kilometres.",
+      "sourceUrl": "https://www.gbrmpa.gov.au/the-reef/reef-facts"
+    },
+    "39": {
+      "originalFact": "Some fish change sex during their lifetime depending on the needs of their group.",
+      "sourceUrl": "https://ocean.si.edu/ocean-life/fish/fish-reproduction"
+    },
+    "40": {
+      "originalFact": "The ocean contains underwater waterfalls caused by differences in water temperature and salinity.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/denmark-strait.html"
+    },
+    "41": {
+      "originalFact": "Narwhals use their tusks to sense changes in water temperature, pressure and salinity.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/24639076/"
+    },
+    "42": {
+      "originalFact": "The Portuguese man o' war is not a single animal but a colony of specialised organisms working together.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/portuguese-man-o-war.html"
+    },
+    "43": {
+      "originalFact": "Bioluminescence has evolved independently dozens of times in marine organisms.",
+      "sourceUrl": "https://www.si.edu/newsdesk/releases/bioluminescence-first-evolved-animals-least-540-million-years-ago"
+    },
+    "44": {
+      "originalFact": "Some deep-sea anglerfish rely on glowing lures to attract prey in complete darkness.",
+      "sourceUrl": "https://www.mbari.org/news/amazing-black-sea-devil-anglerfish-observed-in-monterey-bay/"
+    },
+    "45": {
+      "originalFact": "Ocean waves can travel thousands of kilometres across entire oceans before reaching land.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/wavesinocean.html"
+    },
+    "46": {
+      "originalFact": "The Moon's gravity causes most of Earth's ocean tides.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/tides.html"
+    },
+    "47": {
+      "originalFact": "Scientists discover hundreds of new marine species almost every year.",
+      "sourceUrl": "https://www.marinespecies.org/"
+    },
+    "48": {
+      "originalFact": "The deepest parts of the ocean are colder than most household refrigerators.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/how-many-oceans.html"
+    }
+  }
+}

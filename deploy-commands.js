@@ -1,3 +1,4 @@
+require('./utils/safeLogging').installSafeLogging();
 require('dotenv').config();
 
 const fs =
@@ -7,7 +8,6 @@ const path =
   require('path');
 
 const {
-  PermissionFlagsBits,
   REST,
   Routes
 } = require('discord.js');
@@ -35,71 +35,7 @@ if (!CLIENT_ID) {
   throw new Error('CLIENT_ID missing in .env');
 }
 
-const permissionDefaults = {
-  ban: PermissionFlagsBits.BanMembers,
-  unban: PermissionFlagsBits.BanMembers,
-  kick: PermissionFlagsBits.KickMembers,
-  mute: PermissionFlagsBits.ModerateMembers,
-  unmute: PermissionFlagsBits.ModerateMembers,
-  warn: PermissionFlagsBits.ModerateMembers,
-  warnings: PermissionFlagsBits.ModerateMembers,
-  clearwarns: PermissionFlagsBits.ManageGuild,
-  case: PermissionFlagsBits.ManageGuild,
-  cases: PermissionFlagsBits.ManageGuild,
-  history: PermissionFlagsBits.ManageGuild,
-  editcase: PermissionFlagsBits.ManageGuild,
-  modlogs: PermissionFlagsBits.ManageGuild,
-  modlogremove: PermissionFlagsBits.ManageGuild,
-  purge: PermissionFlagsBits.ManageMessages,
-  role: PermissionFlagsBits.ManageRoles,
-  slowmode: PermissionFlagsBits.ManageChannels,
-  lock: PermissionFlagsBits.ManageChannels,
-  unlock: PermissionFlagsBits.ManageChannels,
-  poll: PermissionFlagsBits.ManageMessages,
-  setmodlogs: PermissionFlagsBits.ManageGuild,
-  suggestchannel: PermissionFlagsBits.ManageGuild,
-  loggingmanager: PermissionFlagsBits.Administrator,
-  suggestionmanager: PermissionFlagsBits.Administrator,
-  verification: PermissionFlagsBits.Administrator,
-  reactionrole: PermissionFlagsBits.Administrator,
-  greetings: PermissionFlagsBits.Administrator,
-  setadminrole: PermissionFlagsBits.Administrator,
-  setstaffrole: PermissionFlagsBits.Administrator,
-  setgiveawayrole: PermissionFlagsBits.Administrator,
-  setticketchannel: PermissionFlagsBits.Administrator,
-  settranscriptchannel: PermissionFlagsBits.Administrator,
-  linkblock: PermissionFlagsBits.ManageGuild,
-  ticketpanel: PermissionFlagsBits.Administrator,
-  ticketsetup: PermissionFlagsBits.Administrator,
-  ticketpanelv3: PermissionFlagsBits.Administrator,
-  ticketdebug: PermissionFlagsBits.Administrator,
-  ticketstats: PermissionFlagsBits.Administrator,
-  ticketsla: PermissionFlagsBits.Administrator,
-  ticketfeedback: PermissionFlagsBits.Administrator,
-  freegames: PermissionFlagsBits.Administrator,
-  stafflist: PermissionFlagsBits.Administrator,
-  giveaway: PermissionFlagsBits.ManageGuild,
-  greroll: PermissionFlagsBits.ManageGuild,
-  gend: PermissionFlagsBits.ManageGuild,
-  gdelete: PermissionFlagsBits.ManageGuild,
-  glist: PermissionFlagsBits.ManageGuild,
-  gstats: PermissionFlagsBits.ManageGuild,
-  ginfo: PermissionFlagsBits.ManageGuild,
-  gblacklist: PermissionFlagsBits.ManageGuild,
-  gunblacklist: PermissionFlagsBits.ManageGuild,
-  inviteadmin: PermissionFlagsBits.ManageGuild,
-  setinvitechannel: PermissionFlagsBits.ManageGuild,
-  dailyfact: PermissionFlagsBits.ManageGuild,
-  dailyinteraction: PermissionFlagsBits.ManageGuild,
-  leveling: PermissionFlagsBits.ManageGuild,
-  levelreward: PermissionFlagsBits.ManageRoles,
-  socialadd: PermissionFlagsBits.ManageGuild,
-  socialremove: PermissionFlagsBits.ManageGuild,
-  commandcontrol: PermissionFlagsBits.ManageGuild,
-  antispam: PermissionFlagsBits.ManageGuild,
-  tickettargets: PermissionFlagsBits.Administrator,
-  changelog: PermissionFlagsBits.Administrator
-};
+const { permissionDefaults } = require('./utils/commandPermissions');
 
 async function getGuildCommandCleanupIds(rest) {
 

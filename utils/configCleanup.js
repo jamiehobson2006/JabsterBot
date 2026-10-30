@@ -34,7 +34,7 @@ function cleanupDeletedChannel(channel) {
     for (const column of guildChannelColumns) {
       run(
         `UPDATE guild_settings
-         SET ${column} = NULL${column === 'staffListChannelId' ? ', staffListMessageId = NULL' : ''}
+         SET ${column} = NULL${column === 'staffListChannelId' ? ', staffListMessageId = NULL, staffListMessageIds = NULL' : ''}
          WHERE guildId = ? AND ${column} = ?`,
         [guildId, channelId]
       );
@@ -141,7 +141,7 @@ function cleanupDeletedChannel(channel) {
       [Date.now(), guildId, channelId]
     );
     run(
-      `UPDATE staff_rota_settings SET enabled = 0, channelId = NULL, messageId = NULL
+      `UPDATE staff_rota_settings SET enabled = 0, channelId = NULL, messageId = NULL, messageIds = NULL
        WHERE guildId = ? AND channelId = ?`,
       [guildId, channelId]
     );
@@ -211,7 +211,7 @@ function cleanupDeletedRole(role) {
       [guildId, roleId]
     );
     run(
-      `UPDATE staff_rota_settings SET enabled = 0, staffRoleId = NULL, messageId = NULL
+      `UPDATE staff_rota_settings SET enabled = 0, staffRoleId = NULL, messageId = NULL, messageIds = NULL
        WHERE guildId = ? AND staffRoleId = ?`,
       [guildId, roleId]
     );

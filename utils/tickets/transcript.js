@@ -14,25 +14,27 @@ const {
   run
 } = require('../../database');
 
-async function findExistingTranscript(channel, ticket, marker) {
+async function findExistingTranscript(channel, ticket, marker, botId = channel?.client?.user?.id) {
   if (!channel?.messages?.fetch) return null;
+  if (!botId) return null;
+  const expectedId = String(ticket.id || ticket.channelId);
+  const filename = `ticket-${ticket.channelId}.html`;
+  const matches = message => message?.author?.id === botId &&
+    (!message.channelId || message.channelId === channel.id) &&
+    [...(message.attachments?.values?.() || [])].some(file => file.name === filename) &&
+    message.embeds?.some(embed => (embed.fields || embed.data?.fields || []).some(field =>
+      field.name === 'Ticket' && String(field.value || '').split(/\r?\n/).some(line => line.trim() === `ID: ${expectedId}`)));
 
   if (ticket.transcriptMessageId && ticket.transcriptArchiveChannelId === channel.id) {
     const saved = await channel.messages.fetch(ticket.transcriptMessageId).catch(() => null);
-    if (saved) return saved;
+    if (matches(saved)) return saved;
   }
 
   let before;
   for (let page = 0; page < 10; page += 1) {
     const messages = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
     if (!messages?.size) break;
-    const match = messages.find(message =>
-      String(message.content || '').includes(marker) ||
-      message.embeds?.some(embed => embed.fields?.some(field =>
-        String(field.name || '') === 'Ticket' &&
-        String(field.value || '').includes(`ID: ${ticket.id || ticket.channelId}`)
-      ))
-    );
+    const match = messages.find(matches);
     if (match) return match;
     before = messages.last()?.id;
     if (!before || messages.size < 100) break;
@@ -151,7 +153,7 @@ async function generateTranscript({
     for (const channelId of getTranscriptChannelIds(settings, ticket)) {
       const candidate = await client.channels.fetch(channelId).catch(() => null);
 
-      if (candidate?.isTextBased()) {
+      if (candidate?.isTextBased() && (!candidate.guildId || candidate.guildId === channel.guild.id)) {
         transcriptChannel = candidate;
         break;
       }
@@ -279,11 +281,10 @@ async function generateTranscript({
       try {
         const savedTicket = get(`SELECT * FROM tickets WHERE channelId = ?`, [channel.id]) || ticket;
         const marker = `ticket-transcript:${channel.guild.id}:${ticket.id || channel.id}`;
-        let archiveMessage = await findExistingTranscript(transcriptChannel, savedTicket, marker);
+        let archiveMessage = await findExistingTranscript(transcriptChannel, savedTicket, marker, client.user?.id);
 
         if (!archiveMessage) {
           archiveMessage = await sendTranscriptMessage(transcriptChannel, {
-            content: `-# ${marker}`,
             embeds: [archiveEmbed],
             files: [attachment]
           });

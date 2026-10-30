@@ -141,7 +141,7 @@ test('daily interaction embeds show participation and the community activity', (
   assert.equal(embed.data.fields.find(field => field.name === 'Participants').value, '4');
 });
 
-test('participation-only interactions do not instruct members to submit an answer', () => {
+test('open-ended questions direct members into native discussion instead of a bot relay', () => {
   const embed = buildInteractionEmbed(
     {
       guildId: 'guild-1',
@@ -157,7 +157,7 @@ test('participation-only interactions do not instruct members to submit an answe
   );
 
   const howToJoin = embed.data.fields.find(field => field.name === 'How to Join');
-  assert.match(howToJoin.value, /does not accept free-text responses/);
+  assert.match(howToJoin.value, /reply as yourself/);
   assert.doesNotMatch(howToJoin.value, /Submit Answer/);
 });
 

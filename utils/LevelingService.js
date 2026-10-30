@@ -18,7 +18,7 @@ const {
 } = require('./levelingConfig');
 
 const {
-  automaticRoleSafetyError
+  automaticRoleSafetyIssue
 } = require('./roleSafety');
 
 function getXpRange(config) {
@@ -43,21 +43,28 @@ function queueLevelRewards(guildId, userId, level) {
 async function applyPendingRewards(guild, member) {
   const pending = all(
     `SELECT * FROM leveling_reward_grants
-     WHERE guildId = ? AND userId = ? AND status = 'PENDING'
+     WHERE guildId = ? AND userId = ? AND status = 'PENDING' AND nextAttemptAt <= ?
      ORDER BY level`,
-    [guild.id, member.id]
+    [guild.id, member.id, Date.now()]
   );
 
   for (const grant of pending) {
+    const configured = get('SELECT 1 FROM leveling_rewards WHERE guildId=? AND roleId=? AND level=?', [guild.id,grant.roleId,grant.level]);
+    const progress = get('SELECT level FROM leveling_users WHERE guildId=? AND userId=?', [guild.id,member.id]);
+    if (!configured || Number(progress?.level || 0) < grant.level) {
+      run("UPDATE leveling_reward_grants SET status='CANCELLED',lastError=? WHERE guildId=? AND userId=? AND roleId=?",
+        [configured ? 'Member no longer qualifies for this reward.' : 'Reward configuration no longer exists.',guild.id,member.id,grant.roleId]);
+      continue;
+    }
     const role = guild.roles.cache.get(grant.roleId);
 
-    const safetyError = automaticRoleSafetyError(guild, role);
-    if (safetyError) {
+    const safetyIssue = automaticRoleSafetyIssue(guild, role);
+    if (safetyIssue) {
       run(
         `UPDATE leveling_reward_grants
-         SET status = 'CANCELLED', attempts = attempts + 1, lastError = ?
+         SET status = ?, attempts = attempts + 1, lastError = ?, nextAttemptAt = ?
          WHERE guildId = ? AND userId = ? AND roleId = ?`,
-        [safetyError, guild.id, member.id, grant.roleId]
+        [safetyIssue.retryable ? 'PENDING' : 'CANCELLED', safetyIssue.message, Date.now() + 5 * 60_000, guild.id, member.id, grant.roleId]
       );
       continue;
     }
@@ -77,10 +84,10 @@ async function applyPendingRewards(guild, member) {
       run(
         `UPDATE leveling_reward_grants
          SET attempts = attempts + 1,
-             status = CASE WHEN attempts + 1 >= 5 THEN 'FAILED' ELSE status END,
-             lastError = ?
+             nextAttemptAt = ?, lastError = ?
          WHERE guildId = ? AND userId = ? AND roleId = ?`,
-        [String(error.message || error).slice(0, 500), guild.id, member.id, grant.roleId]
+        [Date.now() + Math.min(3_600_000, 60_000 * (2 ** Math.min(grant.attempts || 0, 6))),
+          String(error.message || error).slice(0, 500), guild.id, member.id, grant.roleId]
       );
     }
   }
@@ -156,11 +163,11 @@ async function sendLevelUpMessage(message, member, config, level, xp, messages) 
 class LevelingService {
   static interval = null;
 
-  static async processPending(client) {
+  static async processPending(client, guildId = null) {
     const pending = all(
       `SELECT DISTINCT guildId, userId
        FROM leveling_reward_grants
-       WHERE status = 'PENDING'`
+       WHERE status = 'PENDING' AND nextAttemptAt <= ? AND (? IS NULL OR guildId=?)`, [Date.now(),guildId,guildId]
     );
 
     for (const row of pending) {

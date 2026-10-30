@@ -38,22 +38,23 @@ async function deliverLogBurst(client, row) {
     const channel = await require('./logger').getLogChannel(client, row.guildId, payload.logType, destination);
     if (!channel) throw new Error('Log channel is unavailable.');
     const marker = `Ref: ${deliveryNonce(row.deliveryKey)}`;
-    if (claimed.attempts > 1 && channel.messages?.fetch) {
-      const recent = await channel.messages.fetch({ limit: 100 });
-      const existing = recent.find(message => message.author?.id === client.user.id &&
-        message.embeds?.some(embed => (embed.footer?.text || embed.data?.footer?.text || '').includes(marker)));
-      if (existing) return existing;
-    }
     const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
     const entries = payload.entries;
     const embed = entries.length === 1 ? new EmbedBuilder(entries[0].embed)
       : new EmbedBuilder().setColor(destination.color || 0xFEE75C).setTitle(`${entries.length} ${payload.action.toLowerCase().replaceAll('_', ' ')} events`)
         .setDescription(`By <@${payload.executorId}>\nTargets: ${[...new Set(entries.map(entry => entry.targetId))].length}\nComplete individual details are attached.`)
         .setTimestamp(entries.at(-1).timestamp);
-    const footer = embed.data.footer?.text;
-    embed.setFooter({ text: `${footer ? `${footer} | ` : ''}${marker}`.slice(-2048) });
+    if (embed.data.footer) embed.setFooter(require('./dailyFooter').cleanDailyFooter(embed.data.footer));
     const files = entries.length > 1 ? [new AttachmentBuilder(Buffer.from(JSON.stringify({ action: payload.action,
       executorId: payload.executorId, guildId: row.guildId, events: entries }, null, 2)), { name: 'audit-event-details.json' })] : [];
+    if (claimed.attempts > 1 && channel.messages?.fetch) {
+      const recent = await channel.messages.fetch({ limit: 100 });
+      const recovery = require('./messageRecovery');
+      const existing = recent.find(message => message.author?.id === client.user.id &&
+        ((recovery.isRecentDelivery(message, claimed) && recovery.sameMessage(message, { embeds: [embed] })) ||
+          message.embeds?.some(item => (item.footer?.text || item.data?.footer?.text || '').includes(marker))));
+      if (existing) return existing;
+    }
     if (files.length && !channel.permissionsFor(channel.guild.members.me)?.has('AttachFiles')) {
       throw new Error('Attach Files permission is required to deliver full audit burst details.');
     }

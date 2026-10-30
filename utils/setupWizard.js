@@ -23,7 +23,7 @@ function summary(guildId) {
     [guildId]
   )?.total || 0;
   const ticket = get(
-    `SELECT enabled, categoryId, roleId FROM ticket_settings WHERE guildId = ? AND type = 'SUPPORT'`,
+    `SELECT enabled, categoryId, roleId FROM ticket_settings WHERE guildId = ? AND type = 'support'`,
     [guildId]
   );
   const guild = get(

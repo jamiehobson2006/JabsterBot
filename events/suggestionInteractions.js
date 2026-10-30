@@ -160,33 +160,27 @@ async function countVotes(
   };
 }
 
-async function findDecisionCopy(channel, suggestion, status) {
+async function findDecisionCopy(channel, suggestion, status, botId) {
+  if (!botId) return null;
+  const matches = message => message?.author?.id === botId &&
+    message.embeds?.some(embed => String(embed.title || '').toUpperCase() === `SUGGESTION ${status}` &&
+      embed.fields?.some(field => String(field.name || '').toLowerCase() === 'suggestion id' &&
+        String(field.value || '').trim() === `#${suggestion.id}`));
   if (
     suggestion.decisionChannelId === channel.id &&
     suggestion.decisionMessageId
   ) {
     const saved = await channel.messages.fetch(suggestion.decisionMessageId).catch(() => null);
-    if (saved) return saved;
+    if (matches(saved)) return saved;
   }
 
-  const marker = `suggestion-decision:${suggestion.guildId}:${suggestion.id}:${status}`;
   let before;
 
   for (let page = 0; page < 10; page += 1) {
     const messages = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
     if (!messages?.size) break;
 
-    const match = messages.find(message =>
-      String(message.content || '').includes(marker) ||
-      message.embeds?.some(embed => {
-        const title = String(embed.title || '').toUpperCase();
-        const hasId = embed.fields?.some(field =>
-          String(field.name || '').toLowerCase() === 'suggestion id' &&
-          String(field.value || '').includes(`#${suggestion.id}`)
-        );
-        return title.includes(status) && hasId;
-      })
-    );
+    const match = messages.find(matches);
     if (match) return match;
 
     before = messages.last()?.id;
@@ -492,10 +486,9 @@ async function handleDecisionModal(
       });
     }
 
-    let decisionCopy = await findDecisionCopy(destination, suggestion, status);
+    let decisionCopy = await findDecisionCopy(destination, suggestion, status, interaction.client.user?.id);
     if (!decisionCopy) {
       decisionCopy = await destination.send({
-        content: `-# suggestion-decision:${suggestion.guildId}:${suggestion.id}:${status}`,
         embeds: [copiedEmbed],
         allowedMentions: { parse: [] }
       });
@@ -570,18 +563,19 @@ async function handleDecisionModal(
 
 module.exports = {
   name: 'interactionCreate',
+  findDecisionCopy,
 
   async execute(interaction) {
     try {
       if (isSuggestionButton(interaction)) {
-        return handleDecisionButton(interaction);
+        return await handleDecisionButton(interaction);
       }
 
       if (
         interaction.isModalSubmit() &&
         interaction.customId.startsWith('suggest_decision_')
       ) {
-        return handleDecisionModal(interaction);
+        return await handleDecisionModal(interaction);
       }
 
       return null;

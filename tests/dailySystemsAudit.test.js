@@ -43,7 +43,7 @@ function sandbox() {
     } }, guilds: { cache: new Collection() }, users: { fetch: async userId => ({
       createDM: async () => channels.get(`dm-${userId}`) || channel(`dm-${userId}`)
     }) } };
-  const guild = { id: 'guild', name: 'Sandbox', members: { me: { id: 'bot' } }, channels: client.channels };
+  const guild = { id: 'guild', name: 'Sandbox', members: { me: { id: 'bot' }, fetch: async id => ({ id }) }, channels: client.channels };
   client.guilds.cache.set('guild', guild);
   let sequence = 0;
   function channel(id) {
@@ -58,7 +58,7 @@ function sandbox() {
       } },
       send: async payload => {
         value.sent += 1;
-        const message = { id: `message-${++sequence}`, author: client.user, channel: value,
+        const message = { id: `message-${++sequence}`, createdTimestamp: Date.now(), author: client.user, channel: value,
           content: payload.content, components: payload.components || [],
           embeds: (payload.embeds || []).map(embed => EmbedBuilder.from(embed)),
           edit: async update => {
@@ -189,7 +189,7 @@ test('scheduled facts resume and finalize without posting a second message', asy
     FactService.getDateParts(new Date(), 'UTC').dateKey);
 });
 
-test('a lost Discord send response is recovered by its footer rather than an unavailable nonce', async t => {
+test('a lost Discord send response is recovered from content and creation time without a visible code', async t => {
   const context = sandbox();
   const config = configureFacts();
   addApproved();
@@ -433,7 +433,7 @@ async function activityPost(context) {
 function answerRequest(context, post, userId = 'member', answer = 'eagle') {
   return { client: context.client, guild: context.guild, member: { id: userId },
     user: { id: userId, tag: userId, toString: () => `<@${userId}>` },
-    customId: `dailyinteraction_answer_${post.messageId}`,
+    channelId: post.channelId, customId: `dailyinteraction_answer_${post.messageId}`,
     inGuild: () => true, isButton: () => false, isModalSubmit: () => true,
     fields: { getTextInputValue: () => answer },
     deferReply: async function () { this.deferred = true; },
@@ -444,16 +444,17 @@ function answerRequest(context, post, userId = 'member', answer = 'eagle') {
 test('legacy concurrent answer updates edit one response and award participation once', async () => {
   const context = sandbox();
   const { post } = await activityPost(context);
-  run('UPDATE daily_interaction_posts SET activityJson = NULL WHERE messageId = ?', [post.messageId]);
-  const first = answerRequest(context, post);
-  const second = answerRequest(context, post, 'member', 'earth');
-  await Promise.all([activityEvents.execute(first), activityEvents.execute(second)]);
+  run("UPDATE daily_interaction_posts SET activityJson = NULL, type = 'QUESTION' WHERE messageId = ?", [post.messageId]);
+  const nativePost = get('SELECT * FROM daily_interaction_posts WHERE messageId = ?', [post.messageId]);
+  const record = require('../utils/dailyDiscussion').recordDiscussionMessage;
+  record({ id: 'native-one', author: { id: 'member' }, content: 'eagle' }, nativePost);
+  record({ id: 'native-two', author: { id: 'member' }, content: 'earth' }, nativePost);
   assert.equal(all('SELECT * FROM daily_interaction_responses').length, 1);
   assert.equal(get('SELECT response FROM daily_interaction_responses').response, 'earth');
   const stats = activities.getMemberEngagementStats('guild', 'member');
   assert.equal(stats.totalJoins, 1);
   assert.equal(stats.totalResponses, 1);
-  assert.equal(context.channels.get(post.messageId).sent, 1);
+  assert.equal(context.channels.has(post.messageId), false);
 });
 
 test('concurrent joins keep the final participant display and totals consistent', async () => {
@@ -473,7 +474,7 @@ test('concurrent joins keep the final participant display and totals consistent'
   assert.equal(get('SELECT displayedParticipantCount FROM daily_interaction_posts').displayedParticipantCount, 12);
 });
 
-test('failed answers retry from storage and award points only after delivery', async t => {
+test('legacy modal submissions redirect to the thread without relaying or storing the submitted answer', async t => {
   const context = sandbox();
   const { source, post } = await activityPost(context);
   const thread = await activities.getOrCreateDiscussionThread({ guild: context.guild, message: source, post });
@@ -482,24 +483,26 @@ test('failed answers retry from storage and award points only after delivery', a
   t.mock.method(console, 'error', () => {});
   const request = answerRequest(context, post);
   await activityEvents.execute(request);
-  assert.match(request.response.content, /queued for delivery/);
-  assert.equal(all('SELECT * FROM daily_interaction_participants').length, 0);
+  assert.match(request.response.content, /replies are posted as you/);
+  assert.equal(all('SELECT * FROM daily_interaction_participants').length, 1);
   thread.send = send;
   drainRetryDelays();
   await delivery.recoverDailyDeliveries(context.client);
-  assert.equal(all('SELECT * FROM daily_interaction_responses').length, 1);
-  assert.equal(activities.getMemberEngagementStats('guild', 'member').totalResponses, 1);
+  assert.equal(all('SELECT * FROM daily_interaction_responses').length, 0);
+  assert.equal(activities.getMemberEngagementStats('guild', 'member').totalResponses, 0);
   await activities.refreshDailyPosts(context.client);
   assert.equal(source.embeds[0].data.fields.find(field => field.name === 'Participants').value, '1');
 });
 
-test('new censor terms are checked again before a queued answer is posted', async t => {
+test('old queued answer relays are cancelled regardless of censor configuration', async t => {
   const context = sandbox();
   const { source, post } = await activityPost(context);
   const thread = await activities.getOrCreateDiscussionThread({ guild: context.guild, message: source, post });
   thread.send = async () => { throw new Error('Temporary outage'); };
   t.mock.method(console, 'error', () => {});
-  await activityEvents.execute(answerRequest(context, post));
+  delivery.queueDailyDelivery({ deliveryKey: 'legacy-relay', type: 'DAILY_INTERACTION_RESPONSE',
+    guildId: 'guild', channelId: thread.id, message: { content: 'eagle' },
+    metadata: { postId: post.messageId, userId: 'member', answer: 'eagle' } });
   require('../utils/censor').addCensorTerm({ guildId: 'guild', word: 'eagle', addedBy: 'owner' });
   drainRetryDelays();
   await delivery.recoverDailyDeliveries(context.client);
@@ -515,7 +518,7 @@ test('answer errors are caught inside the interaction handler after deferral', a
   t.mock.method(console, 'error', () => {});
   const request = answerRequest(context, post);
   await activityEvents.execute(request);
-  assert.match(request.response.content, /could not complete/);
+  assert.match(request.response.content, /Missing thread permission/);
   assert.equal(request.deferred, true);
 });
 
@@ -615,15 +618,16 @@ test('only active, non-future posts can accept participation', () => {
   assert.equal(activities.isDailyInteractionOpen({ sentAt: now - 1000 }, now), true);
 });
 
-test('missing protection permissions prevent an answer button from being advertised', async () => {
+test('missing thread protection permissions do not hide the discussion control or create a relay answer button', async () => {
   const context = sandbox();
   const config = configureActivities();
   const permissions = new PermissionsBitField([PermissionFlagsBits.ViewChannel,
     PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks,
     PermissionFlagsBits.CreatePublicThreads, PermissionFlagsBits.SendMessagesInThreads]);
   context.main.permissionsFor = () => permissions;
-  const sent = await activities.sendDailyInteraction({ client: context.client, config, type: 'GAME' });
+  const sent = await activities.sendDailyInteraction({ client: context.client, config, type: 'GAME', random: () => 0 });
   const message = await context.main.messages.fetch(sent.message.id);
   assert.equal(message.components[0].components.some(button => button.custom_id === 'dailyinteraction_answer'), false);
-  assert.match(message.embeds[0].data.fields.find(field => field.name === 'How to Join').value, /does not accept/);
+  assert.match(message.embeds[0].data.fields.find(field => field.name === 'How to Join').value, /reply as yourself/);
+  assert.equal(message.components[0].components.some(button => button.custom_id === 'dailyinteraction_discuss'), true);
 });

@@ -123,7 +123,7 @@ test('giveaway retry backoff prevents a tight retry loop', () => {
   assert.equal(claimDueGiveaways(now + 60001).some(row => row.messageId === 'backoff-giveaway'), true);
 });
 
-test('a disappeared one-use invite can still be attributed exactly', async () => {
+test('a disappeared one-use invite is not falsely credited when it could have expired or been deleted', async () => {
   cache.invites.set('invite-guild', new Collection([
     ['once', {
       code: 'once', uses: 0, maxUses: 1, inviterId: 'inviter', inviterTag: 'Inviter'
@@ -136,9 +136,9 @@ test('a disappeared one-use invite can still be attributed exactly', async () =>
     fetchVanityData: async () => null
   };
   const used = await findUsedInvite({ guild });
-  assert.equal(used.code, 'once');
-  assert.equal(used.inviterId, 'inviter');
-  assert.equal(used.confidence, 'EXACT');
+  assert.equal(used.code, 'Unknown');
+  assert.equal(used.inviterId, null);
+  assert.equal(used.confidence, 'UNKNOWN');
 });
 
 test('deleted-message media downloader only trusts Discord HTTPS hosts', () => {

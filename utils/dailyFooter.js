@@ -4,10 +4,10 @@ function dailyReference(text) {
   return String(text || '').match(/Ref:\s*[a-f0-9]{24}\b/i)?.[0] || null;
 }
 
-function cleanDailyFooter(footer, marker = dailyReference(footer?.text)) {
+function cleanDailyFooter(footer) {
   const text = String(footer?.text || '').replace(REFERENCE, '').replace(/(?:\s*\|\s*)+$/g, '').trim()
     || 'Jabster Studios';
-  return { ...footer, text: marker ? `${text.slice(0, 1980)} | ${marker}` : text.slice(0, 2048) };
+  return { ...footer, text: text.slice(0, 2048) };
 }
 
 module.exports = { cleanDailyFooter, dailyReference };

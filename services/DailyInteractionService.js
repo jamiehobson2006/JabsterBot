@@ -43,6 +43,8 @@ const DEFAULT_TIMEZONE = 'Europe/London';
 const threadCreationLocks = new Map();
 const ANSWER_PERMISSIONS = [PermissionFlagsBits.CreatePublicThreads, PermissionFlagsBits.SendMessagesInThreads,
   PermissionFlagsBits.ManageThreads, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ReadMessageHistory];
+const THREAD_PERMISSIONS = [PermissionFlagsBits.CreatePublicThreads, PermissionFlagsBits.SendMessagesInThreads,
+  PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ReadMessageHistory];
 
 const DAY_NAMES = Object.freeze([
   'Sunday',
@@ -664,9 +666,10 @@ function buildInteractionEmbed(
       { name: 'Participants', value: String(participants), inline: true },
       {
         name: 'How to Join',
-        value: acceptsAnswers
-          ? 'Click **Join In** to count, then use **Submit Answer** for a verified response.'
-          : 'Click **Join In** to count your participation. This activity does not accept free-text responses.'
+        value: !canSubmitAnswers ? 'Click **Join In** to count your participation.'
+          : interaction.type === 'TRIVIA' && acceptsAnswers ? 'Submit your answer privately. Results are revealed when the round closes.'
+          : require('../utils/dailyInteractionSafety').choicesFromPrompt(interaction).length > 1 ? 'Choose an option below to vote.'
+          : 'Open the discussion thread and reply as yourself. The bot does not repost your answers.'
       }
     )
     .setFooter({ text: `Jabster Studios Daily Interactions | ${interaction.source === 'custom' ? 'Community custom prompt' : 'Built-in prompt'}` })
@@ -696,13 +699,16 @@ function buildInteractionComponents({ canSubmitAnswers, interaction, activity })
       new StringSelectMenuBuilder().setCustomId('dailyinteraction_choice').setPlaceholder('Choose your answer')
         .addOptions(activity.choices.map((choice, index) => ({ label: choice, value: String(index) })))), ratingRow];
   }
-  if (canSubmitAnswers && supportsSubmittedAnswer(interaction)) {
+  if (canSubmitAnswers && interaction.type === 'TRIVIA' && supportsSubmittedAnswer(interaction)) {
     buttons.push(
       new ButtonBuilder()
         .setCustomId('dailyinteraction_answer')
         .setLabel('Submit Answer')
         .setStyle(ButtonStyle.Primary)
     );
+  }
+  if (canSubmitAnswers && activity?.mode !== 'choice' && interaction.type !== 'TRIVIA') {
+    buttons.push(new ButtonBuilder().setCustomId('dailyinteraction_discuss').setLabel('Open Discussion').setStyle(ButtonStyle.Primary));
   }
 
   return [new ActionRowBuilder().addComponents(buttons), ratingRow];
@@ -816,7 +822,7 @@ async function refreshDailyPosts(client, now = Date.now()) {
   const posts = all(`SELECT post.*, (SELECT COUNT(*) FROM daily_interaction_participants participant
     WHERE participant.messageId = post.messageId) AS participantCount
     FROM daily_interaction_posts post
-    WHERE (sentAt <= ? AND buttonsClosedAt IS NULL) OR (sentAt > ? AND footerNormalizedAt IS NULL) OR displayedParticipantCount !=
+    WHERE (sentAt <= ? AND buttonsClosedAt IS NULL) OR (sentAt > ? AND (footerNormalizedAt IS NULL OR controlsVersion < 2)) OR displayedParticipantCount !=
       (SELECT COUNT(*) FROM daily_interaction_participants participant WHERE participant.messageId = post.messageId)
     ORDER BY sentAt DESC LIMIT 25`, [now - DAY_MS, now - DAY_MS]);
   for (const post of posts) {
@@ -827,19 +833,23 @@ async function refreshDailyPosts(client, now = Date.now()) {
         post.participantCount = get('SELECT COUNT(*) AS count FROM daily_interaction_participants WHERE messageId = ?', [post.messageId]).count;
         const embed = EmbedBuilder.from(message.embeds[0]);
         embed.setFooter(cleanDailyFooter(embed.data.footer));
+        const config = getDailyInteractionConfig(post.guildId);
+        const canSubmitAnswers = Boolean(config?.discussionEnabled);
         const fields = (embed.data.fields || []).filter(field => field.name !== 'Status')
-          .map(field => field.name === 'Participants' ? { ...field, value: String(post.participantCount) } : field);
+          .map(field => field.name === 'Participants' ? { ...field, value: String(post.participantCount) }
+            : field.name === 'How to Join' ? buildInteractionEmbed(config, { ...post, source: 'custom' }, post.participantCount, canSubmitAnswers).data.fields.find(item => item.name === 'How to Join') : field);
         const closed = !isDailyInteractionOpen(post, now) || !activityOpen(post, now);
         if (closed) fields.push({ name: 'Status', value: 'Closed' });
         embed.setFields(fields);
-        await message.edit({ embeds: [embed], ...(closed ? { components: [] } : {}) });
+        await message.edit({ embeds: [embed], components: closed ? [] : buildInteractionComponents({
+          canSubmitAnswers, interaction: post, activity: require('../utils/dailyActivities').activityFor(post) }) });
         run(`UPDATE daily_interaction_posts SET displayedParticipantCount = ?,
-          buttonsClosedAt = CASE WHEN ? THEN ? ELSE buttonsClosedAt END, footerNormalizedAt = ? WHERE messageId = ?`,
+          buttonsClosedAt = CASE WHEN ? THEN ? ELSE buttonsClosedAt END, footerNormalizedAt = ?, controlsVersion = 2 WHERE messageId = ?`,
         [post.participantCount, closed ? 1 : 0, now, now, post.messageId]);
       });
     } catch (error) {
       if ([10003, 10008].includes(Number(error.code))) {
-        run(`UPDATE daily_interaction_posts SET buttonsClosedAt = ?, displayedParticipantCount = ?, footerNormalizedAt = ?
+        run(`UPDATE daily_interaction_posts SET buttonsClosedAt = ?, displayedParticipantCount = ?, footerNormalizedAt = ?, controlsVersion = 2
           WHERE messageId = ?`, [now, post.participantCount, now, post.messageId]);
       } else {
         console.error(`Daily interaction refresh ${post.messageId}:`, error.message);
@@ -1020,7 +1030,7 @@ async function sendDailyInteraction({
   const picked = chooseInteraction({ guildId: config.guildId, type, now, random });
   if (!picked) return { status: 'no-prompts' };
 
-  const canSubmitAnswers = Number(config.discussionEnabled) === 1 && permissions.has(ANSWER_PERMISSIONS);
+  const canSubmitAnswers = Number(config.discussionEnabled) === 1;
   const activity = canSubmitAnswers ? createActivity(picked, engagementSettings(config.guildId)) : null;
 
   const embed = buildInteractionEmbed(config, picked, 0, canSubmitAnswers);
@@ -1176,6 +1186,7 @@ class DailyInteractionService {
 
 module.exports = {
   ANSWER_PERMISSIONS,
+  THREAD_PERMISSIONS,
   DAILY_INTERACTION_TYPES: INTERACTION_TYPES,
   DAY_NAMES,
   DEFAULT_TIMEZONE,

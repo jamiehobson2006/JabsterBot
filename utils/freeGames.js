@@ -195,7 +195,6 @@ function normalizeSteamOffers(payload) {
       : null;
 
     return [{
-      // The history table expires after 90 days, allowing a genuine later promotion to alert again.
       key: `steam:${item.id}`,
       source: 'STEAM',
       title: String(item.name || 'Untitled Steam Game').slice(0, 256),
@@ -366,16 +365,60 @@ async function fetchSteamOffers(country) {
     if (failure) throw failure.reason;
   }
 
-  return mergeOffers(featuredOffers, searchOffers);
+  const offers = mergeOffers(featuredOffers, searchOffers).map(offer => observeSteamOffer(offer, steamCountry));
+  await verifyMissingSteamOffers(offers, steamCountry);
+  return offers;
 }
 
-function reserveAnnouncement(guildId, offer) {
+function observeSteamOffer(offer, country, now = Date.now()) {
+  const baseKey = String(offer.key).split(':promotion:')[0];
+  const key = `${String(country).toUpperCase()}:${baseKey}`;
+  const previous = get('SELECT * FROM free_game_observations WHERE offerKey=?', [key]);
+  const window = Number(offer.endsAt) || null;
+  const changed = previous && (!previous.isFree || window && Number(previous.sourceWindow) &&
+    Number(previous.sourceWindow) <= now && window > now && window !== Number(previous.sourceWindow));
+  const occurrence = changed ? require('node:crypto').randomUUID() : previous?.occurrence || 'initial';
+  const receiptKey = occurrence === 'initial' ? baseKey : `${baseKey}:promotion:${occurrence}`;
+  run(`INSERT INTO free_game_observations(offerKey,source,occurrence,isFree,firstSeenAt,lastSeenAt,absentSince,sourceWindow,receiptKey)
+    VALUES(?,'STEAM',?,1,?,?,NULL,?,?) ON CONFLICT(offerKey) DO UPDATE SET
+      occurrence=excluded.occurrence,isFree=1,lastSeenAt=excluded.lastSeenAt,absentSince=NULL,
+      sourceWindow=COALESCE(excluded.sourceWindow,free_game_observations.sourceWindow),receiptKey=excluded.receiptKey`,
+  [key,occurrence,now,now,window,receiptKey]);
+  return { ...offer, key: receiptKey };
+}
+
+async function verifyMissingSteamOffers(offers, country, now = Date.now()) {
+  const active = new Set(offers.map(offer => offer.key));
+  const candidates = all(`SELECT * FROM free_game_observations WHERE source='STEAM' AND isFree=1
+    AND offerKey LIKE ? ORDER BY lastSeenAt ASC LIMIT 20`, [`${String(country).toUpperCase()}:steam:%`]);
+  for (const row of candidates) {
+    if (active.has(row.receiptKey)) continue;
+    const appId = row.offerKey.split(':').at(-1);
+    try {
+      const response = await axios.get('https://store.steampowered.com/api/appdetails', {
+        params: { appids: appId, cc: country, filters: 'price_overview,basic' }, timeout: 10000
+      });
+      const details = response.data?.[appId];
+      // A missing search result is not proof the promotion ended. Only an
+      // explicit paid price from the store can reset an unbounded promotion.
+      if (details?.success && Number(details.data?.price_overview?.final) > 0) {
+        run('UPDATE free_game_observations SET isFree=0,absentSince=?,lastSeenAt=? WHERE offerKey=?', [now,now,row.offerKey]);
+      } else {
+        run('UPDATE free_game_observations SET lastSeenAt=? WHERE offerKey=?', [now,row.offerKey]);
+      }
+    } catch {
+      run('UPDATE free_game_observations SET lastSeenAt=? WHERE offerKey=?', [now,row.offerKey]);
+    }
+  }
+}
+
+function reserveAnnouncement(guildId, offer, channelId = null) {
   return run(
     `INSERT OR IGNORE INTO free_game_announcements (
-       guildId, offerKey, source, title, announcedAt
+       guildId, offerKey, source, title, announcedAt, channelId
      )
-     VALUES (?, ?, ?, ?, ?)`,
-    [guildId, offer.key, offer.source, offer.title, Date.now()]
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [guildId, offer.key, offer.source, offer.title, Date.now(), channelId]
   ).changes === 1;
 }
 
@@ -399,12 +442,16 @@ function saveAnnouncementMessage(guildId, offerKey, messageId) {
   );
 }
 
-async function findAnnouncementByMarker(channel, marker) {
+async function findAnnouncementByMarker(channel, marker, offer = null, botId = null, since = 0) {
   let before;
   for (let page = 0; page < 10; page += 1) {
     const messages = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
     if (!messages?.size) break;
-    const match = messages.find(message => String(message.content || '').includes(marker));
+    const match = messages.find(message => (!botId || message.author?.id === botId) &&
+      (String(message.content || '').includes(marker) || offer && require('./messageRecovery').isRecentDelivery(message, { createdAt: since }) && message.components?.some(row =>
+        (row.components || []).some(button => (button.url || button.data?.url) === offer.url)) &&
+        message.embeds?.some(embed => (embed.title || embed.data?.title || '').startsWith('Free Game Alert') &&
+          (embed.description || embed.data?.description || '').includes(`**${offer.title}**`))));
     if (match) return match;
     before = messages.last()?.id;
     if (!before || messages.size < 100) break;
@@ -417,6 +464,7 @@ function buildOfferEmbed(offer) {
   const embed = new EmbedBuilder()
     .setColor(isEpic ? 0x9146FF : 0x1B9AAA)
     .setTitle(`Free Game Alert | ${isEpic ? 'Epic Games' : 'Steam'}`)
+    .setURL(offer.url)
     .setDescription(
       `**${offer.title}** is currently free${offer.originalPrice ? ` (usually ${offer.originalPrice})` : ''}.`
     )
@@ -439,20 +487,26 @@ function buildOfferEmbed(offer) {
 }
 
 function buildOfferComponents(offer) {
-  return [new ActionRowBuilder().addComponents(
+  const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setStyle(ButtonStyle.Link)
       .setLabel(`Get it on ${offer.source === 'EPIC' ? 'Epic Games' : 'Steam'}`)
       .setURL(offer.url)
-  )];
+  );
+  if (offer.reminderId) row.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Secondary)
+    .setCustomId(`game-reminder:${offer.reminderId}`).setLabel('Remind Me Before It Ends'));
+  return [row];
 }
 
 async function announceOffer(client, settings, offer) {
-  const channel = await client.channels.fetch(settings.channelId).catch(() => null);
+  offer = {...offer};
+  const previous = get('SELECT channelId FROM free_game_announcements WHERE guildId=? AND offerKey=?', [settings.guildId, offer.key]);
+  const channel = await client.channels.fetch(previous?.channelId || settings.channelId).catch(() => null);
 
   if (!channel?.isTextBased()) {
     return 'channel-unavailable';
   }
+  offer.reminderId=require('./freeGameReminders').saveReminderOffer({...settings,channelId:channel.id},offer);
 
   const permissions = channel.permissionsFor(channel.guild.members.me);
   if (!permissions?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) {
@@ -465,10 +519,19 @@ async function announceOffer(client, settings, offer) {
     [settings.guildId, offer.key]
   );
 
-  if (existingReservation?.messageId) return 'already-announced';
+  if (existingReservation?.messageId) {
+    if (offer.reminderId) {
+      const existing = await channel.messages.fetch(existingReservation.messageId).catch(()=>null);
+      if (existing?.author?.id === client.user?.id && !existing.components?.some(row=>
+        row.components?.some(button=>button.customId === `game-reminder:${offer.reminderId}`))) {
+        await existing.edit({components:buildOfferComponents(offer)}).catch(error=>console.warn('Free game reminder button:',error.message));
+      }
+    }
+    return 'already-announced';
+  }
 
   if (existingReservation) {
-    const existingMessage = await findAnnouncementByMarker(channel, marker);
+    const existingMessage = await findAnnouncementByMarker(channel, marker, offer, client.user?.id, existingReservation.announcedAt);
     if (existingMessage) {
       saveAnnouncementMessage(settings.guildId, offer.key, existingMessage.id);
       return 'already-announced';
@@ -481,19 +544,18 @@ async function announceOffer(client, settings, offer) {
     releaseAnnouncement(settings.guildId, offer.key);
   }
 
-  if (!reserveAnnouncement(settings.guildId, offer)) {
+  if (!reserveAnnouncement(settings.guildId, offer, channel.id)) {
     return 'announcement-pending';
   }
 
   let message = null;
   try {
     message = await channel.send({
-      content: [
-        settings.pingRoleId ? `<@&${settings.pingRoleId}>` : null,
-        `-# ${marker}`
-      ].filter(Boolean).join('\n'),
+      content: settings.pingRoleId ? `<@&${settings.pingRoleId}>` : undefined,
       embeds: [buildOfferEmbed(offer)],
       components: buildOfferComponents(offer),
+      nonce: require('./deliveryOutbox').deliveryNonce(marker),
+      enforceNonce: true,
       allowedMentions: settings.pingRoleId
         ? { roles: [settings.pingRoleId], parse: [] }
         : { parse: [] }
@@ -523,7 +585,7 @@ async function announceOffer(client, settings, offer) {
 
     return 'sent';
   } catch (err) {
-    if (!message) {
+    if (!message && Number(err.status) >= 400 && Number(err.status) < 500 && Number(err.status) !== 429) {
       releaseAnnouncement(settings.guildId, offer.key);
     }
     console.error(`Free game announcement error for ${settings.guildId}:`, err.message);
@@ -648,6 +710,8 @@ module.exports = {
   normalizeEpicOffers,
   normalizeSteamOffers,
   normalizeSteamSearchOffers,
+  observeSteamOffer,
+  verifyMissingSteamOffers,
   findAnnouncementByMarker,
   saveFreeGameSettings,
   start
