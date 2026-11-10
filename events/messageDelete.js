@@ -49,6 +49,7 @@ module.exports = {
       if (!guild) {
         return;
       }
+      if(require('../utils/messageSnapshots').messageLoggingExcluded({...loggedMessage,guild,channel:message.channel || guild.channels?.cache.get(loggedMessage.channelId)})) return;
 
       const visualCopy = await buildDeletedMessageCopy(loggedMessage);
 

@@ -443,9 +443,11 @@ module.exports = {
           // ======================================
           // 📩 DM USER
           // ======================================
+          await require('../../utils/moderationAuthorization').authorizeModeration(interaction,user.id,PermissionsBitField.Flags.KickMembers);
+          let dmNotification={status:'FAILED',error:'Notification could not be prepared.'};
           try {
 
-            await user.send({
+            dmNotification=await require('../../utils/moderationNotifications').sendPendingModerationDM(user,'KICK',interaction.guild.name,{
 
               embeds: [
 
@@ -487,6 +489,9 @@ module.exports = {
             });
 
           } catch {}
+          await require('../../utils/moderationAuthorization').authorizeModeration(
+            interaction, user.id, PermissionsBitField.Flags.KickMembers
+          );
           const { caseId } = await performModerationAction(
             {
               guildId: interaction.guild.id,
@@ -496,8 +501,9 @@ module.exports = {
               reason,
               channelId: interaction.channelId
             },
-            () => member.kick(`${reason} | Kicked by ${interaction.user.tag}`)
+            record => member.kick(require('../../utils/moderationActions').moderationReason(reason,record))
           );
+          require('../../utils/moderationNotifications').recordNotification(caseId,dmNotification);
 
           // ======================================
           // 📜 AUDIT LOG

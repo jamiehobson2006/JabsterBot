@@ -92,7 +92,7 @@ async function handleCensor(message, client) {
           expiresAt,
           channelId: message.channel.id
         },
-        () => message.member.timeout(duration, `Custom censor match: ${term}`)
+        record => message.member.timeout(duration, require('./moderationActions').moderationReason(`Custom censor match: ${term}`,record))
       );
       timeoutCaseId = result.caseId;
     } catch (error) {

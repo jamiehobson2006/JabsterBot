@@ -565,7 +565,10 @@ function promptsForType(guildId, type) {
     if (existing) existing.legacyKeys.push(...row.legacyKeys);
     else seen.set(row.key, row);
   }
-  return [...seen.values()];
+  const quality=require('../utils/promptQuality');
+  const ratings=quality.promptQuality(guildId);
+  return [...seen.values()].filter(prompt=>ratings.get(prompt.key)?.enabled!==0)
+    .map(prompt=>({...prompt,weight:quality.qualityWeight(ratings.get(prompt.key))}));
 }
 
 function chooseWeightedType(types, random = Math.random) {
@@ -609,7 +612,8 @@ function choosePrompt({ guildId, type, now = Date.now(), random = Math.random })
     .map(key => Number(history.get(key)) || 0));
   const eligible = prompts.filter(prompt => !lastUsed(prompt));
   if (eligible.length) {
-    return eligible[Math.floor(random() * eligible.length)];
+    let selected=random()*eligible.reduce((sum,prompt)=>sum+prompt.weight,0);
+    return eligible.find(prompt=>(selected-=prompt.weight)<0) || eligible.at(-1);
   }
 
   const oldest = [...prompts]
@@ -984,7 +988,10 @@ function getDailyInteractionAnalytics(guildId, now = Date.now()) {
     [guildId, since]
   ).count;
   const types = all(
-    `SELECT type, COUNT(*) AS count
+    `SELECT type, COUNT(*) AS count,
+       SUM((SELECT COUNT(*) FROM daily_interaction_participants j WHERE j.messageId=daily_interaction_posts.messageId)) AS joined,
+       SUM((SELECT COUNT(*) FROM (SELECT userId FROM daily_interaction_responses r WHERE r.messageId=daily_interaction_posts.messageId
+         UNION SELECT userId FROM daily_trivia_attempts t WHERE t.messageId=daily_interaction_posts.messageId))) AS answered
      FROM daily_interaction_posts
      WHERE guildId = ?
      AND sentAt >= ?
@@ -1195,6 +1202,8 @@ module.exports = {
   buildInteractionEmbed,
   buildInteractionComponents,
   chooseInteraction,
+  choosePrompt,
+  promptsForType,
   clearDayTheme,
   cleanupDiscussionThreads,
   getDailyInteractionAnalytics,

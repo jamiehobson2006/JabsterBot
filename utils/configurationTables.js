@@ -1,6 +1,11 @@
 // Only server-owned configuration belongs here. Runtime state and member content
 // must never be imported, exported or restored by configuration tools.
 const TABLES = {
+  community_access:['guildId','feature','managerRoleId','useRoleId','channelId'],
+  training_settings:['guildId','enabled','trainerRoleId','traineeRoleId','reviewChannelId','title','passPercent','questionCount',
+    'maxAttempts','cooldownMinutes','attemptWindowDays','requireReview','showFeedback','shuffle'],
+  temporary_role_allowlist:['guildId','roleId','maxHours','selfClaim'],
+  free_game_routes:['guildId','source','channelId','pingRoleId','pingMode','enabled'],
   guild_settings: ['guildId','modlogChannelId','suggestionChannelId','acceptedSuggestionChannelId','deniedSuggestionChannelId',
     'transcriptChannelId','applicationTranscriptChannelId','ticketFeedbackChannelId','staffListChannelId','staffListRoleId',
     'applicationCreatorRoleId','inviteChannelId','giveawayChannelId','messageLogChannelId','commandLogChannelId',
@@ -16,8 +21,12 @@ const TABLES = {
   daily_interaction_types: ['guildId','type','enabled','weight'],
   daily_interaction_day_themes: ['guildId','dayOfWeek','type'],
   daily_engagement_settings: ['guildId','quietDays','remindersEnabled','reminderDelayMinutes','dailyPointCap','triviaMinutes'],
-  free_game_settings: ['guildId','enabled','channelId','pingRoleId','epicEnabled','steamEnabled','steamCountry'],
-  leveling_config: ['guildId','enabled','xpMin','xpMax','cooldown','levelChannelId','levelMessage','permissionLevel','ignoredChannels','ignoredRoles','levelUpStyle'],
+  free_game_settings: ['guildId','enabled','channelId','pingRoleId','epicEnabled','steamEnabled','steamCountry','extraSources'],
+  leveling_config: ['guildId','enabled','xpMin','xpMax','cooldown','levelChannelId','levelMessage','permissionLevel','ignoredChannels','ignoredRoles','levelUpStyle','duplicateWindow'],
+  automation_managers:['guildId','module','roleId'],
+  logging_privacy:['guildId','retentionDays'],
+  raid_exempt_roles:['guildId','roleId'],
+  ticket_work_hours:['guildId','timezone','startMinute','endMinute','weekdays'],
   leveling_rewards: ['guildId','level','roleId'],
   verification_settings: ['guildId','enabled','channelId','verifiedRoleId','unverifiedRoleId','minimumAccountAgeDays',
     'title','description','buttonLabel','buttonEmoji','buttonStyle','color','thumbnailUrl','imageUrl','footer'],

@@ -128,13 +128,10 @@ async function sendFeedbackPrompt({
   feedback,
   transcriptAttachment = null
 }) {
-  const user =
-    await client.users.fetch(feedback.userId)
-      .catch(() => null);
-
-  if (!user) {
-    return false;
-  }
+  feedback=getFeedback(feedback.id) || feedback;
+  if(feedback.dmSent) return true;
+  const deliveryKey=`ticket-feedback-dm:${feedback.id}`;
+  enqueueDelivery({deliveryKey,type:'TICKET_FEEDBACK_DM',guildId:feedback.guildId,payload:{feedbackId:feedback.id}});
 
   const payload = {
     content:
@@ -147,18 +144,37 @@ async function sendFeedbackPrompt({
   }
 
   try {
-    await sendTranscriptMessage(user, payload);
+    const delivery=await deliverOnce(deliveryKey,async claimed=>{
+      const user=await client.users.fetch(feedback.userId);
+      const destination=user.createDM ? await user.createDM():user;
+      const ticket=get('SELECT * FROM tickets WHERE channelId=?',[feedback.channelId]);
+      if(!transcriptAttachment && ticket?.transcriptMessageId && ticket.transcriptArchiveChannelId) {
+        const archive=await client.channels.fetch(ticket.transcriptArchiveChannelId);
+        const message=await archive.messages.fetch({message:ticket.transcriptMessageId,force:true});
+        const attachment=[...(message.attachments?.values?.() || [])].find(file=>file.name===`ticket-${feedback.channelId}.html`);
+        if(!attachment || !require('./tickets/transcriptDocument').isDiscordAsset(attachment.url)) throw new Error('The transcript copy is unavailable; feedback DM retained for retry.');
+        payload.files=[{attachment:attachment.url,name:attachment.name}];
+      }
+      if(!payload.files?.length) throw new Error('Waiting for a durable transcript before sending feedback.');
+      // Keep file URLs fresh rather than persisting expiring Discord CDN signatures.
+      claimed.parsedPayload={message:payload};
+      run('UPDATE ticket_feedback SET dmAttempts=dmAttempts+1 WHERE id=?',[feedback.id]);
+      return sendTranscriptMessage({send:options=>sendQueuedMessage(destination,claimed,options)},payload);
+    });
+    if(delivery?.status!=='SENT') return false;
 
     run(
       `UPDATE ticket_feedback
-       SET dmSent = 1
+       SET dmSent = 1,dmMessageId=?,dmLastError=NULL,dmNextAttemptAt=0
        WHERE id = ?`,
-      [feedback.id]
+      [delivery.messageId,feedback.id]
     );
 
     return true;
 
   } catch (err) {
+    const delivery=get('SELECT nextAttemptAt FROM delivery_outbox WHERE deliveryKey=?',[deliveryKey]);
+    run('UPDATE ticket_feedback SET dmLastError=?,dmNextAttemptAt=? WHERE id=?',[String(err.message).slice(0,1000),delivery?.nextAttemptAt || Date.now()+60000,feedback.id]);
     console.warn(
       `Could not DM ticket feedback request to ${feedback.userId}:`,
       err.message
@@ -166,6 +182,27 @@ async function sendFeedbackPrompt({
 
     return false;
   }
+}
+
+async function retryFeedbackPrompts(client,limit=25) {
+  const records=all(`SELECT f.* FROM ticket_feedback f JOIN tickets t ON t.channelId=f.channelId
+    WHERE f.dmSent=0 AND f.dmNextAttemptAt<=? AND t.transcriptMessageId IS NOT NULL
+    AND NOT EXISTS(SELECT 1 FROM delivery_outbox d WHERE d.deliveryKey='ticket-feedback-dm:'||f.id AND
+      (d.status IN ('UNCERTAIN','CANCELLED') OR d.nextAttemptAt>? OR COALESCE(d.leaseUntil,0)>?))
+    AND UPPER(t.status) IN ('CLOSING','CLOSED','DELETED') ORDER BY f.dmNextAttemptAt,f.createdAt LIMIT ?`,[Date.now(),Date.now(),Date.now(),limit]);
+  let sent=0;
+  for(const feedback of records) if(await sendFeedbackPrompt({client,feedback})) sent++;
+  return sent;
+}
+
+function resetFeedbackPrompt(id,guildId) {
+  const feedback=getFeedback(id);
+  if(!feedback || feedback.guildId!==guildId) throw new Error('Feedback request not found.');
+  const delivery=get('SELECT * FROM delivery_outbox WHERE deliveryKey=?',[`ticket-feedback-dm:${id}`]);
+  if(delivery?.status==='PROCESSING' && delivery.leaseUntil>Date.now()) throw new Error('Delivery is currently running; try again later.');
+  run('DELETE FROM delivery_outbox WHERE deliveryKey=?',[`ticket-feedback-dm:${id}`]);
+  run('UPDATE ticket_feedback SET dmSent=0,dmNextAttemptAt=0,dmLastError=NULL WHERE id=?',[id]);
+  return getFeedback(id);
 }
 
 function submitFeedback({
@@ -385,11 +422,13 @@ function startFeedbackPublisher(client) {
 
   publishPendingFeedback(client)
     .catch(error => console.error('Ticket feedback startup publish error:', error));
+  retryFeedbackPrompts(client).catch(error=>console.error('Feedback DM retry:',error.message));
 
   publisherInterval = setInterval(() => {
+    retryFeedbackPrompts(client).catch(error=>console.error('Feedback DM retry:',error.message));
     publishPendingFeedback(client)
       .catch(error => console.error('Ticket feedback publish error:', error));
-  }, PUBLISH_RETRY_MS);
+  }, 60000);
 
   publisherInterval.unref?.();
   return publisherInterval;
@@ -404,6 +443,8 @@ module.exports = {
   publishFeedback,
   publishPendingFeedback,
   sendFeedbackPrompt,
+  resetFeedbackPrompt,
+  retryFeedbackPrompts,
   startFeedbackPublisher,
   submitFeedback
 };

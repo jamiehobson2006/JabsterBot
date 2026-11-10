@@ -12,10 +12,10 @@ function stableValue(value) {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value;
 }
 
-function ticketFingerprint({ guildId, userId, type, formId = null, answers = null, requestId = null }) {
+function ticketFingerprint({ guildId, userId, type, formId = null, answers = null, requestId = null, reason = null }) {
   const directIdentity = answers
     ? { guildId, userId, type, formId, answers: stableValue(answers) }
-    : { guildId, userId, type, requestId };
+    : reason?.trim() ? { guildId,userId,type,reason:stableValue(reason).toLowerCase() } : { guildId, userId, type, requestId };
 
   return crypto
     .createHash('sha256')

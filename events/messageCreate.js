@@ -221,7 +221,7 @@ async function handleLinkBlock(
   return true;
 }
 
-async function handleDailyInteractionThreadSafety(message, client) {
+async function handleDailyInteractionThreadSafety(message, client, { commit = true } = {}) {
   if (!message.guild || !message.author || message.author.id === client.user?.id) return false;
   const post = get(
     `SELECT *
@@ -235,7 +235,7 @@ async function handleDailyInteractionThreadSafety(message, client) {
   if (!post) return false;
 
   if (message.author.bot) return false;
-  const validation = require('../utils/dailyDiscussion').recordDiscussionMessage(message, post);
+  const validation = require('../utils/dailyDiscussion').recordDiscussionMessage(message, post, { commit });
   if (validation.valid) return false;
 
   suppressMessageDelete(message.id);
@@ -311,10 +311,12 @@ async function handleAntiSpam(message, client) {
     message.member?.moderatable
   ) {
     try {
-      await message.member.timeout(
-        timeoutSeconds * 1000,
-        `Anti-spam: ${violation.rule}`
-      );
+      await require('../utils/moderationActions').performModerationAction({
+        guildId:message.guild.id,userId:message.author.id,moderatorId:client.user.id,
+        action:'AUTO-TIMEOUT',reason:`Anti-spam: ${violation.rule}`,duration:timeoutSeconds*1000,
+        expiresAt:Date.now()+timeoutSeconds*1000,channelId:message.channel.id
+      }, record => message.member.timeout(timeoutSeconds*1000,
+        require('../utils/moderationActions').moderationReason(`Anti-spam: ${violation.rule}`,record)));
       timedOut = true;
     } catch (err) {
       console.error('Anti-spam timeout failed:', err.message);
@@ -519,11 +521,14 @@ module.exports = {
 
       captureMessageSnapshot(message);
 
-      if (await handleDailyInteractionThreadSafety(message, client)) return;
+      if (await require('../utils/trapChannel').handleTrapMessage(message, client)) return;
+
+      if (await handleDailyInteractionThreadSafety(message, client, { commit:false })) return;
 
       if (message.author.bot) {
         return;
       }
+
 
       // ==========================================
       // 🚫 IGNORE EMPTY
@@ -559,39 +564,14 @@ module.exports = {
       const now =
         Date.now();
 
-      if (await handlePhishing(message, client)) {
-        return;
-      }
+      const safety=await require('../utils/messageSafety').runContentSafety(message,client,{
+        spam:handleAntiSpam,phishing:handlePhishing,censor:handleCensor,links:handleLinkBlock});
+      if(!safety.allowed) return;
 
-      if (
-        await handleCensor(
-          message,
-          client
-        )
-      ) {
+      if (await handleDailyInteractionThreadSafety(message,client,{ commit:true })) return;
 
-        return;
-      }
-
-      if (
-        await handleLinkBlock(
-          message,
-          client
-        )
-      ) {
-
-        return;
-      }
-
-      if (
-        await handleAntiSpam(
-          message,
-          client
-        )
-      ) {
-
-        return;
-      }
+      try { await require('../utils/automation').handleAutoResponse(message); }
+      catch (error) { console.error('Automatic reply:',error.message); }
 
       await trackTicketStaffMessage(
         message,

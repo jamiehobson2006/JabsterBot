@@ -28,6 +28,11 @@ module.exports = {
     .setName('inviteadmin')
     .setDescription('Manage and audit reliable invite tracking')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand(command=>command.setName('reconcile').setDescription('Reconcile memberships without guessing offline invite attribution.'))
+    .addSubcommand(command=>command.setName('correct').setDescription('Correct one membership attribution with an immutable audit trail.')
+      .addUserOption(option=>option.setName('user').setDescription('Membership to correct').setRequired(true))
+      .addStringOption(option=>option.setName('reason').setDescription('Reason for the correction').setRequired(true).setMaxLength(300))
+      .addUserOption(option=>option.setName('inviter').setDescription('Correct inviter; omit to clear credit')))
     .addSubcommand(subcommand => subcommand
       .setName('sync')
       .setDescription('Refresh the invite cache from Discord now'))
@@ -62,6 +67,19 @@ module.exports = {
     }
 
     const subcommand = interaction.options.getSubcommand();
+    if(subcommand==='reconcile') {
+      const result=await require('../../utils/inviteTracking').reconcileMembership(interaction.guild);
+      return interaction.editReply(`Reconciled ${result.left} departures and ${result.observed} memberships without attribution. No offline inviter was guessed.`);
+    }
+    if(subcommand==='correct') {
+      const member=await interaction.guild.members.fetch({user:interaction.user.id,force:true});
+      if(!member.permissions.has(PermissionFlagsBits.ManageGuild)) return interaction.editReply('Manage Server permission is required.');
+      const inviter=interaction.options.getUser('inviter');
+      if(inviter?.bot) return interaction.editReply('Bots cannot receive invite credit.');
+      require('../../utils/inviteTracking').correctAttribution({guildId:interaction.guild.id,memberId:interaction.options.getUser('user',true).id,
+        inviterId:inviter?.id,actorId:interaction.user.id,reason:interaction.options.getString('reason',true)});
+      return interaction.editReply('Attribution corrected; the before/after values and reason are recorded in the invite audit.');
+    }
     if (subcommand === 'sync') {
       if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ManageGuild)) {
         return interaction.editReply({ content: 'I need Manage Server permission to fetch and attribute invite uses.' });

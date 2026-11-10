@@ -78,10 +78,12 @@ async function getChannel(query) {
 
 async function getRecentUploads(
   channelId,
-  limit = 10
+  limit = 10,
+  { strict=false } = {}
 ) {
 
   if (!isYouTubeConfigured()) {
+    if(strict) throw new Error('YouTube API credentials are not configured.');
     return null;
   }
 
@@ -103,7 +105,7 @@ async function getRecentUploads(
       channelResponse.data.items?.[0]
         ?.contentDetails?.relatedPlaylists?.uploads;
 
-    if (!uploadsPlaylistId) return null;
+    if (!uploadsPlaylistId) {if(strict) throw new Error('YouTube channel or upload playlist is unavailable.');return null;}
 
     const response = await youtubeApi.get(
       'https://www.googleapis.com/youtube/v3/playlistItems',
@@ -134,6 +136,7 @@ async function getRecentUploads(
       err.response?.data || err.message
     );
 
+    if(strict) throw err;
     return [];
   }
 }
@@ -147,10 +150,12 @@ async function getLatestUpload(channelId) {
 // ========================================
 
 async function getVideoDetails(
-  videoId
+  videoId,
+  { strict=false } = {}
 ) {
 
   if (!isYouTubeConfigured()) {
+    if(strict) throw new Error('YouTube API credentials are not configured.');
     return null;
   }
 
@@ -233,6 +238,7 @@ actualEndTime:
       err.response?.data || err.message
     );
 
+    if(strict) throw err;
     return null;
   }
 }

@@ -107,6 +107,7 @@ test('free-game alerts have no visible recovery code and lost-response recovery 
   const f = sandbox();
   const offer = { key: 'steam:game', source: 'STEAM', title: 'A Free Game', url: 'https://store.steampowered.com/app/123/' };
   const settings = { guildId: 'guild', channelId: 'parent' };
+  games.saveFreeGameSettings({...settings,epicEnabled:true,steamEnabled:true,updatedBy:'admin'});
   let sends = 0;
   f.parent.send = async payload => {
     sends++;

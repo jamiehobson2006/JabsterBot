@@ -7,9 +7,12 @@ const { sendGreeting, sendMilestone } = require('../utils/greetings');
 module.exports = {
   name: 'guildMemberAdd',
   async execute(member, client) {
+    const inviteCheck=trackMemberJoin(member);
+    const raidCheck=require('../utils/raidProtection').handleRaidJoin(member,client)
+      .catch(error=>console.error('Anti-raid join check:',error.message));
     try {
       // Capture attribution before welcome/logging network requests can consume the evidence.
-      const invite = await trackMemberJoin(member);
+      const invite = await inviteCheck;
       if (invite.duplicate) return;
       for (const operation of [
         () => sendLog(client, member.guild.id, 'MEMBERS', createMemberJoinEmbed(member)),
@@ -31,5 +34,6 @@ module.exports = {
         .setFooter({ text: flags.length ? `${flags.join(' | ')} (not proof of an alternate account)` : `Account age: ${days} days` }).setTimestamp();
       await sendLog(client, member.guild.id, 'INVITES', embed);
     } catch (error) { console.error('GuildMemberAdd Error:', error); }
+    finally {await raidCheck;}
   }
 };

@@ -4,6 +4,7 @@ const {
   run,
   checkpointDatabase
 } = require('../database');
+const {transaction}=require('../database');
 
 const crypto =
   require('node:crypto');
@@ -237,7 +238,9 @@ function addQuestion({
   guildId,
   formId,
   question,
-  required = true
+  required = true,
+  answerType = 'TEXT',
+  choices = []
 }) {
   const existing =
     getQuestions(formId);
@@ -254,6 +257,11 @@ function addQuestion({
   if (cleaned.length < 3) {
     throw new Error('Question is too short.');
   }
+  if (!['TEXT','YES_NO','CHOICE','NUMBER'].includes(answerType)) throw new Error('Invalid answer type.');
+  const options = [...new Set(choices.map(value => String(value).replace(/\s+/g,' ').trim()).filter(Boolean))];
+  if (answerType === 'CHOICE' && (options.length < 2 || options.length > 10 || options.some(value => value.length > 80))) {
+    throw new Error('Choice questions need 2-10 unique options of up to 80 characters.');
+  }
 
   const result = run(
     `INSERT INTO application_questions (
@@ -262,16 +270,16 @@ function addQuestion({
        question,
        position,
        required,
-       createdAt
+       createdAt, answerType, choicesJson
      )
-     VALUES (?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       guildId,
       formId,
       cleaned,
       existing.length + 1,
       required ? 1 : 0,
-      Date.now()
+      Date.now(), answerType, JSON.stringify(options)
     ]
   );
 
@@ -405,26 +413,29 @@ function getDraft(
 function saveDraft({
   id,
   answers,
-  nextQuestionIndex
+  nextQuestionIndex,
+  expectedVersion = null
 }) {
   const expiresAt =
     Date.now() + DRAFT_LIFETIME_MS;
 
-  run(
+  const result = run(
     `UPDATE application_drafts
      SET answersJson = ?,
          nextQuestionIndex = ?,
          expiresAt = ?,
-         updatedAt = ?
-     WHERE id = ?`,
+         updatedAt = ?, questionVersion = questionVersion + 1
+     WHERE id = ? AND submissionStatus NOT IN ('SUBMITTING','SUBMITTED')
+       AND (? IS NULL OR questionVersion = ?)`,
     [
       JSON.stringify(answers || []),
       nextQuestionIndex,
       expiresAt,
       Date.now(),
-      id
+      id, expectedVersion, expectedVersion
     ]
   );
+  if (!result.changes) throw new Error('This answer form is out of date. Resume from the latest application message.');
 
   checkpointDatabase();
 
@@ -501,6 +512,31 @@ function removeQuestion(
   return question;
 }
 
+function editQuestion(formId,position,fields) {
+  const before=get('SELECT * FROM application_questions WHERE formId=? AND position=?',[formId,position]);
+  if(!before) throw new Error('Question not found.');
+  const row={...before,...fields};
+  row.question=cleanQuestion(row.question);
+  if(row.question.length<3 || !['TEXT','YES_NO','CHOICE','NUMBER'].includes(row.answerType)) throw new Error('Choose valid question text and answer type.');
+  const choices=fields.choices ?? JSON.parse(before.choicesJson || '[]');
+  const normalized=[...new Set(choices.map(value=>String(value).trim()).filter(Boolean))];
+  if(row.answerType==='CHOICE' && (normalized.length<2 || normalized.length>10 || normalized.some(value=>value.length>80))) throw new Error('Choice questions need 2-10 options of up to 80 characters.');
+  run('UPDATE application_questions SET question=?,required=?,answerType=?,choicesJson=? WHERE id=? AND formId=?',
+    [row.question,Number(Boolean(row.required)),row.answerType,JSON.stringify(row.answerType==='CHOICE'?normalized:[]),before.id,formId]);
+  checkpointDatabase();return get('SELECT * FROM application_questions WHERE id=?',[before.id]);
+}
+
+function moveQuestion(formId,from,to) {
+  return transaction(()=>{
+    const rows=getQuestions(formId);
+    if(!Number.isInteger(from) || !Number.isInteger(to) || from<1 || to<1 || from>rows.length || to>rows.length) throw new Error('Choose existing question positions.');
+    const [moved]=rows.splice(from-1,1);rows.splice(to-1,0,moved);
+    for(const row of rows)run('UPDATE application_questions SET position=? WHERE id=? AND formId=?',[-row.id,row.id,formId]);
+    rows.forEach((row,index)=>run('UPDATE application_questions SET position=? WHERE id=? AND formId=?',[index+1,row.id,formId]));
+    return getQuestions(formId);
+  });
+}
+
 module.exports = {
   MAX_APPLICATION_QUESTIONS,
   QUESTIONS_PER_MODAL,
@@ -516,6 +552,8 @@ module.exports = {
   deleteForm,
   addQuestion,
   removeQuestion,
+  editQuestion,
+  moveQuestion,
   createDraft,
   getDraft,
   saveDraft,

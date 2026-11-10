@@ -4094,7 +4094,11 @@ createReliabilityTables();
 require('./utils/dailySchema').migrateDailyFeatures(rawRun, ensureColumn);
 require('./utils/auditSchema').migrateAuditFixes(rawRun, ensureColumn, rawGet, rawAll);
 require('./utils/communityFeaturesSchema').migrateCommunityFeatures(rawRun, ensureColumn);
+require('./utils/trapChannelSchema').migrateTrapChannel(rawRun);
+require('./utils/selectedImprovementsSchema').migrateSelectedImprovements(rawRun, ensureColumn);
+require('./utils/communityExpansionSchema').migrateCommunityExpansion(rawRun, ensureColumn);
 require('./utils/configurationTables').installConfigurationHistory(db, rawAll);
+require('./utils/commandGroupMigration').migrateCommandGroups(rawRun, rawAll, rawGet);
 
   });
 
@@ -4149,7 +4153,9 @@ function startDatabaseCleanup() {
       run(
 
         `DELETE FROM message_snapshots
-         WHERE updatedAt < ?`,
+         WHERE updatedAt < CASE WHEN EXISTS(SELECT 1 FROM logging_privacy p WHERE p.guildId=message_snapshots.guildId)
+           THEN CAST((julianday('now')-2440587.5)*86400000 AS INTEGER) - 86400000*(SELECT retentionDays FROM logging_privacy p WHERE p.guildId=message_snapshots.guildId)
+           ELSE ? END`,
 
         [snapshotCutoff]
       );

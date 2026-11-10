@@ -401,7 +401,7 @@ module.exports = {
             `**${label} Action Record**`
           )
 
-          .addFields(fields)
+          .addFields(...fields,{name:'Member DM notification',value:require('../../utils/moderationNotifications').notificationStatus(c.id),inline:true})
 
           .setFooter({
 

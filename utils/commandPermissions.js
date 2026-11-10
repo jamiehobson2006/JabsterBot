@@ -1,5 +1,6 @@
 const { PermissionFlagsBits } = require('discord.js');
 const permissionDefaults = {
+  trapchannel: PermissionFlagsBits.Administrator,
   ban: PermissionFlagsBits.BanMembers,
   unban: PermissionFlagsBits.BanMembers,
   kick: PermissionFlagsBits.KickMembers,

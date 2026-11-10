@@ -1,4 +1,6 @@
 const MUTATING_COMMANDS = new Set([
+  'automation',
+  'trapchannel',
   'application',
   'antispam',
   'ban',
@@ -97,6 +99,13 @@ function getSubcommand(interaction) {
 }
 
 function shouldLogCommand(command, interaction) {
+  if(['knowledge','challenge','partner','temprole','training','socialsettings'].includes(interaction.commandName)) {
+    const sub=getSubcommand(interaction);
+    return !['list','show','view','search','history','pending','approved','settings','next','start','answer','results','queue','ticket'].includes(sub);
+  }
+  if(interaction.commandName==='ticketstats') return ['hours','hours-clear'].includes(getSubcommand(interaction));
+  if (interaction.commandName === 'automation') return !['use','list','status','preview'].includes(getSubcommand(interaction));
+  if(interaction.commandName==='logging') return ['retention','exclude'].includes(interaction.options?.getString?.('view'));
   if (interaction.commandName === 'factsources') return getSubcommand(interaction) === 'verify';
   if (interaction.commandName === 'configuration') return getSubcommand(interaction) === 'apply';
   if (interaction.commandName === 'suggestions') return ['link','unlink'].includes(getSubcommand(interaction));

@@ -3,7 +3,7 @@ const { activityFor, activityOpen, gameState, validateGameTurn } = require('./da
 const { validateDailyInteractionContent } = require('./dailyInteractionSafety');
 const { listCensorTerms } = require('./censor');
 
-function recordDiscussionMessage(message, post) {
+function recordDiscussionMessage(message, post, { commit = true } = {}) {
   if (!activityOpen(post)) return { valid: false, message: 'This activity has closed.' };
   const terms = listCensorTerms(post.guildId);
   const safety = validateDailyInteractionContent({ answer: message.content, censorTerms: terms, maxLength: 250 });
@@ -24,9 +24,11 @@ function recordDiscussionMessage(message, post) {
       if (previous) return previous.answer === safety.answer ? { valid: true } : { valid: false, message: 'A submitted game turn cannot be changed.' };
       const validated = validateGameTurn(post, message.author.id, safety.answer, terms);
       if (!validated.valid) return validated;
+      if (!commit) return { valid: true };
       run(`INSERT INTO daily_game_turns (messageId,turn,userId,answer,createdAt,sourceMessageId) VALUES (?, ?, ?, ?, ?, ?)`,
         [post.messageId, gameState(post).version + 1, message.author.id, validated.answer, Date.now(), message.id]);
     }
+    if (!commit) return { valid: true };
     const previous = get('SELECT 1 FROM daily_interaction_responses WHERE messageId = ? AND userId = ?', [post.messageId, message.author.id]);
     run(`INSERT INTO daily_interaction_responses (messageId,userId,response,submittedAt,threadMessageId)
       VALUES (?, ?, ?, ?, ?) ON CONFLICT(messageId,userId) DO UPDATE SET response=excluded.response,

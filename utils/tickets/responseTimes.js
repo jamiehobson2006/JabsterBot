@@ -1,11 +1,16 @@
-const { get, run, transaction } = require('../../database');
+const { all,get, run, transaction } = require('../../database');
 const { formatHandleTime } = require('./stats');
 
-function responseEstimate(guildId, type, roleId) {
+function responseEstimate(guildId, type, roleId, { days=0 } = {}) {
   if (!roleId) return { count: 0, averageMs: null, label: 'N/A' };
-  const row = get(`SELECT COUNT(*) AS count, AVG(responseMs) AS averageMs
-    FROM ticket_response_samples WHERE guildId = ? AND type = ? AND roleId = ?`, [guildId, type, roleId]);
-  return { count: row.count, averageMs: row.averageMs,
+  const cutoff=days?Date.now()-days*86400000:0;
+  const row = get(`SELECT COUNT(*) AS count, AVG(responseMs) AS averageMs,AVG(businessMs) AS businessMs
+    FROM ticket_response_samples WHERE guildId = ? AND type = ? AND roleId = ? AND recordedAt>=?`, [guildId, type, roleId,cutoff]);
+  const samples=all(`SELECT responseMs FROM ticket_response_samples WHERE guildId=? AND type=? AND roleId=? AND recordedAt>=?
+    ORDER BY recordedAt DESC LIMIT 5000`,[guildId,type,roleId,cutoff]).map(row=>row.responseMs).sort((a,b)=>a-b);
+  const medianMs=samples.length ? (samples[Math.floor((samples.length-1)/2)]+samples[Math.ceil((samples.length-1)/2)])/2:null;
+  const p90Ms=samples.length ? samples[Math.ceil(samples.length*0.9)-1]:null;
+  return { count: row.count, averageMs: row.averageMs, medianMs,p90Ms,businessMs:row.businessMs,distributionCount:samples.length,
     label: row.count ? formatHandleTime(Math.round(row.averageMs)) : 'N/A' };
 }
 
@@ -39,11 +44,12 @@ function recordTicketReply(ticket, { userId, isStaff, roleId, now = Date.now() }
         responseRoleId = COALESCE(responseRoleId, ?) WHERE channelId = ?`, [now, responseRole, current.channelId]);
       if (!current.firstStaffResponseAt && responseRole && Number(current.createdAt) > 0 && now >= current.createdAt) {
         run(`INSERT OR IGNORE INTO ticket_response_samples
-          (guildId, channelId, type, roleId, responseMs, recordedAt) VALUES (?, ?, ?, ?, ?, ?)`,
-        [current.guildId, current.channelId, current.type, responseRole, now - current.createdAt, now]);
+          (guildId, channelId, type, roleId, responseMs, recordedAt,businessMs) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [current.guildId, current.channelId, current.type, responseRole, now - current.createdAt, now,
+          require('./workingHours').businessDuration(current.guildId,current.createdAt,now)]);
       }
       setWaiting(current.channelId, 'MEMBER', now);
-    } else {
+    } else if(userId===current.userId) {
       setWaiting(current.channelId, 'STAFF', now);
     }
     return isStaff;

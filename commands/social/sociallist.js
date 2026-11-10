@@ -18,7 +18,8 @@ module.exports = {
 
     .setDescription(
       'View configured social feeds'
-    ),
+    )
+    .addIntegerOption(option=>option.setName('page').setDescription('Feed page').setMinValue(1)),
 
   async execute(interaction) {
 
@@ -64,7 +65,7 @@ module.exports = {
 
         .setDescription(
 
-          socials.map(feed =>
+          socials.slice(((interaction.options.getInteger('page') || 1)-1)*5,(interaction.options.getInteger('page') || 1)*5).map(feed =>
 
             `**${feed.creatorName}**\n` +
 
@@ -82,7 +83,10 @@ module.exports = {
             `Style: ${feed.messageTemplate ? 'Custom template' : 'Default'}\n` +
             `Quiet Hours: ${feed.quietStartHour !== null && feed.quietEndHour !== null && Number.isInteger(Number(feed.quietStartHour)) && Number.isInteger(Number(feed.quietEndHour))
               ? `${String(feed.quietStartHour).padStart(2, '0')}:00-${String(feed.quietEndHour).padStart(2, '0')}:00 (${feed.timezone || 'Europe/London'})`
-              : 'Disabled'}`
+              : 'Disabled'}` + '\n' + (()=>{
+                const health=require('../../utils/gameProviders').providerHealth(`SOCIAL:${feed.platform==='twitch'?'twitch:':'youtube-uploads:'}${feed.creatorId}${feed.platform==='youtube'?':10':''}`);
+                return `API: ${health?.error?String(health.error).slice(0,180):health?.successAt?`Last success <t:${Math.floor(health.successAt/1000)}:R>`:'Not checked yet'}`;
+              })()
 
           ).join('\n\n')
         )

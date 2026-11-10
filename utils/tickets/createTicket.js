@@ -83,7 +83,8 @@ async function createTicketUnlocked({
 
   reason = null,
 
-  application = null
+  application = null,
+  assertLease = () => {}
 }) {
 
   // ==========================================
@@ -133,7 +134,8 @@ async function createTicketUnlocked({
     type: safeType,
     formId: application?.form?.id || null,
     answers: application?.answers || null,
-    requestId: interaction.id
+    requestId: interaction.id,
+    reason
   });
 
   const duplicate = get(
@@ -149,6 +151,17 @@ async function createTicketUnlocked({
 
   if (duplicate) {
     throw new Error(`This exact ticket already exists in <#${duplicate.channelId}>.`);
+  }
+  const intent=get('SELECT status FROM ticket_creation_intents WHERE fingerprint=?',[fingerprint]);
+  if(!intent || ['COMPLETE','FAILED'].includes(intent.status)) {
+    const limits=get('SELECT * FROM ticket_limits WHERE guildId=?',[interaction.guild.id]) || {maxPerWindow:3,windowMinutes:10,cooldownSeconds:15};
+    const cutoff=Date.now()-limits.windowMinutes*60000;
+    const count=get(`SELECT (SELECT COUNT(*) FROM tickets WHERE guildId=? AND userId=? AND createdAt>=?) +
+      (SELECT COUNT(*) FROM ticket_creation_intents WHERE guildId=? AND userId=? AND createdAt>=? AND status NOT IN ('COMPLETE','FAILED')) AS count`,
+    [interaction.guild.id,interaction.user.id,cutoff,interaction.guild.id,interaction.user.id,cutoff]).count;
+    if(count>=limits.maxPerWindow) throw new Error(`You can create up to ${limits.maxPerWindow} tickets per ${limits.windowMinutes} minutes. Existing unfinished requests can still be retried.`);
+    const remaining=await require('../cooldowns').useCooldown(interaction.guild.id,interaction.user.id,'ticket-create',limits.cooldownSeconds*1000);
+    if(remaining) throw new Error(`Please wait ${Math.ceil(remaining/1000)} seconds before creating another ticket.`);
   }
 
   const settings =
@@ -207,11 +220,11 @@ async function createTicketUnlocked({
     null;
 
   if (!category || category.type !== ChannelType.GuildCategory) {
-    throw new Error('This ticket type has no valid category. Ask an administrator to run /ticketsetup again.');
+    throw new Error('This ticket type has no valid category. Ask an administrator to run /ticket setup again.');
   }
 
   if (!staffRole || staffRole.id === interaction.guild.roles.everyone.id || staffRole.managed) {
-    throw new Error('This ticket type has no valid staff role. Ask an administrator to run /ticketsetup again.');
+    throw new Error('This ticket type has no valid staff role. Ask an administrator to run /ticket setup again.');
   }
 
   const categoryPermissions = category.permissionsFor(interaction.guild.members.me);
@@ -330,8 +343,8 @@ async function createTicketUnlocked({
   // ==========================================
   // 🎫 CREATE CHANNEL
   // ==========================================
-  const channel =
-    await interaction.guild.channels.create({
+  const channel = await require('./creationIntent').prepareChannel({guild:interaction.guild,fingerprint,
+    userId:interaction.user.id,type:safeType,create:()=>{assertLease();return interaction.guild.channels.create({
 
       name:
         channelName,
@@ -350,6 +363,7 @@ async function createTicketUnlocked({
           'Jabster Studios ticket',
           `type:${safeType}`,
           `owner:${interaction.user.id}`,
+          `request:${fingerprint}`,
           application?.form?.id
             ? `form:${application.form.id}`
             : null
@@ -360,7 +374,7 @@ async function createTicketUnlocked({
       reason:
 
         `Ticket created by ${interaction.user.tag}`
-    });
+    });}});
 
   try {
 
@@ -546,7 +560,7 @@ async function createTicketUnlocked({
 
       const question =
         String(item.question || `Question ${index + 1}`)
-          .slice(0, 240);
+          .slice(0, 250);
 
       const answer =
         String(item.answer || 'No answer provided')
@@ -567,7 +581,7 @@ async function createTicketUnlocked({
   embed.addFields({ name: 'Waiting For', value: 'Staff', inline: true });
 
   const msg =
-    await channel.send({
+    await require('./creationIntent').sendCreationMessage(channel,interaction.client,{
 
       content:
 
@@ -579,18 +593,20 @@ async function createTicketUnlocked({
 
       embeds: [embed],
 
-      components: [buttons]
-    });
+      components: [buttons],
+      allowedMentions:{roles:staffRole ? [staffRole.id]:[]}
+    },{assertLease});
 
   for (let index = 0; index < answerEmbeds.length; index += 2) {
-    await channel.send({
+    await require('./creationIntent').sendCreationMessage(channel,interaction.client,{
       embeds: answerEmbeds.slice(index, index + 2)
-    });
+    },{key:`answers:${index}`,assertLease});
   }
 
   // ==========================================
   // 💾 SAVE DATABASE
   // ==========================================
+  assertLease();
   const ticketId = transaction(() => {
     const ticketResult = run(
       `INSERT INTO tickets (
@@ -650,6 +666,7 @@ async function createTicketUnlocked({
   });
 
   checkpointDatabase();
+  run("UPDATE ticket_creation_intents SET status='COMPLETE',messageId=?,updatedAt=? WHERE fingerprint=?",[msg.id,Date.now(),fingerprint]);
 
   await logAudit(
     interaction.client,
@@ -695,10 +712,7 @@ async function createTicketUnlocked({
       [channel.id]
     );
 
-    if (!savedTicket) {
-      await channel.delete('Ticket creation failed before it could be saved')
-        .catch(() => null);
-    }
+    if (!savedTicket) run("UPDATE ticket_creation_intents SET status='CREATED',updatedAt=? WHERE fingerprint=?",[Date.now(),fingerprint]);
 
     throw error;
   }
@@ -717,7 +731,10 @@ async function createTicket(options) {
   if (key) ticketCreationLocks.add(key);
 
   try {
-    return await createTicketUnlocked(options);
+    return key ? await require('../workLeases').withWorkLease(`ticket-create:${key}`,async assertOwned=>{
+      assertOwned();
+      return createTicketUnlocked({...options,assertLease:assertOwned});
+    },{leaseMs:300000}) : await createTicketUnlocked(options);
   } finally {
     if (key) ticketCreationLocks.delete(key);
   }

@@ -122,15 +122,21 @@ module.exports = {
       );
 
     if (!command) {
+      const moved = require('../utils/commandLayout').LEGACY_PATHS[interaction.commandName];
       return safelyReply(
         interaction,
         {
           content:
-            'This command is outdated. Try redeploying slash commands.',
+            moved ? `This command moved to /${moved}. Refresh the slash-command list or open /help.` :
+              'This command is outdated. Try redeploying slash commands.',
           flags: MessageFlags.Ephemeral
         }
       );
     }
+
+    let resolved;
+    try { resolved = require('../utils/commandRegistry').resolveInvocation(command,interaction); }
+    catch (error) { return safelyReply(interaction,{content:error.message,flags:MessageFlags.Ephemeral}); }
 
     const availability =
       getCommandAvailability(interaction);
@@ -150,7 +156,7 @@ module.exports = {
     }
 
     const shouldBeEphemeral =
-      Boolean(command.ephemeral);
+      typeof resolved.command.ephemeral==='function' ? resolved.command.ephemeral(resolved.interaction) : Boolean(resolved.command.ephemeral);
 
     const acknowledged =
       await safelyDeferReply(
@@ -167,8 +173,8 @@ module.exports = {
         await useCooldown(
           interaction.guild.id,
           interaction.user.id,
-          interaction.commandName,
-          command.cooldown || 1500
+          resolved.sourceName,
+          resolved.command.cooldown || 1500
         );
 
       if (cooldown > 0) {
@@ -187,7 +193,7 @@ module.exports = {
         client
       );
 
-      if (shouldLogCommand(command, interaction)) {
+      if (shouldLogCommand(resolved.command, resolved.interaction)) {
         await logCommand(
           client,
           interaction

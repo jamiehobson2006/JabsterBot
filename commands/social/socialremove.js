@@ -162,6 +162,7 @@ module.exports = {
             '❌ No matching social feed was found.'
         });
       }
+      require('../../utils/socialDeliveryPolicy').cancelRemovedSocialDeliveries(interaction.guild.id);
 
       await interaction.editReply({
 

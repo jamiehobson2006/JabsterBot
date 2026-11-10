@@ -266,153 +266,13 @@ function getJsFiles(
 }
 
 function loadCommands() {
-
-  const commandsPath =
-    path.join(
-      __dirname,
-      'commands'
-    );
-
-  if (
-    !fs.existsSync(
-      commandsPath
-    )
-  ) {
-    throw new Error('Commands folder is missing; startup aborted.');
+  const { commands } = require('./utils/commandRegistry').loadCommandRegistry({ fresh: true });
+  client.commands.clear();
+  for (const [name, command] of commands) {
+    client.commands.set(name, command);
+    console.log(`Loaded command /${name}`);
   }
-
-  const folders =
-    fs.readdirSync(
-      commandsPath
-    );
-
-  let loaded = 0;
-
-  let failed = 0;
-
-  for (
-    const folder of folders
-  ) {
-
-    const folderPath =
-      path.join(
-        commandsPath,
-        folder
-      );
-
-    if (
-
-      !fs.statSync(
-        folderPath
-      ).isDirectory()
-    ) {
-
-      continue;
-    }
-
-    const files =
-      getJsFiles(
-        folderPath
-      );
-
-    for (
-      const file of files
-    ) {
-
-      try {
-
-        const filePath =
-          path.join(
-            folderPath,
-            file
-          );
-
-        delete require.cache[
-          require.resolve(
-            filePath
-          )
-        ];
-
-        const command =
-          require(filePath);
-
-        if (
-
-          !command ||
-
-          !command.data ||
-
-          !command.execute
-        ) {
-
-          console.warn(
-
-            `⚠️ Skipped invalid command ${file}`
-          );
-
-          failed++;
-
-          continue;
-        }
-
-        if (
-
-          client.commands.has(
-            command.data.name
-          )
-        ) {
-
-          console.warn(
-
-            `⚠️ Duplicate command skipped: ${command.data.name}`
-          );
-
-          failed++;
-
-          continue;
-        }
-
-        command.category =
-          command.category ||
-          folder;
-
-        client.commands.set(
-
-          command.data.name,
-
-          command
-        );
-
-        loaded++;
-
-        console.log(
-
-          `✅ Loaded command /${command.data.name}`
-        );
-
-      } catch (err) {
-
-        failed++;
-
-        console.error(
-
-          `❌ Failed loading command ${file}:`,
-
-          err
-        );
-      }
-    }
-  }
-
-  console.log(
-    `✅ Loaded ${loaded} commands`
-  );
-
-  if (
-    failed > 0
-  ) {
-    throw new Error(`Failed to load ${failed} command(s); startup aborted.`);
-  }
+  console.log(`Loaded ${commands.size} global command groups`);
 }
 
 function loadEvents() {
@@ -565,6 +425,8 @@ client.once('clientReady', async () => {
   console.log(`Commands: ${client.commands.size}`);
   console.log('----------------------');
 
+  require('./utils/trapChannel').startTrapProtection(client);
+  require('./utils/raidProtection').startAutomationMaintenance(client);
   await warmInviteCache();
 
   const startupTasks = [
@@ -581,6 +443,8 @@ client.once('clientReady', async () => {
     }],
     ['giveaway loop', () => startGiveawayLoop(client)],
     ['social monitor', () => socialMonitor.start(client)],
+    ['social digests', () => require('./utils/serviceRunner').startManagedLoop('social-digests',
+      () => require('./utils/socialDigests').maintain(client), 60_000, { timeoutMs: 60_000 })],
     ['free game watch', () => freeGameMonitor.start(client)],
     ['free game reminders', () => require('./utils/serviceRunner').startManagedLoop(
       'free-game-reminders',()=>require('./utils/freeGameReminders').processReminders(client),60_000)],
@@ -597,6 +461,10 @@ client.once('clientReady', async () => {
     ['ticket targets', () => startTicketTargetLoop(client)],
     ['timeout reconciliation', () => TimeoutReconciliationService.start(client)],
     ['delivery outbox', () => startDeliveryWorker(client)],
+    ['temporary roles', () => require('./utils/serviceRunner').startManagedLoop('temporary-roles',
+      () => require('./utils/temporaryRoles').maintain(client), 30_000, { timeoutMs: 60_000 })],
+    ['training result notices', () => require('./utils/serviceRunner').startManagedLoop('training-notices',
+      () => require('./utils/moderatorTraining').maintainNotifications(client), 60_000, { timeoutMs: 60_000 })],
     ['temporary voice recovery', () => cleanupTempVoiceRooms(client)]
   ];
 

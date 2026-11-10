@@ -84,6 +84,8 @@ function homePayload(guildId, notice = null) {
     }
   ];
   if (notice) fields.unshift({ name: 'Saved', value: notice.slice(0, 1024) });
+  const latest=get('SELECT actorId,changedAt FROM configuration_changes WHERE guildId=? ORDER BY id DESC LIMIT 1',[guildId]);
+  if(latest?.actorId) fields.push({name:'Last configuration change',value:`<@${latest.actorId}> | <t:${Math.floor(latest.changedAt/1000)}:R>`});
 
   return {
     embeds: [new EmbedBuilder()
@@ -100,6 +102,7 @@ function homePayload(guildId, notice = null) {
           { label: 'Logging', value: 'logging', description: 'Send all log categories to one channel' },
           { label: 'Support Tickets', value: 'tickets', description: 'Choose the support category and staff role' },
           { label: 'Community', value: 'community', description: 'Configure suggestions and welcome messages' },
+          { label:'Daily Posts and Free Games',value:'notifications',description:'Choose destinations, then explicitly enable posting' },
           { label: 'Safety', value: 'safety', description: 'Enable recommended server protections' }
         )
     )]
@@ -117,13 +120,25 @@ function backRow() {
 
 function sectionPayload(guildId, section) {
   const state = summary(guildId);
+  if(section==='notifications') {
+    const facts=get('SELECT channelId,enabled FROM dailyfact_config WHERE guildId=?',[guildId]);
+    const interactions=get('SELECT channelId,enabled FROM daily_interaction_config WHERE guildId=?',[guildId]);
+    const games=get('SELECT channelId,enabled FROM free_game_settings WHERE guildId=?',[guildId]);
+    const destinations=[['facts','Daily facts',facts],['interactions','Daily interactions',interactions],['games','Free games',games]];
+    return {embeds:[new EmbedBuilder().setTitle('Daily Posts and Free Games').setColor(0x57F287)
+      .addFields(destinations.map(([,name,row])=>({name,value:`${row?.channelId?`<#${row.channelId}>`:'Channel not set'} | ${row?.enabled?'Enabled':'Disabled'}`})))],
+    components:[...destinations.map(([key,name])=>new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder()
+      .setCustomId(`setupwizard:set:${key}`).setPlaceholder(`${name} destination`).setChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement))),
+      new ActionRowBuilder().addComponents(...destinations.map(([key,name,row])=>new ButtonBuilder().setCustomId(`setupwizard:toggle:${key}`)
+        .setLabel(`${row?.enabled?'Disable':'Enable'} ${name}`).setStyle(row?.enabled?ButtonStyle.Secondary:ButtonStyle.Success))),backRow()]};
+  }
 
   if (section === 'logging') {
     return {
       embeds: [new EmbedBuilder()
         .setColor(0x3498DB)
         .setTitle('Setup Logging')
-        .setDescription('Choose a channel. All logging categories will be enabled there; you can split them later with `/logging`.')
+        .setDescription('Choose a channel. All logging categories will be enabled there; you can split them later with `/logging dashboard`.')
         .addFields({ name: 'Current Status', value: `${state.logs} categories enabled` })],
       components: [
         new ActionRowBuilder().addComponents(
@@ -169,7 +184,7 @@ function sectionPayload(guildId, section) {
       embeds: [new EmbedBuilder()
         .setColor(0x57F287)
         .setTitle('Setup Community Features')
-        .setDescription('Suggestions use `/suggest`. Welcome messages use the built-in rotating message style without pinging.')
+        .setDescription('Suggestions use `/suggestions submit`. Welcome messages use the built-in rotating message style without pinging.')
         .addFields(
           { name: 'Suggestions', value: state.suggestionChannelId ? `<#${state.suggestionChannelId}>` : 'Not set', inline: true },
           { name: 'Welcome Messages', value: state.welcomeChannelId ? `<#${state.welcomeChannelId}>` : 'Not set', inline: true }
@@ -196,7 +211,7 @@ function sectionPayload(guildId, section) {
     embeds: [new EmbedBuilder()
       .setColor(0xED4245)
       .setTitle('Setup Safety')
-      .setDescription('Recommended protection enables phishing detection, server-wide link blocking, built-in anti-racism, and balanced anti-spam defaults.')
+      .setDescription('Both presets enable phishing, anti-racism and anti-spam with automatic spam timeouts off. Balanced allows ordinary links; Strict blocks them. Neither enables anti-raid or trap bans.')
       .addFields(
         { name: 'Phishing', value: state.phishing ? 'On' : 'Off', inline: true },
         { name: 'Link Blocking', value: state.linkBlock ? 'On' : 'Off', inline: true },
@@ -205,9 +220,10 @@ function sectionPayload(guildId, section) {
       )],
     components: [
       new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('setupwizard:safety:balanced').setLabel('Balanced: keep links').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId('setupwizard:safety:recommended')
-          .setLabel('Enable Recommended Protection')
+          .setLabel('Strict: block links')
           .setStyle(ButtonStyle.Success)
       ),
       backRow()

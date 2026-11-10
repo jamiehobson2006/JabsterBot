@@ -654,8 +654,13 @@ function formatCommandOption(option) {
 
 function formatCommandInvocation(interaction) {
 
+  const privateRoots=new Set(['training','knowledge','partner','challenge']);
+  const sensitive=new Set(['content','prompt','expected','explanation','choices','answer','feedback','reason','note','description','url']);
+  const redact=option=>option.options?{...option,options:option.options.map(redact)}:
+    privateRoots.has(interaction.commandName) && sensitive.has(option.name)?{...option,value:'[private content omitted]'}:option;
   const formatted =
     (interaction.options?.data || [])
+      .map(redact)
       .map(formatCommandOption)
       .filter(Boolean);
 

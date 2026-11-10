@@ -184,6 +184,7 @@ module.exports = {
             '❌ That user is not banned.'
         });
       }
+      await require('../../utils/moderationAuthorization').authorizeModeration(interaction, userId, PermissionsBitField.Flags.BanMembers);
       const { caseId } = await performModerationAction(
         {
           guildId: interaction.guild.id,
@@ -193,9 +194,9 @@ module.exports = {
           reason,
           channelId: interaction.channelId
         },
-        () => interaction.guild.members.unban(
+        record => interaction.guild.members.unban(
           userId,
-          `${reason} | By ${interaction.user.tag}`
+          require('../../utils/moderationActions').moderationReason(reason, record)
         )
       );
 
@@ -365,7 +366,7 @@ module.exports = {
           });
         }
 
-        await fetchedUser.send({
+        await require('../../utils/moderationNotifications').sendModerationDM(fetchedUser,caseId,{
 
           embeds: [dmEmbed]
         });

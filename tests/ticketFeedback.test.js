@@ -101,7 +101,7 @@ test('every ticket category sends and publishes feedback through the shared feed
   const client = {
     users: {
       fetch: async () => ({
-        send: async payload => directMessages.push(payload)
+        send: async payload => {directMessages.push(payload);return{id:`dm-${directMessages.length}`};}
       })
     },
     channels: {
@@ -127,7 +127,7 @@ test('every ticket category sends and publishes feedback through the shared feed
       closeReason: `Closed ${type} ticket.`
     });
 
-    assert.equal(await sendFeedbackPrompt({ client, feedback: record }), true);
+    assert.equal(await sendFeedbackPrompt({ client, feedback: record,transcriptAttachment:{attachment:Buffer.from('transcript'),name:'ticket.html'} }), true);
 
     const submitted = submitFeedback({
       id: record.id,

@@ -194,6 +194,8 @@ test('warning command displays use active counters and label cleared history sep
     client: { user: { id: 'bot', tag: 'Bot' } }, options: { getUser: () => user, getString: () => 'New warning' },
     member: { roles: { highest: { position: 50 } } }, deferred: true, ephemeral: true,
     editReply: async payload => { responses.push(payload); } };
+  guild.members.fetch=async input=>(typeof input==='string'?input:input.user)==='moderator' ?
+    {id:'moderator',permissions:interaction.memberPermissions,roles:{highest:{position:50}}}:member;
   await require('../commands/moderation/warn').execute(interaction);
   const warned = responses.find(payload => payload.embeds?.[0]?.data.fields?.some(field => field.name.includes('Previous Warns')));
   assert.equal(warned.embeds[0].data.fields.find(field => field.name.includes('Previous Warns')).value, '0');

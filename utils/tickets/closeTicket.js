@@ -202,6 +202,7 @@ async function closeTicketUnlocked({
 
   try {
     assertLease();
+    await require('./sealTicket').sealTicket(interaction.channel,interaction.client.user.id);
     if (!closingTicket.closeNoticeSentAt) {
       await interaction.channel.send({ embeds: [closeEmbed] });
 
@@ -264,6 +265,7 @@ async function closeTicketUnlocked({
         'Transcript delivery is still pending. The channel was kept; use Close again to retry.'
       );
     }
+    if (transcript.boundaryId) run('UPDATE tickets SET transcriptBoundaryId=? WHERE channelId=?',[transcript.boundaryId,interaction.channel.id]);
 
     const deleteAfter = Date.now() + 5000;
     const finalize = db.transaction(() => {
@@ -318,6 +320,7 @@ async function closeTicketUnlocked({
       handleTime
     };
   } catch (error) {
+    await require('./sealTicket').unsealTicket(interaction.channel).catch(restoreError=>console.error('Ticket permission restore:',restoreError.message));
     run(
       `UPDATE tickets
        SET closeLastError = ?

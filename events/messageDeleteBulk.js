@@ -40,6 +40,7 @@ module.exports = {
       if (!channel?.guild || !messages?.size) {
         return;
       }
+      if(require('../utils/messageSnapshots').messageLoggingExcluded({guild:channel.guild,channel})) return;
 
       const deletedMessages = [...messages.values()]
         .map(message => getMessageSnapshot(message.id) || message);

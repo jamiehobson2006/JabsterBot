@@ -8,6 +8,7 @@ const DEFAULT_CONFIG = {
   xpMin: 15,
   xpMax: 25,
   cooldown: 60,
+  duplicateWindow:300,
   levelChannelId: null,
   levelMessage: null,
   ignoredChannels: null,

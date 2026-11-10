@@ -18,14 +18,18 @@ const {
 } = require('./deliveryOutbox');
 
 const {
-  getRecentUploads,
-  getVideoDetails,
+  getRecentUploads: fetchRecentUploads,
+  getVideoDetails: fetchVideoDetails,
   getUploadType
 } = require('./youtube');
 
 const {
-  getStream
+  getStream: fetchStream
 } = require('./twitch');
+const {sharedSocialFetch,assertActiveSocialDelivery}=require('./socialDeliveryPolicy');
+const getStream=id=>sharedSocialFetch(`twitch:${id}`,()=>fetchStream(id));
+const getVideoDetails=id=>sharedSocialFetch(`youtube-video:${id}`,()=>fetchVideoDetails(id,{strict:true}));
+const getRecentUploads=(id,limit)=>sharedSocialFetch(`youtube-uploads:${id}:${limit}`,()=>fetchRecentUploads(id,limit,{strict:true}));
 
 const CHECK_INTERVAL =
   5 * 60 * 1000;
@@ -740,15 +744,9 @@ const payload = {
   components: [row],
   allowedMentions: socialAllowedMentions(social)
 };
-enqueueDelivery({
-  deliveryKey,
-  type: 'SOCIAL_TWITCH',
-  guildId: social.guildId,
-  channelId: channel.id,
-  payload: { creatorId: social.creatorId, streamId: stream.id, message: payload }
-});
-const delivery = await deliverOnce(deliveryKey,
-  claimed => sendQueuedMessage(channel, claimed, payload));
+const delivery = await require('./socialDigests').deliverSocialOrQueue({client,social,deliveryKey,
+  type:'SOCIAL_TWITCH',channel,message:payload,metadata:{creatorId:social.creatorId,feedType:social.contentType,
+    feedAddedAt:Number(social.addedAt),streamId:stream.id,title:stream.title}});
 if (delivery?.status !== 'SENT') continue;
 const message = { id: delivery.messageId };
 
@@ -1128,15 +1126,9 @@ const payload = {
   components: [row],
   allowedMentions: socialAllowedMentions(social)
 };
-enqueueDelivery({
-  deliveryKey,
-  type: 'SOCIAL_YOUTUBE',
-  guildId: social.guildId,
-  channelId: channel.id,
-  payload: { creatorId: social.creatorId, videoId: latestUpload.videoId, uploadType, message: payload }
-});
-const delivery = await deliverOnce(deliveryKey,
-  claimed => sendQueuedMessage(channel, claimed, payload));
+const delivery = await require('./socialDigests').deliverSocialOrQueue({client,social,deliveryKey,
+  type:'SOCIAL_YOUTUBE',channel,message:payload,metadata:{creatorId:social.creatorId,feedType:social.contentType,
+    feedAddedAt:Number(social.addedAt),videoId:latestUpload.videoId,uploadType,title:details.title}});
 if (delivery?.status !== 'SENT') break;
 const message = { id: delivery.messageId };
 
@@ -1296,6 +1288,7 @@ monitorInterval.unref?.();
 }
 
 module.exports = {
+  isQuietHours,
   start,
   checkEndedTwitchStreams,
   runMonitor

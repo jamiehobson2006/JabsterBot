@@ -88,7 +88,31 @@ module.exports = {
     }
 
     await interaction.deferUpdate();
+    try {
     const guildId = interaction.guild.id;
+    const fresh=await interaction.guild.members.fetch({user:interaction.user.id,force:true});
+    if(!fresh.permissions.has(PermissionFlagsBits.ManageGuild)) return interaction.editReply({content:'Manage Server permission is required.',components:[],embeds:[]});
+
+    const notification=customId.match(/^setupwizard:(set|toggle):(facts|interactions|games)$/);
+    if(notification) {
+      const [,action,feature]=notification;
+      if(feature==='games' && !fresh.permissions.has(PermissionFlagsBits.Administrator)) return interaction.followUp({content:'Only administrators can configure free-game posting.',flags:MessageFlags.Ephemeral});
+      const tables={facts:'dailyfact_config',interactions:'daily_interaction_config',games:'free_game_settings'};
+      const table=tables[feature];
+      if(action==='set') {
+        const channel=interaction.channels.first();
+        require('../utils/destinationValidation').assertDestination(interaction.guild,channel);
+        run(`INSERT INTO ${table}(guildId,channelId,enabled) VALUES(?,?,0) ON CONFLICT(guildId) DO UPDATE SET channelId=excluded.channelId`,[guildId,channel.id]);
+      } else {
+        const settings=get(`SELECT channelId,enabled FROM ${table} WHERE guildId=?`,[guildId]);
+        if(!settings?.channelId) return interaction.followUp({content:'Set a channel before enabling this feature.',flags:MessageFlags.Ephemeral});
+        const channel=await interaction.guild.channels.fetch(settings.channelId);
+        require('../utils/destinationValidation').assertDestination(interaction.guild,channel);
+        run(`UPDATE ${table} SET enabled=? WHERE guildId=?`,[settings.enabled?0:1,guildId]);
+      }
+      await logSetupChange(interaction,`Notifications ${feature}`,action);
+      return interaction.editReply(sectionPayload(guildId,'notifications'));
+    }
 
     if (customId === HOME_ID) {
       await interaction.editReply(homePayload(guildId));
@@ -168,6 +192,7 @@ module.exports = {
 
     if (customId === 'setupwizard:set:suggestions' && interaction.isChannelSelectMenu()) {
       const channel = interaction.channels.first();
+      require('../utils/destinationValidation').assertDestination(interaction.guild,channel);
       run(
         `INSERT INTO guild_settings (guildId, suggestionChannelId)
          VALUES (?, ?)
@@ -181,6 +206,7 @@ module.exports = {
 
     if (customId === 'setupwizard:set:welcome' && interaction.isChannelSelectMenu()) {
       const channel = interaction.channels.first();
+      require('../utils/destinationValidation').assertDestination(interaction.guild,channel);
       run(
         `INSERT INTO greeting_settings (
            guildId, type, enabled, channelId, mode, ping, color, updatedBy, updatedAt
@@ -195,8 +221,9 @@ module.exports = {
       return;
     }
 
-    if (customId === 'setupwizard:safety:recommended' && interaction.isButton()) {
+    if (['setupwizard:safety:recommended','setupwizard:safety:balanced'].includes(customId) && interaction.isButton()) {
       const now = Date.now();
+      const blockLinks=customId==='setupwizard:safety:recommended';
       run(
         `INSERT INTO phishing_settings (guildId, enabled, updatedBy, updatedAt)
          VALUES (?, 1, ?, ?)
@@ -205,23 +232,26 @@ module.exports = {
       );
       run(
         `INSERT INTO guild_settings (guildId, linkBlockEnabled, censorAntiRacismEnabled)
-         VALUES (?, 1, 1)
+         VALUES (?, ?, 1)
          ON CONFLICT(guildId) DO UPDATE SET
-           linkBlockEnabled = 1,
+           linkBlockEnabled = excluded.linkBlockEnabled,
            censorAntiRacismEnabled = 1`,
-        [guildId]
+        [guildId,blockLinks?1:0]
       );
       run(
-        `INSERT INTO antispam_settings (guildId, enabled, updatedBy, updatedAt)
-         VALUES (?, 1, ?, ?)
-         ON CONFLICT(guildId) DO UPDATE SET enabled = 1, updatedBy = excluded.updatedBy, updatedAt = excluded.updatedAt`,
+        `INSERT INTO antispam_settings (guildId, enabled,timeoutSeconds, updatedBy, updatedAt)
+         VALUES (?, 1,0, ?, ?)
+         ON CONFLICT(guildId) DO UPDATE SET enabled = 1,timeoutSeconds=0, updatedBy = excluded.updatedBy, updatedAt = excluded.updatedAt`,
         [guildId, interaction.user.id, now]
       );
       await logSetupChange(interaction, 'Recommended safety protection', 'enabled');
       await interaction.editReply(homePayload(
         guildId,
-        'Recommended phishing, link, anti-racism, and anti-spam protection is enabled.'
+        `${blockLinks?'Strict':'Balanced'} safety preset saved: phishing, anti-racism and anti-spam enabled; links ${blockLinks?'blocked':'allowed'}. Anti-spam automatic timeouts are disabled. Anti-raid and trap settings were not changed.`
       ));
+    }
+    } catch(error) {
+      await interaction.followUp({content:error.message,flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});
     }
   }
 };

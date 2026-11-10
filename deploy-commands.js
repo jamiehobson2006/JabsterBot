@@ -1,12 +1,6 @@
 require('./utils/safeLogging').installSafeLogging();
 require('dotenv').config();
 
-const fs =
-  require('fs');
-
-const path =
-  require('path');
-
 const {
   REST,
   Routes
@@ -34,8 +28,6 @@ if (!TOKEN) {
 if (!CLIENT_ID) {
   throw new Error('CLIENT_ID missing in .env');
 }
-
-const { permissionDefaults } = require('./utils/commandPermissions');
 
 async function getGuildCommandCleanupIds(rest) {
 
@@ -68,112 +60,8 @@ async function getGuildCommandCleanupIds(rest) {
 }
 
 function loadCommands() {
-
-  const commands = [];
-  const loadedNames = new Set();
-  const failedCommands = [];
-  const foldersPath =
-    path.join(__dirname, 'commands');
-
-  if (!fs.existsSync(foldersPath)) {
-    throw new Error('Commands folder missing');
-  }
-
-  const commandFolders =
-    fs.readdirSync(foldersPath);
-
-  for (const folder of commandFolders) {
-
-    const commandsPath =
-      path.join(foldersPath, folder);
-
-    if (!fs.statSync(commandsPath).isDirectory()) {
-      continue;
-    }
-
-    const commandFiles =
-      fs.readdirSync(commandsPath)
-        .filter(file => file.endsWith('.js'));
-
-    for (const file of commandFiles) {
-
-      const filePath =
-        path.join(commandsPath, file);
-
-      try {
-
-        delete require.cache[
-          require.resolve(filePath)
-        ];
-
-        const command =
-          require(filePath);
-
-        if (
-          !command ||
-          !command.data ||
-          !command.execute
-        ) {
-
-          console.warn(`Skipped invalid command file: ${file}`);
-          failedCommands.push(file);
-          continue;
-        }
-
-        const commandJson =
-          command.data.toJSON();
-
-        if (!commandJson.name) {
-
-          console.warn(`Skipped command with missing name: ${file}`);
-          failedCommands.push(file);
-          continue;
-        }
-
-        if (loadedNames.has(commandJson.name)) {
-
-          console.warn(`Skipped duplicate command: ${commandJson.name}`);
-          failedCommands.push(commandJson.name);
-          continue;
-        }
-
-        loadedNames.add(commandJson.name);
-
-        const defaultPermission =
-          permissionDefaults[commandJson.name];
-
-        if (defaultPermission !== undefined) {
-
-          commandJson.default_member_permissions =
-            defaultPermission.toString();
-        }
-
-        if (command.dmPermission === false) {
-          commandJson.dm_permission = false;
-        }
-
-        commands.push(commandJson);
-
-      } catch (err) {
-
-        console.error(
-          `Failed loading command ${file}:`,
-          err
-        );
-
-        failedCommands.push(file);
-      }
-    }
-  }
-
-  if (!commands.length) {
-    throw new Error('No commands loaded.');
-  }
-
-  return {
-    commands,
-    failedCommands
-  };
+  const registry = require('./utils/commandRegistry').loadCommandRegistry({ fresh: true });
+  return { commands: registry.definitions, failedCommands: [] };
 }
 
 async function deploy() {
@@ -193,6 +81,7 @@ async function deploy() {
       `Deployment aborted because command loading failed: ${failedCommands.join(', ')}`
     );
   }
+  require('./utils/commandValidation').validateGlobalCommands(commands);
 
   const rest =
     new REST({

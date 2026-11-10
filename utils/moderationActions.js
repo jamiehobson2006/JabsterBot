@@ -49,13 +49,13 @@ function beginModerationAction({
   return get('SELECT * FROM moderation_actions WHERE recordId = ?', [recordId]);
 }
 
-function markDiscordApplied(recordId) {
+function markDiscordApplied(recordId,appliedAt = Date.now()) {
   const now = Date.now();
   run(
     `UPDATE moderation_actions
      SET status = 'APPLIED', discordAppliedAt = ?, updatedAt = ?, error = NULL
-     WHERE recordId = ? AND status IN ('PENDING', 'FAILED')`,
-    [now, now, recordId]
+     WHERE recordId = ? AND status IN ('PENDING', 'FAILED', 'UNCERTAIN')`,
+    [appliedAt, now, recordId]
   );
 }
 
@@ -155,11 +155,59 @@ async function performModerationAction(details, apply) {
   } catch (error) {
     try {
       markModerationFailed(record.recordId, error, applied);
+      if (!applied && (!error.code || !Number.isFinite(Number(error.code)) || Number(error.status || error.response?.status) >= 500)) {
+        run("UPDATE moderation_actions SET status='UNCERTAIN' WHERE recordId=? AND caseId IS NULL",[record.recordId]);
+      }
     } catch (recordError) {
       console.error('Failed to update moderation action state:', recordError);
     }
     throw error;
   }
+}
+
+function moderationReason(reason, record) {
+  return `${String(reason || 'Moderation action').slice(0,400)} | JS action:${record.recordId}`;
+}
+
+async function reconcileModerationActions(client, now = Date.now()) {
+  const { AuditLogEvent } = require('discord.js');
+  const types = { BAN:AuditLogEvent.MemberBanAdd, UNBAN:AuditLogEvent.MemberBanRemove,
+    KICK:AuditLogEvent.MemberKick, MUTE:AuditLogEvent.MemberUpdate,
+    TIMEOUT:AuditLogEvent.MemberUpdate, 'AUTO-TIMEOUT':AuditLogEvent.MemberUpdate, UNMUTE:AuditLogEvent.MemberUpdate };
+  let recovered = recoverAppliedModerationActions();
+  const auditCache=new Map();
+  const rows = all(`SELECT * FROM moderation_actions WHERE caseId IS NULL
+    AND status IN ('PENDING','UNCERTAIN','FAILED') AND updatedAt<=? ORDER BY updatedAt LIMIT 100`,[now-120000]);
+  for (const row of rows) {
+    const guild = client.guilds.cache.get(row.guildId);
+    if (!guild || !types[row.action]) continue;
+    try {
+      const marker = `JS action:${row.recordId}`;
+      let confirmed = false;
+      let confirmedAt=row.createdAt;
+      if (row.action === 'BAN') {
+        const ban = await guild.bans.fetch({user:row.userId,force:true}).catch(error => {
+          if (Number(error.code) === 10026) return null;
+          throw error;
+        });
+        confirmed = Boolean(ban?.reason?.includes(marker));
+      }
+      if (!confirmed && guild.fetchAuditLogs) {
+        const key=`${row.guildId}:${types[row.action]}`;
+        if(!auditCache.has(key)) auditCache.set(key,guild.fetchAuditLogs({type:types[row.action],limit:100}));
+        const logs = await auditCache.get(key);
+        const entry=logs.entries.find(item => item.target?.id === row.userId &&
+          item.executor?.id === client.user.id && item.reason?.includes(marker));
+        confirmed=Boolean(entry);
+        if(entry?.createdTimestamp) confirmedAt=entry.createdTimestamp;
+      }
+      if (confirmed) { markDiscordApplied(row.recordId,confirmedAt); completeModerationAction(row.recordId); recovered++; }
+      else run('UPDATE moderation_actions SET updatedAt=? WHERE recordId=? AND caseId IS NULL',[now,row.recordId]);
+    } catch (error) {
+      run('UPDATE moderation_actions SET error=?,updatedAt=? WHERE recordId=?',[cleanError(error),now,row.recordId]);
+    }
+  }
+  return recovered;
 }
 
 function recoverAppliedModerationActions(limit = 100) {
@@ -190,5 +238,7 @@ module.exports = {
   markDiscordApplied,
   markModerationFailed,
   performModerationAction,
+  moderationReason,
+  reconcileModerationActions,
   recoverAppliedModerationActions
 };

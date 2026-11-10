@@ -40,6 +40,7 @@ test('real ticket creation saves the configured application reviewer role and di
   const guild = { id: 'guild', members: { me: {} }, roles: { everyone: { id: 'everyone' },
     cache: new Map([['developers', { id: 'developers' }], ['general', { id: 'general' }]]) },
   channels: { cache: new Map([['category', category]]), create: async () => ({ id: 'new-app',
+    messages:{fetch:async()=>new (require('discord.js').Collection)()},
     send: async payload => { messages.push(payload); return { id: 'starter' }; } }) } };
   const interaction = { id: 'request', guild, user: { id: 'applicant', username: 'applicant', tag: 'Applicant', toString: () => '<@applicant>' },
     client: { user: { id: 'bot' } } };
@@ -56,7 +57,7 @@ test('averages are isolated by guild, ticket type and application reviewer role'
     ['e', 'application', 'mods', 'other', 1200000]]) {
     recordTicketReply(ticket(id, type, role, guild), { userId: 'staff', isStaff: true, roleId: 'changed-role', now: 1000000 + ms });
   }
-  assert.deepEqual(responseEstimate('guild', 'application', 'mods'), { count: 2, averageMs: 120000, label: '2m' });
+  assert.deepEqual(responseEstimate('guild', 'application', 'mods'), { count: 2, averageMs: 120000, label: '2m',medianMs:120000,p90Ms:180000,businessMs:null,distributionCount:2 });
   assert.equal(responseEstimate('guild', 'application', 'helpers').label, '10m');
   assert.equal(responseEstimate('guild', 'support', 'mods').label, '15m');
   assert.equal(responseEstimate('other', 'application', 'mods').label, '20m');

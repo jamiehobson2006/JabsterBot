@@ -146,14 +146,19 @@ function renderGreeting(
 
   const replacements = {
     '{user}': `<@${member.id}>`,
-    '{username}': member.user.username,
-    '{server}': member.guild.name,
-    '{member_count}': String(member.guild.memberCount)
+    '{username}': require('discord.js').escapeMarkdown(member.user.username),
+    '{server}': require('discord.js').escapeMarkdown(member.guild.name),
+    '{member_count}': String(member.guild.memberCount),
+    '{display_name}':require('discord.js').escapeMarkdown(member.displayName || member.user.username),
+    '{user_id}':member.id,
+    '{server_id}':member.guild.id,
+    '{account_created}':member.user.createdTimestamp?`<t:${Math.floor(member.user.createdTimestamp/1000)}:F>`:'Unknown',
+    '{joined_at}':member.joinedTimestamp?`<t:${Math.floor(member.joinedTimestamp/1000)}:F>`:'Unknown'
   };
 
   return String(template || '')
     .replace(
-      /\{user\}|\{username\}|\{server\}|\{member_count\}/g,
+      /\{(?:user|username|server|member_count|display_name|user_id|server_id|account_created|joined_at)\}/g,
       token => replacements[token]
     )
     .slice(0, 4000);
@@ -202,6 +207,7 @@ module.exports = {
   BUTTON_STYLES,
   DEFAULT_COLOR,
   RANDOM_GREETINGS,
+  renderGreeting,
   buildGreetingEmbed,
   buildVerificationPanel,
   parseEmbedColor,

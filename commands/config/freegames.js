@@ -28,10 +28,14 @@ const COUNTRY_CHOICES = [
   { name: 'Germany', value: 'DE' }
 ];
 
+const STORE_CHOICES=[{name:'Epic Games',value:'EPIC'},{name:'Steam',value:'STEAM'},
+  ...Object.entries(require('../../utils/gameProviders').SOURCES).map(([value,name])=>({name,value}))];
+
 function describeSources(settings) {
   const sources = [];
   if (Number(settings?.epicEnabled) === 1) sources.push('Epic Games');
   if (Number(settings?.steamEnabled) === 1) sources.push('Steam');
+  sources.push(...require('../../utils/gameProviders').extraSources(settings).map(source=>require('../../utils/gameProviders').SOURCES[source]));
   return sources.length ? sources.join(' and ') : 'None';
 }
 
@@ -47,7 +51,7 @@ function statusEmbed(settings) {
       { name: 'Ping Role', value: settings?.pingRoleId ? `<@&${settings.pingRoleId}>` : 'No role ping', inline: true },
       { name: 'Checks', value: `Every ${CHECK_INTERVAL / 60000} minutes`, inline: true }
     )
-    .setFooter({ text: 'Only temporary discounted-to-zero Steam games are announced.' })
+    .setFooter({ text: 'Extra stores use GamerPower coverage; regional/key-stock limits may apply. Detection is not exhaustive.' })
     .setTimestamp();
 }
 
@@ -92,7 +96,20 @@ module.exports = {
       .setDescription('Check the stores now and post any unannounced offers'))
     .addSubcommand(subcommand => subcommand
       .setName('test')
-      .setDescription('Send a sample free game alert in the configured channel')),
+      .setDescription('Send a sample free game alert in the configured channel'))
+    .addSubcommand(command=>command.setName('source').setDescription('Add/remove supplementary stores, or list enabled sources.')
+      .addStringOption(option=>option.setName('action').setDescription('Action').setRequired(true).addChoices(...['add','remove','list'].map(value=>({name:value,value}))))
+      .addStringOption(option=>option.setName('store').setDescription('Supplementary store').addChoices(...Object.entries(require('../../utils/gameProviders').SOURCES).map(([value,name])=>({name,value})))))
+    .addSubcommand(command=>command.setName('health').setDescription('Last successful store checks and provider errors.'))
+    .addSubcommand(command=>command.setName('route').setDescription('Override destination, ping and enabled state for one store.')
+      .addStringOption(option=>option.setName('store').setDescription('Store').setRequired(true).addChoices(...STORE_CHOICES))
+      .addChannelOption(option=>option.setName('channel').setDescription('Store-specific destination').addChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement))
+      .addRoleOption(option=>option.setName('ping_role').setDescription('Store-specific ping role'))
+      .addStringOption(option=>option.setName('ping').setDescription('Notification preference').addChoices({name:'Inherit main ping',value:'INHERIT'},{name:'No ping',value:'NONE'},{name:'Selected role',value:'ROLE'}))
+      .addBooleanOption(option=>option.setName('enabled').setDescription('Post alerts from this store')))
+    .addSubcommand(command=>command.setName('route-reset').setDescription('Restore the main watch settings for one store.')
+      .addStringOption(option=>option.setName('store').setDescription('Store').setRequired(true).addChoices(...STORE_CHOICES)))
+    .addSubcommand(command=>command.setName('routes').setDescription('List per-store destinations and notification preferences.')),
 
   async execute(interaction) {
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
@@ -101,6 +118,45 @@ module.exports = {
 
     const subcommand = interaction.options.getSubcommand();
     const existing = getFreeGameSettings(interaction.guild.id);
+    if(['route','route-reset','routes'].includes(subcommand)) {
+      const {all,get,run}=require('../../database');
+      if(!existing) return interaction.editReply('Run /freegames setup first.');
+      if(subcommand==='routes') return interaction.editReply({content:all('SELECT * FROM free_game_routes WHERE guildId=? ORDER BY source',[interaction.guild.id])
+        .map(row=>`**${row.source}** | ${row.enabled?'Enabled':'Disabled'} | ${row.channelId?`<#${row.channelId}>`:'Main channel'} | ${row.pingMode==='ROLE'?`<@&${row.pingRoleId}>`:row.pingMode==='NONE'?'No ping':'Main ping'}`).join('\n').slice(0,1900) || 'All stores inherit the main watch settings.',allowedMentions:{parse:[]}});
+      const source=interaction.options.getString('store',true);
+      if(subcommand==='route-reset') {run('DELETE FROM free_game_routes WHERE guildId=? AND source=?',[interaction.guild.id,source]);return interaction.editReply('Store overrides removed. The main watch settings apply again.');}
+      const previous=get('SELECT * FROM free_game_routes WHERE guildId=? AND source=?',[interaction.guild.id,source]) || {};
+      const channel=interaction.options.getChannel('channel'),role=interaction.options.getRole('ping_role');
+      if(channel) {const issue=require('../../utils/destinationValidation').destinationIssue(interaction.guild,channel);if(issue)throw new Error(issue);}
+      require('../../utils/communityAccess').validRole(interaction.guild,role);
+      const mode=interaction.options.getString('ping') || (role?'ROLE':previous.pingMode || 'INHERIT');
+      const roleId=role?.id || previous.pingRoleId || null;
+      if(mode==='ROLE' && !roleId)throw new Error('Select a ping role or choose No ping / Inherit main ping.');
+      run(`INSERT INTO free_game_routes(guildId,source,channelId,pingRoleId,pingMode,enabled) VALUES(?,?,?,?,?,?)
+        ON CONFLICT(guildId,source) DO UPDATE SET channelId=excluded.channelId,pingRoleId=excluded.pingRoleId,pingMode=excluded.pingMode,enabled=excluded.enabled`,
+      [interaction.guild.id,source,channel?.id || previous.channelId || null,roleId,mode,Number(interaction.options.getBoolean('enabled') ?? previous.enabled ?? true)]);
+      return interaction.editReply('Store preferences saved. Enable its provider in the main watch/source settings if it is not already watched.');
+    }
+    if(subcommand==='health') {
+      const country=existing?.steamCountry || 'GB';
+      const providers=require('../../utils/gameProviders');
+      return interaction.editReply({content:['EPIC:'+country,'STEAM:'+country,'GAMERPOWER'].map(name=>{
+        const health=providers.providerHealth(name);
+        return `**${name}**: ${health?.error?`Error: ${health.error}`:health?'Healthy':'Not checked'}${health?.successAt?` | Success <t:${Math.floor(health.successAt/1000)}:R>`:''}`;
+      }).join('\n'),allowedMentions:{parse:[]}});
+    }
+    if(subcommand==='source') {
+      if(!existing) return interaction.editReply('Run /freegames setup first.');
+      const {extraSources,SOURCES}=require('../../utils/gameProviders');
+      const action=interaction.options.getString('action',true),store=interaction.options.getString('store');
+      const sources=new Set(extraSources(existing));
+      if(action!=='list') {
+        if(!Object.hasOwn(SOURCES,store || '')) return interaction.editReply('Choose a supplementary store.');
+        if(action==='add') sources.add(store); else sources.delete(store);
+        require('../../database').run('UPDATE free_game_settings SET extraSources=?,updatedBy=?,updatedAt=? WHERE guildId=?',[JSON.stringify([...sources]),interaction.user.id,Date.now(),interaction.guild.id]);
+      }
+      return interaction.editReply({content:`Supplementary stores: ${[...sources].map(source=>SOURCES[source]).join(', ') || 'None'}.\nCoverage supplied by [GamerPower](https://www.gamerpower.com/); availability and claim requirements vary.`,allowedMentions:{parse:[]}});
+    }
 
     if (subcommand === 'status') {
       return interaction.editReply({
@@ -130,10 +186,11 @@ module.exports = {
         epicEnabled: Number(existing.epicEnabled) === 1,
         steamEnabled: Number(existing.steamEnabled) === 1,
         steamCountry: existing.steamCountry,
+        enabled: Boolean(existing.enabled),
         updatedBy: interaction.user.id
       });
 
-      return interaction.editReply({ content: 'Free game alerts will no longer ping a role.' });
+      return interaction.editReply({ content: 'The main free-game ping role was cleared. Store-specific ping overrides are unchanged; use /freegames route to edit them.' });
     }
 
     if (subcommand === 'setup') {
@@ -199,10 +256,7 @@ module.exports = {
         });
       }
 
-      const detected = [
-        `Epic Games: ${summary.detected.EPIC}`,
-        `Steam: ${summary.detected.STEAM}`
-      ].join(' | ');
+      const detected = Object.entries(summary.detected).map(([source,count])=>`${source}: ${count}`).join(' | ');
       const result = [
         `Checked ${summary.configurations} configured watch${summary.configurations === 1 ? '' : 'es'}.`,
         detected,

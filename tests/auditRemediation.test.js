@@ -149,6 +149,7 @@ test('deleted-message media downloader only trusts Discord HTTPS hosts', () => {
 });
 
 test('free-game announcements recover a sent message after a database-write crash', async () => {
+  run("INSERT INTO free_game_settings(guildId,enabled,channelId) VALUES('free-guild',1,'free-channel')");
   const marker = 'free-game:free-guild:steam:42';
   run(
     `INSERT INTO free_game_announcements (guildId, offerKey, source, title, announcedAt)

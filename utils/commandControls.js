@@ -11,10 +11,16 @@ const BYPASS_TYPES = new Set([
 ]);
 
 function normalizeCommandName(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/^\//, '');
+  return require('./commandLayout').normalizePath(value);
+}
+
+function interactionCommandPath(interaction) {
+  const root = normalizeCommandName(interaction.commandName);
+  if (root.includes(' ')) return root;
+  let group = null, subcommand = null;
+  try { group = interaction.options?.getSubcommandGroup?.(false); } catch {}
+  try { subcommand = interaction.options?.getSubcommand?.(false); } catch {}
+  return [root,group,subcommand].filter(Boolean).join(' ');
 }
 
 function getCommandControl(guildId, commandName) {
@@ -190,29 +196,21 @@ function hasCommandBypass(interaction, commandName) {
 }
 
 function getCommandAvailability(interaction) {
-  const commandName = normalizeCommandName(interaction.commandName);
+  const commandName = interactionCommandPath(interaction);
 
-  if (commandName === 'commandcontrol') {
+  if (commandName.split(' ')[0] === 'commandcontrol') {
     return { allowed: true, reason: null };
   }
 
-  const control = getCommandControl(
-    interaction.guild.id,
-    commandName
-  );
-
-  if (!control || Number(control.enabled) === 1) {
-    return { allowed: true, reason: null };
+  const parts = commandName.split(' ');
+  for (let length = 1; length <= parts.length; length++) {
+    const scope = parts.slice(0,length).join(' ');
+    const control = getCommandControl(interaction.guild.id,scope);
+    if (control && Number(control.enabled) !== 1 && !hasCommandBypass(interaction,scope)) {
+      return { allowed: false, reason: control.reason || null };
+    }
   }
-
-  if (hasCommandBypass(interaction, commandName)) {
-    return { allowed: true, reason: null };
-  }
-
-  return {
-    allowed: false,
-    reason: control.reason || null
-  };
+  return { allowed: true, reason: null };
 }
 
 module.exports = {
@@ -220,6 +218,7 @@ module.exports = {
   addCommandBypass,
   getCommandAvailability,
   getCommandControl,
+  interactionCommandPath,
   hasCommandBypass,
   listCommandBypasses,
   listCommandControls,

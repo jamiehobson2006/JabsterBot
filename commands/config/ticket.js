@@ -76,6 +76,14 @@ module.exports = {
     .setName('ticket')
     .setDescription('Manage the current ticket')
     .setDMPermission(false)
+    .addSubcommand(command=>command.setName('limits').setDescription('Administrator: configure server-wide per-member ticket creation limits.')
+      .addIntegerOption(option=>option.setName('maximum').setDescription('Tickets allowed in the window').setMinValue(1).setMaxValue(25))
+      .addIntegerOption(option=>option.setName('window_minutes').setDescription('Rolling window').setMinValue(1).setMaxValue(1440))
+      .addIntegerOption(option=>option.setName('cooldown_seconds').setDescription('Minimum gap between new requests').setMinValue(1).setMaxValue(300)))
+    .addSubcommand(command=>command.setName('recovery').setDescription('Administrator: list interrupted ticket creations.'))
+    .addSubcommand(command=>command.setName('retrycreation').setDescription('Administrator: reconcile an interrupted creation before allowing a retry.')
+      .addStringOption(option=>option.setName('key').setDescription('Fingerprint from /ticket manage recovery').setRequired(true))
+      .addBooleanOption(option=>option.setName('confirm').setDescription('Confirm manual review of the server channels').setRequired(true)))
     .addSubcommand(subcommand => subcommand.setName('waiting')
       .setDescription('Set who this ticket is waiting for')
       .addStringOption(option => option.setName('for').setDescription('Who needs to reply next?')
@@ -109,6 +117,34 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    const requested=interaction.options.getSubcommand();
+    if(['recovery','retrycreation','limits'].includes(requested)) {
+      const actor=await interaction.guild.members.fetch({user:interaction.user.id,force:true});
+      if(!actor.permissions.has(PermissionFlagsBits.Administrator)) return interaction.editReply('Only administrators can manage ticket creation recovery.');
+      const {all,get}=require('../../database');
+      if(requested==='limits') {
+        const existing=get('SELECT * FROM ticket_limits WHERE guildId=?',[interaction.guild.id]) || {maxPerWindow:3,windowMinutes:10,cooldownSeconds:15};
+        const maximum=interaction.options.getInteger('maximum') ?? existing.maxPerWindow;
+        const window=interaction.options.getInteger('window_minutes') ?? existing.windowMinutes;
+        const cooldown=interaction.options.getInteger('cooldown_seconds') ?? existing.cooldownSeconds;
+        run(`INSERT INTO ticket_limits VALUES(?,?,?,?) ON CONFLICT(guildId) DO UPDATE SET maxPerWindow=excluded.maxPerWindow,
+          windowMinutes=excluded.windowMinutes,cooldownSeconds=excluded.cooldownSeconds`,[interaction.guild.id,maximum,window,cooldown]);
+        return interaction.editReply(`New-ticket limit: ${maximum} per ${window} minutes, with a ${cooldown}s gap. Recovery of unfinished creations is exempt.`);
+      }
+      if(requested==='recovery') return interaction.editReply({content:all("SELECT * FROM ticket_creation_intents WHERE guildId=? AND status NOT IN ('COMPLETE','FAILED') ORDER BY updatedAt LIMIT 8",[interaction.guild.id])
+        .map(row=>`${row.type} | <@${row.userId}> | ${row.status} | ${row.channelId?`<#${row.channelId}>`:'No channel confirmed'}\n\`${row.fingerprint}\``).join('\n\n') || 'No interrupted ticket creations.',allowedMentions:{parse:[]}});
+      if(!interaction.options.getBoolean('confirm',true)) return interaction.editReply('Recovery cancelled.');
+      const key=interaction.options.getString('key',true),intent=get('SELECT * FROM ticket_creation_intents WHERE fingerprint=? AND guildId=?',[key,interaction.guild.id]);
+      if(!intent || ['COMPLETE','FAILED'].includes(intent.status)) return interaction.editReply('No pending creation with that key.');
+      return require('../../utils/workLeases').withWorkLease(`ticket-create:${interaction.guild.id}:${intent.userId}:${intent.type}`,async assertOwned=>{
+        if(intent.updatedAt>Date.now()-120000) return interaction.editReply('Wait two minutes before manually releasing an uncertain creation.');
+        const channels=await interaction.guild.channels.fetch();assertOwned();
+        const channel=channels.find(row=>row?.topic?.includes(`request:${key}`));
+        if(channel) run("UPDATE ticket_creation_intents SET status='CREATED',channelId=?,updatedAt=? WHERE fingerprint=?",[channel.id,Date.now(),key]);
+        else run("UPDATE ticket_creation_intents SET status='FAILED',channelId=NULL,updatedAt=? WHERE fingerprint=?",[Date.now(),key]);
+        return interaction.editReply(channel?'Existing channel found. The member can retry the same request to finish it.':'No channel found after manual review. The member can retry the original request.');
+      });
+    }
     const ticket =
       await ticketChannel(interaction);
 

@@ -260,7 +260,7 @@ async function buildTranscriptDocument({ channel, ticket, closedBy, applicationF
     (assets.linked ? `${assets.linked} Discord media links could not be embedded (size limit, timeout, or unavailable file). ` : '') +
     'External media and download links require an internet connection and may expire. Messages deleted before export and private ephemeral replies are not supplied by Discord.'
   )}</footer>`);
-  return { html: serialize(document), messageCount: messages.length, assets };
+  return { html: serialize(document), messageCount: messages.length, boundaryId:messages.at(-1)?.id || null, assets };
 }
 
 module.exports = { buildTranscriptDocument, extraMessageHtml, fetchTranscriptMessages, isDiscordAsset, metadataHtml, preserveAssets };

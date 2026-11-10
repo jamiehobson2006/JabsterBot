@@ -53,7 +53,7 @@ function addGreetingOptions(subcommand) {
     .addStringOption(option =>
       option
         .setName('message')
-        .setDescription('Required for custom mode. Variables: {user}, {username}, {server}, {member_count}')
+        .setDescription('Custom template; use /greetings status to see supported variables')
         .setMaxLength(4000)
     )
     .addBooleanOption(option =>
@@ -126,7 +126,7 @@ function greetingSettingsEmbed(rows) {
       },
       {
         name: 'Message Variables',
-        value: '`{user}`, `{username}`, `{server}`, `{member_count}`'
+        value: '`{user}`, `{username}`, `{server}`, `{member_count}`, `{display_name}`, `{user_id}`, `{server_id}`, `{account_created}`, `{joined_at}`'
       }
     )
     .setTimestamp();
@@ -143,6 +143,9 @@ module.exports = {
     .setDefaultMemberPermissions(
       PermissionFlagsBits.Administrator
     )
+    .addSubcommand(command=>command.setName('preview').setDescription('Preview a saved greeting without posting or pinging.')
+      .addStringOption(option=>option.setName('type').setDescription('Greeting to preview').setRequired(true)
+        .addChoices(...['welcome','goodbye','milestone'].map(value=>({name:value,value})))))
     .addSubcommand(subcommand =>
       addGreetingOptions(
         subcommand
@@ -232,6 +235,13 @@ module.exports = {
 
     const subcommand =
       interaction.options.getSubcommand();
+    if(subcommand==='preview') {
+      const type=interaction.options.getString('type',true);
+      const settings=get('SELECT * FROM greeting_settings WHERE guildId=? AND type=?',[interaction.guild.id,type]);
+      if(!settings) return interaction.editReply('Configure this greeting first.');
+      const member=await interaction.guild.members.fetch({user:interaction.user.id,force:true});
+      return interaction.editReply({embeds:[require('../../utils/memberExperience').buildGreetingEmbed({settings,type,member})],allowedMentions:{parse:[]}});
+    }
 
     if (subcommand === 'status') {
 

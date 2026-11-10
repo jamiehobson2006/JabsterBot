@@ -44,6 +44,8 @@ module.exports = {
     .setName('leveling')
     .setDescription('Configure the server leveling system')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand(command=>command.setName('preview').setDescription('Preview the current level-up style without awarding XP or pinging.')
+      .addIntegerOption(option=>option.setName('level').setDescription('Example level').setMinValue(1).setMaxValue(100000)))
     .addSubcommand(subcommand => subcommand
       .setName('settings')
       .setDescription('View the current leveling settings'))
@@ -77,6 +79,8 @@ module.exports = {
         .setMinValue(5)
         .setMaxValue(86400)
         .setRequired(true)))
+    .addSubcommand(command=>command.setName('duplicate-window').setDescription('Block repeated identical content from earning XP; zero disables.')
+      .addIntegerOption(option=>option.setName('seconds').setDescription('Duplicate window').setRequired(true).setMinValue(0).setMaxValue(86400)))
     .addSubcommand(subcommand => subcommand
       .setName('channel')
       .setDescription('Set where level-up announcements are posted')
@@ -137,6 +141,12 @@ module.exports = {
     const subcommand = interaction.options.getSubcommand();
     const config = getLevelingConfig(guildId);
     const mutedChannels = parseIdList(config.ignoredChannels);
+    if(subcommand==='preview') {
+      const member=await interaction.guild.members.fetch({user:interaction.user.id,force:true});
+      const level=interaction.options.getInteger('level') || 1;
+      const payload=require('../../utils/LevelingService').buildLevelUpPayload(member,config,level,require('../../utils/leveling').getTotalXPForLevel(level),25);
+      return interaction.editReply({...payload,content:payload?.content || (payload?'':'Level-up announcements are disabled.'),allowedMentions:{parse:[]}});
+    }
 
     if (subcommand === 'settings') {
       const announcement = config.levelUpStyle === 'OFF'
@@ -154,6 +164,8 @@ module.exports = {
             { name: 'Status', value: Number(config.enabled) === 1 ? 'Enabled' : 'Disabled', inline: true },
             { name: 'XP per message', value: `${config.xpMin} - ${config.xpMax}`, inline: true },
             { name: 'Cooldown', value: `${config.cooldown}s`, inline: true },
+            { name:'Duplicate-content window',value:`${config.duplicateWindow}s`,inline:true },
+            { name:'Message variables',value:'`{user}`, `{user_id}`, `{username}`, `{display_name}`, `{server}`, `{level}`, `{xp}`, `{messages}`' },
             { name: 'Announcement', value: announcement, inline: true },
             { name: 'Announcement channel', value: config.levelChannelId ? `<#${config.levelChannelId}>` : 'Message channel', inline: true },
             { name: 'Muted channels', value: `${mutedChannels.length}`, inline: true },
@@ -186,6 +198,11 @@ module.exports = {
       const seconds = interaction.options.getInteger('seconds', true);
       run('UPDATE leveling_config SET cooldown = ? WHERE guildId = ?', [seconds, guildId]);
       return interaction.editReply({ content: `XP cooldown set to ${seconds} seconds.` });
+    }
+    if(subcommand==='duplicate-window') {
+      const seconds=interaction.options.getInteger('seconds',true);
+      run('UPDATE leveling_config SET duplicateWindow=? WHERE guildId=?',[seconds,guildId]);
+      return interaction.editReply(`Duplicate-content XP protection: ${seconds?`${seconds} seconds`:'Disabled'}. Existing XP and message totals are unchanged.`);
     }
 
     if (subcommand === 'channel') {

@@ -1,4 +1,4 @@
-const { get, run, transaction } = require('../database');
+const { all,get, run, transaction } = require('../database');
 const { findUsedInvite } = require('./giveaways/cache');
 const joins = new Map();
 
@@ -58,4 +58,53 @@ async function trackMemberLeave(member, now = Date.now()) {
   });
 }
 
-module.exports = { credited, trackMemberJoin, trackMemberLeave };
+function correctAttribution({guildId,memberId,inviterId,actorId,reason}) {
+  if(!String(reason || '').trim()) throw new Error('A correction reason is required.');
+  if(memberId===inviterId) throw new Error('Members cannot invite themselves.');
+  return transaction(()=>{
+    const before=get('SELECT * FROM invites WHERE guildId=? AND userId=?',[guildId,memberId]);
+    if(!before) throw new Error('This member has no recorded membership to correct.');
+    if(credited(before)) {
+      run('UPDATE invite_stats SET invites=MAX(0,COALESCE(invites,0)-1),leaves=MAX(0,COALESCE(leaves,0)-?) WHERE guildId=? AND userId=?',
+        [before.leftAt?1:0,guildId,before.inviterId]);
+    }
+    run("UPDATE invites SET inviterId=?,confidence=?,source='INVITE',fake=0 WHERE guildId=? AND userId=?",[inviterId || null,inviterId?'EXACT':'UNKNOWN',guildId,memberId]);
+    if(inviterId) run(`INSERT INTO invite_stats(guildId,userId,invites,leaves) VALUES(?,?,1,?) ON CONFLICT(guildId,userId)
+      DO UPDATE SET invites=COALESCE(invites,0)+1,leaves=COALESCE(leaves,0)+excluded.leaves`,[guildId,inviterId,before.leftAt?1:0]);
+    const after=get('SELECT * FROM invites WHERE guildId=? AND userId=?',[guildId,memberId]);
+    run('INSERT INTO invite_corrections(guildId,memberId,actorId,beforeJson,afterJson,reason,createdAt) VALUES(?,?,?,?,?,?,?)',
+      [guildId,memberId,actorId,JSON.stringify(before),JSON.stringify(after),String(reason).slice(0,300),Date.now()]);
+    run(`INSERT INTO invite_events(guildId,memberId,inviterId,inviteCode,eventType,confidence,source,fake,timestamp,metadata)
+      VALUES(?,?,?,?,'CORRECTION',?,'ADMIN',0,?,?)`,[guildId,memberId,inviterId || null,after.inviteCode,after.confidence,Date.now(),JSON.stringify({actorId,reason,previousInviterId:before.inviterId})]);
+    return after;
+  });
+}
+async function reconcileMembership(guild,now=Date.now()) {
+  return require('./workLeases').withWorkLease(`invite-membership:${guild.id}`,async assertOwned=>{
+    const members=await guild.members.fetch();
+    if(!members || members.size<Number(guild.memberCount)) throw new Error('A complete member list was not obtained; no membership records were changed.');
+    assertOwned();
+    return transaction(()=>{
+      let left=0,observed=0;
+      for(const row of all('SELECT * FROM invites WHERE guildId=? AND leftAt IS NULL',[guild.id])) {
+        if(!members.has(row.userId) && saveLeave(row,now,{reconciled:true,reason:'Not present in a complete membership snapshot; exact departure time unknown.'})) left++;
+      }
+      for(const member of members.values()) {
+        if(member.user.bot) continue;
+        const before=get('SELECT * FROM invites WHERE guildId=? AND userId=?',[guild.id,member.id]);
+        const joinedAt=Number(member.joinedTimestamp) || now;
+        if(before && !before.leftAt && joinedAt<=before.joinedAt) continue;
+        if(before && !before.leftAt) saveLeave(before,joinedAt,{reconciled:true,reason:'Newer membership observed.'});
+        // Offline joins never consume live invite-use credits or invent an inviter.
+        run(`INSERT INTO invites(guildId,userId,inviterId,inviteCode,uses,joinedAt,fake,confidence,source,rejoinCount)
+          VALUES(?,?,NULL,'Unknown',0,?,0,'UNKNOWN','RECONCILED',0) ON CONFLICT(guildId,userId) DO UPDATE SET
+          inviterId=NULL,inviteCode='Unknown',uses=0,joinedAt=excluded.joinedAt,leftAt=NULL,fake=0,confidence='UNKNOWN',source='RECONCILED',rejoinCount=rejoinCount+1`,[guild.id,member.id,joinedAt]);
+        run(`INSERT INTO invite_events(guildId,memberId,eventType,confidence,source,fake,timestamp,metadata)
+          VALUES(?,?,'RECONCILED','UNKNOWN','RECONCILED',0,?,?)`,[guild.id,member.id,now,JSON.stringify({reason:'Membership observed without reliable invite evidence.'})]);
+        observed++;
+      }
+      return {left,observed};
+    });
+  });
+}
+module.exports = { credited, correctAttribution,reconcileMembership,trackMemberJoin, trackMemberLeave };

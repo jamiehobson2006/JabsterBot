@@ -31,6 +31,7 @@ module.exports = {
     .setName('ticketfeedback')
     .setDescription('Configure and review ticket feedback')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand(command=>command.setName('stats').setDescription('Feedback completion, ratings and publication by ticket type.'))
     .addSubcommand(subcommand =>
       subcommand
         .setName('setchannel')
@@ -70,10 +71,13 @@ module.exports = {
         .addStringOption(option =>
           option
             .setName('id')
-            .setDescription('Feedback ID from /ticketfeedback list')
+            .setDescription('Feedback ID from /ticket feedback list')
             .setRequired(true)
         )
-    ),
+    )
+    .addSubcommand(command=>command.setName('resend').setDescription('Explicitly resend a feedback DM with its transcript.')
+      .addStringOption(option=>option.setName('id').setDescription('Feedback ID').setRequired(true))
+      .addBooleanOption(option=>option.setName('confirm').setDescription('Confirm that another DM may be sent').setRequired(true))),
 
   async execute(interaction) {
     if (
@@ -88,6 +92,13 @@ module.exports = {
 
     const subcommand =
       interaction.options.getSubcommand();
+    if(subcommand==='stats') {
+      const rows=require('../../database').all(`SELECT ticketType,COUNT(*) AS total,
+        SUM(CASE WHEN status='SUBMITTED' THEN 1 ELSE 0 END) AS submitted,AVG(rating) AS average,
+        SUM(CASE WHEN dmSent=1 THEN 1 ELSE 0 END) AS dms,SUM(CASE WHEN publishedMessageId IS NOT NULL THEN 1 ELSE 0 END) AS published
+        FROM ticket_feedback WHERE guildId=? GROUP BY ticketType`,[interaction.guild.id]);
+      return interaction.editReply({content:rows.map(row=>`**${row.ticketType}**: ${row.submitted}/${row.total} reviewed | ${row.average?.toFixed(2) || 'N/A'}/5\nPrompts delivered: ${row.dms}; reviews published: ${row.published}; stored but unpublished: ${row.submitted-row.published}`).join('\n\n') || 'No ticket feedback yet.',allowedMentions:{parse:[]}});
+    }
 
     if (subcommand === 'setchannel') {
       const channel =
@@ -176,6 +187,13 @@ module.exports = {
         content: 'Feedback record not found.'
       });
     }
+    if(subcommand==='resend') {
+      if(!interaction.options.getBoolean('confirm',true)) return interaction.editReply('Resend cancelled.');
+      const { resetFeedbackPrompt,sendFeedbackPrompt }=require('../../utils/ticketFeedback');
+      const feedback=resetFeedbackPrompt(record.id,interaction.guild.id);
+      const sent=await sendFeedbackPrompt({client:interaction.client,feedback});
+      return interaction.editReply(sent?'Feedback DM sent.':'Feedback DM queued; view this record for the delivery status.');
+    }
 
     return interaction.editReply({
       embeds: [
@@ -183,6 +201,8 @@ module.exports = {
           .setColor(record.rating >= 4 ? 0x57F287 : record.rating <= 2 ? 0xED4245 : 0xFEE75C)
           .setTitle('Ticket Feedback Record')
           .addFields(
+            {name:'Feedback channel delivery',value:record.publishedMessageId?'Published':record.status==='SUBMITTED'?`Stored, awaiting publication${record.lastPublishError?`\n${record.lastPublishError.slice(0,700)}`:''}`:'No review submitted'},
+            {name:'Feedback DM delivery',value:record.dmSent?'Sent':`Pending (${record.dmAttempts} attempts)${record.dmLastError?`\n${record.dmLastError.slice(0,800)}`:''}`},
             {
               name: 'User',
               value: `<@${record.userId}>`,

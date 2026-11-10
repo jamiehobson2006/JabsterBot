@@ -28,9 +28,9 @@ function addCommandOption(subcommand) {
   return subcommand.addStringOption(option =>
     option
       .setName('command')
-      .setDescription('Command name without the slash, for example giveaway')
+      .setDescription('Command/group/action path, e.g. giveaway or giveaway start')
       .setMinLength(1)
-      .setMaxLength(32)
+      .setMaxLength(100)
       .setRequired(true)
   );
 }
@@ -40,11 +40,7 @@ function resolveCommand(interaction) {
     interaction.options.getString('command', true)
   );
 
-  if (!interaction.client.commands.has(name)) {
-    return null;
-  }
-
-  return name;
+  return require('../../utils/commandRegistry').commandNode(interaction.client.commands,name)?.name || null;
 }
 
 function formatBypasses(rows) {

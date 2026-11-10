@@ -61,16 +61,17 @@ function saveFreeGameSettings({
   epicEnabled,
   steamEnabled,
   steamCountry,
-  updatedBy
+  updatedBy,
+  enabled = true
 }) {
   return run(
     `INSERT INTO free_game_settings (
        guildId, enabled, channelId, pingRoleId,
        epicEnabled, steamEnabled, steamCountry, updatedBy, updatedAt
      )
-     VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(guildId)
-     DO UPDATE SET enabled = 1,
+     DO UPDATE SET enabled = excluded.enabled,
                    channelId = excluded.channelId,
                    pingRoleId = excluded.pingRoleId,
                    epicEnabled = excluded.epicEnabled,
@@ -80,6 +81,7 @@ function saveFreeGameSettings({
                    updatedAt = excluded.updatedAt`,
     [
       guildId,
+      enabled ? 1 : 0,
       channelId,
       pingRoleId || null,
       epicEnabled ? 1 : 0,
@@ -357,6 +359,13 @@ async function fetchSteamOffers(country) {
   const searchOffers = searchResult.status === 'fulfilled'
     ? normalizeSteamSearchOffers(searchResult.value.data)
     : [];
+  if(searchResult.status==='fulfilled') {
+    const total=Math.min(500,Number(searchResult.value.data?.total_count) || 0);
+    for(let start=50;start<total;start+=50) {
+      const page=await axios.get(STEAM_SEARCH_ENDPOINT,{params:{query:'',start,count:50,specials:1,maxprice:'free',category1:998,cc:steamCountry,l:'english',infinite:1},timeout:15000,headers});
+      searchOffers.push(...normalizeSteamSearchOffers(page.data));
+    }
+  }
 
   if (!featuredOffers.length && !searchOffers.length) {
     const failure = [featuredResult, searchResult]
@@ -445,7 +454,7 @@ function saveAnnouncementMessage(guildId, offerKey, messageId) {
 async function findAnnouncementByMarker(channel, marker, offer = null, botId = null, since = 0) {
   let before;
   for (let page = 0; page < 10; page += 1) {
-    const messages = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    const messages = await channel.messages.fetch({ limit: 100, before });
     if (!messages?.size) break;
     const match = messages.find(message => (!botId || message.author?.id === botId) &&
       (String(message.content || '').includes(marker) || offer && require('./messageRecovery').isRecentDelivery(message, { createdAt: since }) && message.components?.some(row =>
@@ -463,7 +472,7 @@ function buildOfferEmbed(offer) {
   const isEpic = offer.source === 'EPIC';
   const embed = new EmbedBuilder()
     .setColor(isEpic ? 0x9146FF : 0x1B9AAA)
-    .setTitle(`Free Game Alert | ${isEpic ? 'Epic Games' : 'Steam'}`)
+    .setTitle(`Free Game Alert | ${isEpic ? 'Epic Games' : offer.source==='STEAM'?'Steam':require('./gameProviders').SOURCES[offer.source] || offer.source}`)
     .setURL(offer.url)
     .setDescription(
       `**${offer.title}** is currently free${offer.originalPrice ? ` (usually ${offer.originalPrice})` : ''}.`
@@ -482,6 +491,10 @@ function buildOfferEmbed(offer) {
   if (offer.image) {
     embed.setImage(offer.image);
   }
+  if(offer.attribution) embed.addFields({name:'Offer source',value:`[GamerPower](${offer.attribution})`},
+    {name:'Availability',value:offer.region || 'Confirm region and claim requirements on the linked offer.'});
+  if(offer.reportedEnd && !offer.endsAt) embed.addFields({name:'Reported end',value:`${offer.reportedEnd} (source timezone unspecified; confirm on the offer page).`});
+  if(!offer.endsAt && !offer.reportedEnd) embed.addFields({name:'Deadline',value:'Not confirmed; check current availability before claiming.'});
 
   return embed;
 }
@@ -490,7 +503,7 @@ function buildOfferComponents(offer) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setStyle(ButtonStyle.Link)
-      .setLabel(`Get it on ${offer.source === 'EPIC' ? 'Epic Games' : 'Steam'}`)
+      .setLabel(offer.attribution?'View offer and claim requirements':`Get it on ${offer.source === 'EPIC' ? 'Epic Games' : 'Steam'}`)
       .setURL(offer.url)
   );
   if (offer.reminderId) row.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Secondary)
@@ -500,6 +513,12 @@ function buildOfferComponents(offer) {
 
 async function announceOffer(client, settings, offer) {
   offer = {...offer};
+  const live=getFreeGameSettings(settings.guildId);
+  if(!live?.enabled) return 'watch-disabled';
+  const route=get('SELECT * FROM free_game_routes WHERE guildId=? AND source=?',[settings.guildId,offer.source]);
+  if(route && !route.enabled) return 'source-disabled';
+  settings={...live,channelId:route?.channelId || live.channelId,
+    pingRoleId:route?.pingMode==='NONE'?null:route?.pingMode==='ROLE'?route.pingRoleId:live.pingRoleId};
   const previous = get('SELECT channelId FROM free_game_announcements WHERE guildId=? AND offerKey=?', [settings.guildId, offer.key]);
   const channel = await client.channels.fetch(previous?.channelId || settings.channelId).catch(() => null);
 
@@ -541,7 +560,8 @@ async function announceOffer(client, settings, offer) {
       return 'announcement-pending';
     }
 
-    releaseAnnouncement(settings.guildId, offer.key);
+    // An old reservation can mean a lost send response. Pause for review instead of duplicating an alert.
+    return 'announcement-needs-review';
   }
 
   if (!reserveAnnouncement(settings.guildId, offer, channel.id)) {
@@ -614,6 +634,12 @@ async function checkFreeGames(client, { guildId = null } = {}) {
 
   try {
     const settingsRows = listEnabledFreeGameSettings(guildId);
+    const providers=require('./gameProviders');
+    let extraOffers=[];
+    if(settingsRows.some(settings=>providers.extraSources(settings).length)) {
+      try {extraOffers=await providers.fetchProviderOffers();}
+      catch(error){summary.failures.push(`Additional stores: ${error.message}`);}
+    }
     summary.configurations = settingsRows.length;
     const offersByCountry = new Map();
 
@@ -632,8 +658,10 @@ async function checkFreeGames(client, { guildId = null } = {}) {
       if (relevantSettings.some(setting => Number(setting.epicEnabled) === 1)) {
         try {
           cached.epic = await fetchEpicOffers(country);
+          providers.recordSourceHealth(`EPIC:${country}`,{items:cached.epic.length});
         } catch (err) {
           cached.epic = [];
+          providers.recordSourceHealth(`EPIC:${country}`,{error:err});
           summary.failures.push(`Epic Games (${country}): ${err.message}`);
           console.error(`Epic free-game check failed for ${country}:`, err.message);
         }
@@ -642,8 +670,10 @@ async function checkFreeGames(client, { guildId = null } = {}) {
       if (relevantSettings.some(setting => Number(setting.steamEnabled) === 1)) {
         try {
           cached.steam = await fetchSteamOffers(country);
+          providers.recordSourceHealth(`STEAM:${country}`,{items:cached.steam.length});
         } catch (err) {
           cached.steam = [];
+          providers.recordSourceHealth(`STEAM:${country}`,{error:err});
           summary.failures.push(`Steam (${country}): ${err.message}`);
           console.error(`Steam free-game check failed for ${country}:`, err.message);
         }
@@ -654,11 +684,12 @@ async function checkFreeGames(client, { guildId = null } = {}) {
       const cached = offersByCountry.get(String(settings.steamCountry || 'GB').toUpperCase()) || {};
       const offers = [
         ...(Number(settings.epicEnabled) === 1 ? cached.epic || [] : []),
-        ...(Number(settings.steamEnabled) === 1 ? cached.steam || [] : [])
+        ...(Number(settings.steamEnabled) === 1 ? cached.steam || [] : []),
+        ...extraOffers.filter(offer=>providers.extraSources(settings).includes(offer.source))
       ];
 
       for (const offer of offers) {
-        summary.detected[offer.source]?.add(offer.key);
+        (summary.detected[offer.source] ||= new Set()).add(offer.key);
         const result = await announceOffer(client, settings, offer);
 
         if (result === 'sent') summary.announced += 1;

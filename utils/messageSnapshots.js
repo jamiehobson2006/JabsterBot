@@ -14,6 +14,12 @@ const {
 } = require('./deletedMessageCopy');
 
 const pendingSnapshots = new Map();
+function messageLoggingExcluded(message) {
+  const guildId=message.guild?.id || message.guildId;
+  const channel=message.channel || message.guild?.channels?.cache.get(message.channelId);
+  const ids=[message.channelId || channel?.id,channel?.parentId,channel?.parent?.parentId].filter(Boolean);
+  return ids.some(id=>Boolean(get('SELECT 1 FROM logging_excluded_channels WHERE guildId=? AND channelId=?',[guildId,id])));
+}
 
 function writeSnapshots(rows) {
   transaction(() => {
@@ -72,6 +78,8 @@ function flushMessageSnapshots() {
 function captureMessageSnapshot(message) {
   if (!message?.guild || !message?.id || !message.author?.id) return;
   if (!getLogDestination(message.guild.id, 'MESSAGES').enabled) return;
+  if(messageLoggingExcluded(message)) return;
+  if(get('SELECT retentionDays FROM logging_privacy WHERE guildId=?',[message.guild.id])?.retentionDays===0) return;
 
   const snapshot = serialiseDeletedMessage(message);
   const existing = pendingSnapshots.get(snapshot.messageId);
@@ -82,6 +90,10 @@ function captureMessageSnapshot(message) {
     createdAt: existing?.createdAt || now,
     updatedAt: now
   });
+}
+
+function clearPendingSnapshots(guildId) {
+  for(const [key,row] of pendingSnapshots) if(row.guildId===guildId) pendingSnapshots.delete(key);
 }
 
 function readJson(value, fallback) {
@@ -125,6 +137,8 @@ flushInterval.unref?.();
 
 module.exports = {
   captureMessageSnapshot,
+  clearPendingSnapshots,
   flushMessageSnapshots,
-  getMessageSnapshot
+  getMessageSnapshot,
+  messageLoggingExcluded
 };

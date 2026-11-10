@@ -482,6 +482,7 @@ module.exports = {
 
       const expiresAt =
         Date.now() + duration;
+      await require('../../utils/moderationAuthorization').authorizeModeration(interaction, user.id, PermissionsBitField.Flags.ModerateMembers);
       const { caseId } = await performModerationAction(
         {
           guildId: interaction.guild.id,
@@ -493,9 +494,9 @@ module.exports = {
           expiresAt,
           channelId: interaction.channelId
         },
-        () => member.timeout(
+        record => member.timeout(
           duration,
-          `${reason} | By ${interaction.user.tag}`
+          require('../../utils/moderationActions').moderationReason(reason, record)
         )
       );
 
@@ -504,7 +505,7 @@ module.exports = {
       // ==========================================
       try {
 
-        await user.send({
+        await require('../../utils/moderationNotifications').sendModerationDM(user,caseId,{
 
           embeds: [
 

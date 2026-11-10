@@ -7,7 +7,8 @@ function validStoreUrl(value,source) {
   try {
     const url = new URL(value);
     return url.protocol === 'https:' && !url.username && !url.password && !url.port &&
-      (source === 'STEAM' ? url.hostname === 'store.steampowered.com' : source === 'EPIC' && url.hostname === 'store.epicgames.com');
+      (source === 'STEAM' ? url.hostname === 'store.steampowered.com' : source === 'EPIC' ? url.hostname === 'store.epicgames.com' :
+        Object.hasOwn(require('./gameProviders').SOURCES,source) && Boolean(require('./gameProviders').safeProviderUrl(value)));
   } catch { return false; }
 }
 
@@ -71,9 +72,10 @@ async function processReminders(client,now=Date.now()) {
         const user = await client.users.fetch(row.userId);
         const dm = await user.createDM();
         return sendQueuedMessage(dm,claimed,claimed.parsedPayload.message,{beforeSend:()=>{
-          const current = get('SELECT status,subscriptionKey FROM free_game_reminders WHERE offerId=? AND userId=?',[row.offerId,row.userId]);
+          const current = get('SELECT status,subscriptionKey,remindAt FROM free_game_reminders WHERE offerId=? AND userId=?',[row.offerId,row.userId]);
           const offer=get('SELECT endsAt FROM free_game_reminder_offers WHERE id=?',[row.offerId]);
           if (current?.status !== 'PENDING' || current.subscriptionKey !== row.subscriptionKey || Date.now() >= Number(offer?.endsAt||0)) throw Object.assign(new Error('Reminder is no longer wanted.'),{code:'REMINDER_CANCELLED'});
+          if(current.remindAt>Math.max(now,Date.now()) || Number(offer.endsAt)!==row.endsAt) throw Object.assign(new Error('Offer deadline changed; the reminder was rescheduled.'),{code:'REMINDER_RESCHEDULED'});
         }});
       });
       if (sent?.status === 'SENT') run("UPDATE free_game_reminders SET status='SENT',updatedAt=? WHERE offerId=? AND userId=? AND subscriptionKey=?",[Date.now(),row.offerId,row.userId,row.subscriptionKey]);

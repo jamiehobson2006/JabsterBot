@@ -89,7 +89,7 @@ function markDeliverySent(deliveryKey, messageId = null) {
     `UPDATE delivery_outbox
      SET status = 'SENT', messageId = ?, sentAt = ?, updatedAt = ?,
          leaseUntil = NULL, lastError = NULL
-     WHERE deliveryKey = ?`,
+     WHERE deliveryKey = ? AND status!='CANCELLED'`,
     [messageId, now, now, String(deliveryKey)]
   );
 }
@@ -108,7 +108,7 @@ function markDeliveryFailed(deliveryKey, error) {
     `UPDATE delivery_outbox
      SET status = ?, leaseUntil = NULL, nextAttemptAt = ?,
          lastError = ?, updatedAt = ?, uncertainSince = CASE WHEN ? THEN COALESCE(uncertainSince,?) ELSE uncertainSince END
-     WHERE deliveryKey = ?`,
+     WHERE deliveryKey = ? AND status!='CANCELLED'`,
     [error?.code === 'DELIVERY_UNCERTAIN' ? 'UNCERTAIN' : 'FAILED', now + backoff, cleanError(error), now, uncertain ? 1 : 0, now, String(deliveryKey)]
   );
 }
@@ -186,8 +186,9 @@ async function sendQueuedMessage(channel, delivery, payload, { beforeSend = null
   if (delivery.uncertainSince && Date.now() - Number(delivery.uncertainSince) > 120_000) {
     throw Object.assign(new Error('Delivery outcome could not be verified. Administrator review is required before resending.'), { code: 'DELIVERY_UNCERTAIN' });
   }
+  // A rejected policy check happens before any send and must not become an uncertain delivery.
+  if (beforeSend) await beforeSend();
   try {
-    if (beforeSend) await beforeSend();
     return await channel.send({ ...payload, nonce, enforceNonce: true });
   }
   catch (error) {
@@ -201,6 +202,12 @@ async function retryChannelDeliveries(client) {
   await require('./publicMessageCleanup').cleanupPublicReferences(client).catch(error => console.error('Public display cleanup:', error.message));
   let sent = 0;
   for (const row of pendingDeliveries()) {
+    if (['TRAINING_REVIEW','TRAINING_RESULT'].includes(row.type)) continue;
+    if (row.type === 'SOCIAL_DIGEST') {
+      try { const result=await require('./socialDigests').deliverDigest(client,row);if(result?.status==='SENT')sent++; }
+      catch(error){console.error('Queued social digest:',error.message);}
+      continue;
+    }
     if (row.type === 'LOG_BURST') {
       try {
         const result = await require('./logBursts').deliverLogBurst(client, row);
@@ -228,7 +235,9 @@ async function retryChannelDeliveries(client) {
       const delivery = await deliverOnce(row.deliveryKey, async claimed => {
         const channel = await client.channels.fetch(row.channelId);
         if (!channel?.isTextBased()) throw new Error('Delivery channel is unavailable.');
-        return sendQueuedMessage(channel, claimed, payload.message);
+        return sendQueuedMessage(channel, claimed, payload.message,{beforeSend:()=>{
+          if(['SOCIAL_YOUTUBE','SOCIAL_TWITCH'].includes(claimed.type)) require('./socialDeliveryPolicy').assertActiveSocialDelivery(claimed);
+        }});
       });
       if (delivery?.status === 'SENT') sent += 1;
     } catch (error) {

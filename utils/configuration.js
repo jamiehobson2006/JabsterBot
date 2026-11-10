@@ -16,7 +16,7 @@ function exportConfiguration(guildId) {
     tables[spec.table] = all(`SELECT ${spec.columns.map(c => c.name).join(',')} FROM ${spec.table}
       WHERE guildId=? ORDER BY ${spec.keys.join(',')}`, [guildId]);
   }
-  return { version: 1, sourceGuildId: guildId, tables };
+  return { version: 2, sourceGuildId: guildId, tables };
 }
 
 function configurationHash(guildId) {
@@ -71,13 +71,27 @@ function validateRow(spec, input, guild, mapping = {}, {partial=false} = {}) {
       let ids = list ? require('./contentFilterWhitelist').parseIdList(value) : [value];
       ids = ids.map(id => mapping[id] || id);
       for (const id of ids) validateResource(id,kind,guild,column);
+      const nonDestinations=['command_control_bypasses','antispam_bypasses'];
+      if(kind==='channel' && !list && !nonDestinations.includes(spec.table) && /channelId$/i.test(column)) {
+        const destination=guild.channels.cache.get(ids[0]);
+        if(spec.table==='temp_voice_settings' && column==='lobbyChannelId') {
+          if(destination.type!==ChannelType.GuildVoice) throw new Error('The temporary-voice lobby must be a voice channel.');
+        } else {
+          if(!require('./destinationValidation').TEXT_TYPES.has(destination.type)) throw new Error(`${spec.table}.${column} must be a text or announcement channel.`);
+          if(input.enabled!==0 && typeof destination.permissionsFor==='function') {
+            const issue=require('./destinationValidation').destinationIssue(guild,{id:destination.id,type:destination.type,guildId:guild.id,
+              permissionsFor:member=>destination.permissionsFor(member)});
+            if(issue) throw new Error(`${spec.table}.${column}: ${issue}`);
+          }
+        }
+      }
       output[column] = list ? JSON.stringify(ids) : ids[0];
     } else output[column] = value;
   }
   output.guildId = guild.id;
   if (spec.keys.some(key => output[key] === undefined || output[key] === null)) throw new Error(`${spec.table}: missing row key.`);
   validateValues(spec.table,output,{partial});
-  if(spec.table==='leveling_rewards' && output.roleId) {
+  if(['leveling_rewards','temporary_role_allowlist'].includes(spec.table) && output.roleId) {
     const problem=require('./roleSafety').automaticRoleSafetyError(guild,guild.roles.cache.get(output.roleId));
     if(problem) throw new Error(problem);
   }
@@ -85,10 +99,23 @@ function validateRow(spec, input, guild, mapping = {}, {partial=false} = {}) {
 }
 
 function validateValues(table,row,{partial=false}={}) {
+  if(table==='community_access' && !require('./communityAccess').FEATURES.has(row.feature))throw new Error('Unknown community feature.');
+  if(table==='training_settings') {
+    for(const [key,min,max] of [['passPercent',1,100],['questionCount',1,20],['maxAttempts',1,50],['cooldownMinutes',0,10080],['attemptWindowDays',1,365],['requireReview',0,1],['showFeedback',0,1],['shuffle',0,1]])
+      if(row[key]!=null && (row[key]<min || row[key]>max))throw new Error(`Invalid training ${key}.`);
+    if(row.title?.length>120)throw new Error('Training title exceeds 120 characters.');
+  }
+  if(table==='temporary_role_allowlist' && (row.maxHours!=null && (row.maxHours<1 || row.maxHours>720) || row.selfClaim!=null && ![0,1].includes(row.selfClaim)))throw new Error('Invalid temporary-role limits.');
+  if(table==='free_game_routes') {
+    if(!['STEAM','EPIC',...Object.keys(require('./gameProviders').SOURCES)].includes(row.source))throw new Error('Unknown game store.');
+    if(row.pingMode!=null && !['INHERIT','NONE','ROLE'].includes(row.pingMode))throw new Error('Invalid store ping preference.');
+    if(!partial && row.pingMode==='ROLE' && !row.pingRoleId)throw new Error('Store notification preference requires a ping role.');
+  }
   const ranges={hour:[0,23],minute:[0,59],dayOfWeek:[0,6],color:[0,0xFFFFFF],weight:[1,100],
     xpMin:[1,1000],xpMax:[1,1000],cooldown:[0,86400],minimumAccountAgeDays:[0,365],userLimit:[0,99],
     maxMessages:[2,25],intervalSeconds:[2,120],duplicateLimit:[2,10],duplicateWindowSeconds:[5,600],
     mentionLimit:[0,50],timeoutSeconds:[0,2419200]};
+  Object.assign(ranges,{duplicateWindow:[0,86400],retentionDays:[0,30],startMinute:[0,1439],endMinute:[0,1439]});
   for(const [key,[min,max]]of Object.entries(ranges)) if(row[key]!==undefined && row[key]!==null &&
     (row[key]<min || row[key]>max)) throw new Error(`${table}.${key} must be between ${min} and ${max}.`);
   if(row.xpMin!==undefined && row.xpMax!==undefined && row.xpMax<row.xpMin) throw new Error('Maximum XP cannot be below minimum XP.');
@@ -99,7 +126,19 @@ function validateValues(table,row,{partial=false}={}) {
     style:['DEFAULT','BRANDED','COMPACT'],steamCountry:['GB','US','CA','AU','DE']};
   for(const [key,values]of Object.entries(enums)) if(row[key]!=null && !values.includes(row[key])) throw new Error(`Invalid ${table}.${key}.`);
   if(table==='ticket_settings' && !Object.hasOwn(require('./tickets/ticketTypes'),row.type)) throw new Error('Unknown ticket type.');
+  if(table==='automation_managers' && !require('./automation').MODULES.has(row.module)) throw new Error('Unknown automation module.');
+  if(table==='ticket_work_hours') {
+    if(row.startMinute!=null && row.endMinute!=null && row.endMinute<=row.startMinute) throw new Error('Working hours must end after they start.');
+    if(row.weekdays!=null) {
+      let days;try{days=JSON.parse(row.weekdays);}catch{throw new Error('Invalid working weekdays.');}
+      if(!Array.isArray(days) || !days.length || days.some(day=>!Number.isInteger(day) || day<0 || day>6)) throw new Error('Invalid working weekdays.');
+    }
+  }
   if(table==='dailyfact_config' && row.category!=null && row.category!=='random' && !require('./dailyFacts').isRealCategory(row.category)) throw new Error('Unknown Daily Fact category.');
+  if(table==='free_game_settings' && row.extraSources!=null) {
+    let sources;try{sources=JSON.parse(row.extraSources);}catch{throw new Error('Invalid extra game sources.');}
+    if(!Array.isArray(sources) || sources.some(source=>!Object.hasOwn(require('./gameProviders').SOURCES,source))) throw new Error('Unknown supplementary game provider.');
+  }
   if(['command_control_bypasses','antispam_bypasses'].includes(table) && !['ROLE','CHANNEL','CATEGORY'].includes(row.type)) throw new Error('Invalid bypass type.');
   if(!partial && row.enabled===1 && ['dailyfact_config','daily_interaction_config','free_game_settings','verification_settings','staff_rota_settings'].includes(table) && !row.channelId) throw new Error(`${table} needs a channel before it can be enabled.`);
   if(!partial && table==='verification_settings' && row.enabled===1 && !row.verifiedRoleId) throw new Error('Verification requires a verified role.');
@@ -116,7 +155,7 @@ function makePlan(guildId, actorId, operations) {
 }
 
 function planImport(document, guild, actorId, mapping = {}) {
-  if (!plain(document) || document.version !== 1 || !plain(document.tables) || !plain(mapping)) throw new Error('Invalid configuration or mapping format.');
+  if (!plain(document) || ![1,2].includes(document.version) || !plain(document.tables) || !plain(mapping)) throw new Error('Invalid configuration or mapping format.');
   if (Buffer.byteLength(JSON.stringify(document)) > MAX_BYTES) throw new Error('Configuration exceeds 1 MB.');
   if (Object.keys(document).some(key => !['version','sourceGuildId','tables'].includes(key))) throw new Error('Unknown configuration fields.');
   const specs = configurationSpecs(all);
@@ -126,7 +165,9 @@ function planImport(document, guild, actorId, mapping = {}) {
   for (const [table,rows] of Object.entries(document.tables)) {
     const spec = specs.find(s => s.table === table);
     if (!spec || !Array.isArray(rows)) throw new Error(`Unknown configuration section: ${table}.`);
-    for (const input of rows) {
+    for (const original of rows) {
+      const input = document.version===1 && ['command_controls','command_control_bypasses'].includes(table) && plain(original)
+        ? {...original,commandName:require('./commandLayout').legacyCommandPath(original.commandName)} : original;
       if (++count > 2000) throw new Error('Import exceeds 2,000 settings rows.');
       const validated = validateRow(spec,input,guild,mapping,{partial:true});
       const key = `${table}:${canonical(rowKey(spec,validated))}`;
@@ -151,6 +192,11 @@ function planRollback(revisionId, guild, actorId) {
     if (!spec) throw new Error('This historical section is no longer importable.');
     const before = JSON.parse(row.beforeJson);
     const after = JSON.parse(row.afterJson);
+    if(['command_controls','command_control_bypasses'].includes(row.tableName) &&
+      row.changedAt<=Number(get('SELECT appliedAt FROM command_group_migrations WHERE version=1')?.appliedAt || 0) && [before,after].some(value=>
+      value && Object.hasOwn(require('./commandLayout').LEGACY_PATHS,value.commandName))) {
+      throw new Error('This command-control revision predates grouped commands. Inspect it and create a new command-control change using the current paths.');
+    }
     const key = `${spec.table}:${canonical(rowKey(spec,after||before))}`;
     const existing = merged.get(key);
     merged.set(key,{ table:spec.table, before:existing ? existing.before : before, after });

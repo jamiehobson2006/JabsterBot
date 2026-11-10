@@ -49,24 +49,24 @@ module.exports = {
         return;
       }
 
-      if (await handleDailyInteractionThreadSafety(newMessage, client)) return;
+      if (await handleDailyInteractionThreadSafety(newMessage, client,{commit:false})) return;
 
       if (newMessage.author.bot) {
         captureMessageSnapshot(newMessage);
         return;
       }
 
-      if (await handlePhishing(newMessage, client)) return;
-
-      if (await handleCensor(newMessage, client)) return;
-
-      if (await handleLinkBlock(newMessage, client)) return;
+      const safety=await require('../utils/messageSafety').runContentSafety(newMessage,client,{
+        phishing:handlePhishing,censor:handleCensor,links:handleLinkBlock});
+      if(!safety.allowed) return;
+      if(await handleDailyInteractionThreadSafety(newMessage,client,{commit:true})) return;
+      if(require('../utils/messageSnapshots').messageLoggingExcluded(newMessage)) return;
 
       if (
         (storedOldMessage?.content ?? oldMessage.content) ===
         newMessage.content
       ) {
-
+        captureMessageSnapshot(newMessage);
         return;
       }
 

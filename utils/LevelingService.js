@@ -93,12 +93,16 @@ async function applyPendingRewards(guild, member) {
   }
 }
 
-function replaceVariables(template, userId, level, xp, messages) {
+function replaceVariables(template, userId, level, xp, messages,member=null) {
   return template
     .replaceAll('{user}', `<@${userId}>`)
     .replaceAll('{level}', String(level))
     .replaceAll('{xp}', xp.toLocaleString())
-    .replaceAll('{messages}', messages.toLocaleString());
+    .replaceAll('{messages}', messages.toLocaleString())
+    .replaceAll('{username}',require('discord.js').escapeMarkdown(member?.user.username || 'member'))
+    .replaceAll('{display_name}',require('discord.js').escapeMarkdown(member?.displayName || member?.user.username || 'member'))
+    .replaceAll('{server}',require('discord.js').escapeMarkdown(member?.guild.name || 'server'))
+    .replaceAll('{user_id}',userId);
 }
 
 async function sendLevelUpMessage(message, member, config, level, xp, messages) {
@@ -117,14 +121,16 @@ async function sendLevelUpMessage(message, member, config, level, xp, messages) 
     roles: [],
     parse: []
   };
+  const payload=buildLevelUpPayload(member,config,level,xp,messages);
+  if(payload) await levelChannel.send({...payload,allowedMentions});
+}
+
+function buildLevelUpPayload(member,config,level,xp,messages) {
+  if(config.levelUpStyle==='OFF') return null;
 
   if (config.levelUpStyle === 'MESSAGE') {
     const template = config.levelMessage || '{user} reached level {level}!';
-    await levelChannel.send({
-      content: replaceVariables(template, member.id, level, xp, messages),
-      allowedMentions
-    });
-    return;
+    return {content:replaceVariables(template,member.id,level,xp,messages,member)};
   }
 
   const embed = new EmbedBuilder()
@@ -154,10 +160,7 @@ async function sendLevelUpMessage(message, member, config, level, xp, messages) 
     .setFooter({ text: 'Jabster Studios Leveling' })
     .setTimestamp();
 
-  await levelChannel.send({
-    embeds: [embed],
-    allowedMentions
-  });
+  return {embeds:[embed]};
 }
 
 class LevelingService {
@@ -235,6 +238,13 @@ class LevelingService {
     if (now - Number(user.lastXpTime || 0) < cooldown) {
       return { awarded: false, reason: 'COOLDOWN' };
     }
+    const normalized=String(message.content || '').normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim();
+    const hash=normalized?require('node:crypto').createHash('sha256').update(normalized).digest('hex'):null;
+    const previous=hash ? get('SELECT awardedAt FROM leveling_content_receipts WHERE guildId=? AND userId=? AND contentHash=?',[guildId,userId,hash]):null;
+    if(hash && config.duplicateWindow>0 && ((user.lastContentHash===hash && now-Number(user.lastContentAt || 0)<config.duplicateWindow*1000) ||
+      previous && now-previous.awardedAt<config.duplicateWindow*1000)) {
+      return {awarded:false,reason:'DUPLICATE_CONTENT'};
+    }
 
     const { min, max } = getXpRange(config);
     const xpGain = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -244,10 +254,12 @@ class LevelingService {
 
     run(
       `UPDATE leveling_users
-       SET xp = ?, level = ?, messages = ?, lastXpTime = ?
+       SET xp = ?, level = ?, messages = ?, lastXpTime = ?,lastContentHash=?,lastContentAt=?
        WHERE guildId = ? AND userId = ?`,
-      [newXp, newLevel, newMessageCount, now, guildId, userId]
+      [newXp, newLevel, newMessageCount, now, hash,now,guildId, userId]
     );
+    if(hash && config.duplicateWindow>0) run(`INSERT INTO leveling_content_receipts(guildId,userId,contentHash,awardedAt) VALUES(?,?,?,?)
+      ON CONFLICT(guildId,userId,contentHash) DO UPDATE SET awardedAt=excluded.awardedAt`,[guildId,userId,hash,now]);
 
     if (newLevel > Number(user.level || 0)) {
       queueLevelRewards(guildId, userId, newLevel);
@@ -287,3 +299,4 @@ class LevelingService {
 }
 
 module.exports = LevelingService;
+module.exports.buildLevelUpPayload=buildLevelUpPayload;

@@ -48,7 +48,16 @@ module.exports = {
       )
       .addSubcommand(subcommand => subcommand.setName('responses')
         .setDescription('Average first replies by ticket type and responsible staff role')
-        .addIntegerOption(option => option.setName('page').setDescription('Results page').setMinValue(1)))
+        .addIntegerOption(option => option.setName('page').setDescription('Results page').setMinValue(1))
+        .addIntegerOption(option => option.setName('days').setDescription('Rolling window, default 30 days').setMinValue(1).setMaxValue(365)))
+      .addSubcommand(command=>command.setName('queue').setDescription('Open tickets, waiting state and responsible staff.')
+        .addIntegerOption(option=>option.setName('page').setDescription('Queue page').setMinValue(1)))
+      .addSubcommand(command=>command.setName('hours').setDescription('Set working hours for future first-response samples.')
+        .addStringOption(option=>option.setName('timezone').setDescription('IANA timezone, e.g. Europe/London').setRequired(true))
+        .addStringOption(option=>option.setName('start').setDescription('HH:MM local time').setRequired(true))
+        .addStringOption(option=>option.setName('end').setDescription('HH:MM local time').setRequired(true))
+        .addStringOption(option=>option.setName('weekdays').setDescription('0=Sunday through 6=Saturday, e.g. 1,2,3,4,5').setRequired(true)))
+      .addSubcommand(command=>command.setName('hours-clear').setDescription('Stop collecting working-hour samples; keep historical statistics.'))
       .addSubcommand(subcommand =>
         subcommand
           .setName('overview')
@@ -93,6 +102,23 @@ module.exports = {
 
     const subcommand =
       interaction.options.getSubcommand();
+    if(subcommand==='hours-clear') {
+      require('../../database').run('DELETE FROM ticket_work_hours WHERE guildId=?',[interaction.guild.id]);
+      return interaction.editReply('Working-hour sampling disabled. Existing samples and all wall-clock statistics are retained.');
+    }
+    if(subcommand==='hours') {
+      try {
+        require('../../utils/tickets/workingHours').setWorkingHours(interaction.guild.id,interaction.user.id,{
+          timezone:interaction.options.getString('timezone',true),start:interaction.options.getString('start',true),
+          end:interaction.options.getString('end',true),weekdays:interaction.options.getString('weekdays',true)});
+        return interaction.editReply('Working hours saved. New response samples will include working-hour time; older samples are not guessed.');
+      } catch(error) { return interaction.editReply(error.message); }
+    }
+    if(subcommand==='queue') {
+      const page=interaction.options.getInteger('page') || 1;
+      const rows=all("SELECT * FROM tickets WHERE guildId=? AND UPPER(status) IN ('OPEN','CLOSING') ORDER BY createdAt LIMIT 12 OFFSET ?",[interaction.guild.id,(page-1)*12]);
+      return interaction.editReply({content:rows.map(row=>`<#${row.channelId}> | ${row.type} | ${row.status}\nWaiting: ${row.waitingOn || 'STAFF'} | ${row.claimedBy?`Claimed by <@${row.claimedBy}>`:'Unclaimed'} | Opened <t:${Math.floor(row.createdAt/1000)}:R>`).join('\n\n') || 'No tickets on this page.',allowedMentions:{parse:[]}});
+    }
 
     if (subcommand === 'responses') {
       const cohorts = all(`SELECT type, roleId FROM ticket_settings WHERE guildId = ? AND enabled = 1
@@ -100,8 +126,9 @@ module.exports = {
         UNION SELECT type, roleId FROM ticket_response_samples WHERE guildId = ?`,
       [interaction.guild.id, interaction.guild.id, interaction.guild.id]);
       const lines = cohorts.filter(row => row.roleId).map(row => {
-        const result = require('../../utils/tickets/responseTimes').responseEstimate(interaction.guild.id, row.type, row.roleId);
-        return `**${row.type}** / <@&${row.roleId}>: **${result.label}** (${result.count} replies)`;
+        const result = require('../../utils/tickets/responseTimes').responseEstimate(interaction.guild.id, row.type, row.roleId,{days:interaction.options.getInteger('days') || 30});
+        const label=value=>value===null || value===undefined?'N/A':formatHandleTime(Math.round(value));
+        return `**${row.type}** / <@&${row.roleId}>: **${result.label}** (${result.count} replies)\nMedian: ${label(result.medianMs)} | P90: ${label(result.p90Ms)} | Working-hours average: ${label(result.businessMs)}${result.distributionCount<result.count?' | Distribution: latest 5000 replies':''}`;
       });
       const pages = [];
       let text = '';

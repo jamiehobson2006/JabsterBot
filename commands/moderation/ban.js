@@ -411,9 +411,11 @@ module.exports = {
           // ====================================
           // 📩 DM USER
           // ====================================
+          await require('../../utils/moderationAuthorization').authorizeModeration(interaction,user.id,PermissionsBitField.Flags.BanMembers);
+          let dmNotification={status:'FAILED',error:'Notification could not be prepared.'};
           try {
 
-            await user.send({
+            dmNotification=await require('../../utils/moderationNotifications').sendPendingModerationDM(user,'BAN',interaction.guild.name,{
 
               embeds: [
 
@@ -454,6 +456,9 @@ module.exports = {
             });
 
           } catch {}
+          await require('../../utils/moderationAuthorization').authorizeModeration(
+            interaction, user.id, PermissionsBitField.Flags.BanMembers
+          );
           const { caseId } = await performModerationAction(
             {
               guildId: interaction.guild.id,
@@ -463,11 +468,12 @@ module.exports = {
               reason,
               channelId: interaction.channelId
             },
-            () => interaction.guild.members.ban(user.id, {
+            record => interaction.guild.members.ban(user.id, {
               deleteMessageSeconds: deleteDays * 86400,
-              reason: `${reason} | Banned by ${interaction.user.tag}`
+              reason: require('../../utils/moderationActions').moderationReason(reason,record)
             })
           );
+          require('../../utils/moderationNotifications').recordNotification(caseId,dmNotification);
 
           // ====================================
           // 🎨 SUCCESS EMBED

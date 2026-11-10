@@ -140,7 +140,7 @@ function analyticsEmbed(config, analytics) {
   const types = analytics.types.length
     ? analytics.types.map(row => {
       const definition = listInteractionTypes().find(type => type.value === row.type);
-      return `${definition?.emoji || '-'} ${definition?.label || row.type}: ${row.count}`;
+      return `${definition?.emoji || '-'} ${definition?.label || row.type}: ${row.count} posts\n${row.joined || 0} joined sessions, ${row.answered || 0} answered; completion ${row.joined?`${Math.min(100,Math.round(row.answered/row.joined*100))}%`:'N/A'}`;
     }).join('\n')
     : 'No interactions posted in the last 30 days.';
 

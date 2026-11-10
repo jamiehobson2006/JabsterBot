@@ -107,6 +107,12 @@ module.exports = {
     .setDefaultMemberPermissions(
       PermissionFlagsBits.Administrator
     )
+    .addSubcommand(command=>command.setName('configure').setDescription('Choose reactions, buttons or a dropdown, and an optional prerequisite role.')
+      .addChannelOption(option=>option.setName('channel').setDescription('Panel channel').setRequired(true).addChannelTypes(...textChannelTypes))
+      .addStringOption(option=>option.setName('message_id').setDescription('Panel message ID').setRequired(true))
+      .addStringOption(option=>option.setName('layout').setDescription('Panel controls').addChoices(...['REACTIONS','BUTTONS','SELECT'].map(value=>({name:value,value}))))
+      .addRoleOption(option=>option.setName('required_role').setDescription('Role required to receive panel roles'))
+      .addBooleanOption(option=>option.setName('clear_required_role').setDescription('Remove the prerequisite role')))
     .addSubcommand(subcommand =>
       subcommand
         .setName('create')
@@ -394,6 +400,20 @@ module.exports = {
       });
     }
 
+    if(subcommand==='configure') {
+      if(!message) return interaction.editReply('The panel message is unavailable.');
+      const layout=interaction.options.getString('layout') || panel.layout;
+      const role=interaction.options.getRole('required_role');
+      const clear=interaction.options.getBoolean('clear_required_role');
+      if(role && clear) return interaction.editReply('Choose a prerequisite role or clear it, not both.');
+      if(role && (role.id===interaction.guild.id || role.managed)) return interaction.editReply('Choose a normal server role.');
+      const next={...panel,layout,requiredRoleId:clear?null:role?.id || panel.requiredRoleId};
+      const components=require('../../utils/rolePanels').panelComponents(next,interaction.guild);
+      run('UPDATE reaction_role_panels SET layout=?,requiredRoleId=? WHERE messageId=?',[next.layout,next.requiredRoleId,messageId]);
+      await message.edit({components});
+      return interaction.editReply('Role panel controls and prerequisite saved. Existing reaction controls are ignored in button/dropdown mode.');
+    }
+
     if (subcommand === 'list') {
 
       const mappings =
@@ -420,7 +440,7 @@ module.exports = {
               value: panel.exclusive
                 ? 'Exclusive: members can keep one role from this panel.'
                 : 'Members can keep multiple roles from this panel.'
-            })
+            },{name:'Controls / Prerequisite',value:`${panel.layout} | ${panel.requiredRoleId?`Requires <@&${panel.requiredRoleId}>`:'No prerequisite role'}`})
             .setFooter({ text: `Message ID: ${messageId}` })
         ],
         allowedMentions: { parse: [] }
@@ -484,12 +504,13 @@ module.exports = {
       if (message) {
 
         const reaction =
-          message.reactions.cache.find(item =>
+          message.reactions?.cache.find(item =>
             reactionEmojiKey(item) === parsedEmoji.key
           );
 
         await reaction?.users.remove(interaction.client.user.id)
           .catch(() => null);
+        if(panel.layout!=='REACTIONS') await require('../../utils/rolePanels').refreshRolePanel(message,panel);
       }
 
       return interaction.editReply({
@@ -506,6 +527,7 @@ module.exports = {
 
     const role =
       interaction.options.getRole('role', true);
+    if(panel.layout!=='REACTIONS' && get('SELECT COUNT(*) AS count FROM reaction_role_mappings WHERE messageId=?',[messageId]).count>=25) return interaction.editReply('Button/dropdown panels support up to 25 roles.');
 
     const roleError =
       invalidRoleMessage(interaction.guild, role);
@@ -539,7 +561,8 @@ module.exports = {
 
     try {
 
-      await message.react(parsedEmoji.display);
+      if(panel.layout==='REACTIONS') await message.react(parsedEmoji.display);
+      else await require('../../utils/rolePanels').refreshRolePanel(message,panel);
 
     } catch (err) {
 

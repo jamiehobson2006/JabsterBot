@@ -5,6 +5,8 @@ const {
   EmbedBuilder,
   MessageFlags,
   ModalBuilder,
+  TextDisplayBuilder,
+  LabelBuilder,
   TextInputBuilder,
   TextInputStyle
 } = require('discord.js');
@@ -81,7 +83,8 @@ function getDraftContext(interaction, draftId) {
 
 function submitButton(draftId) {
   return new ActionRowBuilder().addComponents(new ButtonBuilder()
-    .setCustomId(`application_submit_${draftId}`).setLabel('Submit application').setStyle(ButtonStyle.Success));
+    .setCustomId(`application_submit_${draftId}`).setLabel('Submit application').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`application_back_${draftId}`).setLabel('Review / edit previous answer').setStyle(ButtonStyle.Secondary));
 }
 
 async function submitApplication(interaction, draftId) {
@@ -149,6 +152,7 @@ async function showApplicationPreview(interaction, draftId) {
   }
 
   const { draft, form, questions } = context;
+  if (['SUBMITTED','SUBMITTING'].includes(draft.submissionStatus)) return replyPrivate(interaction,'This application has already been submitted or is being submitted.');
   const start = Number(draft.nextQuestionIndex || 0);
   const pageQuestions = questions.slice(start, start + QUESTIONS_PER_MODAL);
 
@@ -168,7 +172,8 @@ async function showApplicationPreview(interaction, draftId) {
   return interaction.update({
     content: null,
     embeds: [buildApplicationPreview(form, pageQuestions, pageNumber, pageCount)],
-    components: [new ActionRowBuilder().addComponents(answerButton)]
+    components: [new ActionRowBuilder().addComponents(answerButton,...(start>0 ? [new ButtonBuilder()
+      .setCustomId(`application_back_${draft.id}`).setLabel('Previous question').setStyle(ButtonStyle.Secondary)] : []))]
   });
 }
 
@@ -179,6 +184,7 @@ async function showApplicationModal(interaction, draftId) {
   }
 
   const { draft, questions } = context;
+  if (['SUBMITTED','SUBMITTING'].includes(draft.submissionStatus)) return replyPrivate(interaction,'This application is no longer editable.');
   const start = Number(draft.nextQuestionIndex || 0);
   const pageQuestions = questions.slice(start, start + QUESTIONS_PER_MODAL);
 
@@ -189,19 +195,25 @@ async function showApplicationModal(interaction, draftId) {
   const pageNumber = Math.floor(start / QUESTIONS_PER_MODAL) + 1;
   const pageCount = Math.ceil(questions.length / QUESTIONS_PER_MODAL);
   const modal = new ModalBuilder()
-    .setCustomId(`application_page_${draft.id}`)
+    .setCustomId(`application_page_${draft.id}_${start}_${draft.questionVersion}`)
     .setTitle(`Question ${pageNumber} of ${pageCount}`);
 
   for (const question of pageQuestions) {
     const input = new TextInputBuilder()
       .setCustomId(`q_${question.id}`)
-      .setLabel(modalQuestionLabel())
       .setPlaceholder(question.required ? 'Write your answer here' : 'Optional answer')
       .setStyle(TextInputStyle.Paragraph)
       .setMaxLength(250)
       .setRequired(Boolean(question.required));
 
-    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    const saved = draft.answers.find(answer => answer.questionId === question.id)?.answer;
+    if (saved) input.setValue(saved);
+    let instructions = '';
+    if (question.answerType === 'YES_NO') instructions = '\nAnswer Yes or No.';
+    if (question.answerType === 'NUMBER') instructions = '\nEnter a number.';
+    if (question.answerType === 'CHOICE') instructions = `\nChoose one: ${JSON.parse(question.choicesJson || '[]').join(' / ')}`;
+    modal.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${question.question}**${instructions}`));
+    modal.addLabelComponents(new LabelBuilder().setLabel(modalQuestionLabel()).setTextInputComponent(input));
   }
 
   return interaction.showModal(modal);
@@ -296,7 +308,8 @@ async function handleApplicationPage(interaction) {
     return replyPrivate(interaction, 'Please complete this application in my DMs.');
   }
 
-  const draftId = getDraftId(interaction.customId, 'application_page_');
+  const modalParts = interaction.customId.slice('application_page_'.length).split('_');
+  const draftId = getDraftId(modalParts[0], '');
   if (!draftId) return replyPrivate(interaction, 'This application session is invalid.');
 
   const context = getDraftContext(interaction, draftId);
@@ -306,6 +319,10 @@ async function handleApplicationPage(interaction) {
 
   const { draft, form, questions } = context;
   const start = Number(draft.nextQuestionIndex || 0);
+  if (['SUBMITTED','SUBMITTING'].includes(draft.submissionStatus) || modalParts.length !== 3 ||
+      Number(modalParts[1]) !== start || Number(modalParts[2]) !== draft.questionVersion) {
+    return replyPrivate(interaction,'This answer form is out of date. Use the latest application message to resume.');
+  }
   const pageQuestions = questions.slice(start, start + QUESTIONS_PER_MODAL);
   const pageAnswers = pageQuestions.map(question => ({
     questionId: question.id,
@@ -316,6 +333,13 @@ async function handleApplicationPage(interaction) {
 
   const missing = pageAnswers.find(answer => answer.required && !answer.answer);
   if (missing) return replyPrivate(interaction, 'Please answer every required question.');
+  for (const question of pageQuestions) {
+    const answer = pageAnswers.find(value => value.questionId === question.id).answer;
+    if (!answer && !question.required) continue;
+    if (question.answerType === 'YES_NO' && !/^(yes|no)$/i.test(answer)) return replyPrivate(interaction,'Please answer Yes or No. Your previous answers are saved.');
+    if (question.answerType === 'NUMBER' && (!/^-?\d+(\.\d+)?$/.test(answer) || !Number.isFinite(Number(answer)))) return replyPrivate(interaction,'Please enter a valid number.');
+    if (question.answerType === 'CHOICE' && !JSON.parse(question.choicesJson || '[]').some(value => value.toLowerCase() === answer.toLowerCase())) return replyPrivate(interaction,'Please use one of the listed choices.');
+  }
 
   const answeredIds = new Set(pageAnswers.map(answer => answer.questionId));
   const answers = [
@@ -324,7 +348,7 @@ async function handleApplicationPage(interaction) {
   ];
   const nextQuestionIndex = start + pageQuestions.length;
 
-  saveDraft({ id: draft.id, answers, nextQuestionIndex });
+  saveDraft({ id: draft.id, answers, nextQuestionIndex, expectedVersion:draft.questionVersion });
 
   if (nextQuestionIndex < questions.length) {
     const button = new ButtonBuilder()
@@ -335,12 +359,12 @@ async function handleApplicationPage(interaction) {
     return replyPrivate(
       interaction,
       'Your answers were saved. Continue when you are ready.',
-      [new ActionRowBuilder().addComponents(button)]
+      [new ActionRowBuilder().addComponents(button,new ButtonBuilder().setCustomId(`application_back_${draft.id}`).setLabel('Edit previous answer').setStyle(ButtonStyle.Secondary))]
     );
   }
 
   require('../database').run("UPDATE application_drafts SET submissionStatus='READY' WHERE id=?", [draft.id]);
-  return submitApplication(interaction, draft.id);
+  return replyPrivate(interaction,'Every answer is saved. You can submit now or review and edit your answers.',[submitButton(draft.id)]);
 }
 
 async function handleApplicationContinue(interaction) {
@@ -364,6 +388,14 @@ module.exports = {
 
   async execute(interaction) {
     try {
+      if (interaction.isButton() && interaction.customId.startsWith('application_back_')) {
+        if (!isDirectMessage(interaction)) return replyPrivate(interaction,'Please edit this application in my DMs.');
+        const draftId=getDraftId(interaction.customId,'application_back_');
+        const context=getDraftContext(interaction,draftId);
+        if (!context || ['SUBMITTED','SUBMITTING'].includes(context.draft.submissionStatus)) return replyPrivate(interaction,'This application is no longer editable.');
+        saveDraft({id:draftId,answers:context.draft.answers,nextQuestionIndex:Math.max(0,context.draft.nextQuestionIndex-1),expectedVersion:context.draft.questionVersion});
+        return await showApplicationPreview(interaction,draftId);
+      }
       if (interaction.isButton() && interaction.customId.startsWith('application_submit_')) {
         const draftId = getDraftId(interaction.customId, 'application_submit_');
         if (!draftId) return replyPrivate(interaction, 'This application session is invalid.');

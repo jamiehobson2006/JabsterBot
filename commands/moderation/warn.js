@@ -33,25 +33,6 @@ const {
 // ========================
 // ⏱ AUTO PUNISHMENTS
 // ========================
-const punishments = {
-
-  3: {
-
-    type: 'timeout',
-
-    duration:
-      10 * 60 * 1000 // 10m
-  },
-
-  5: {
-
-    type: 'timeout',
-
-    duration:
-      60 * 60 * 1000 // 1h
-  }
-};
-
 // ========================
 // ⏱ FORMAT DURATION
 // ========================
@@ -120,6 +101,8 @@ module.exports = {
       ),
 
   async execute(interaction) {
+    const target=interaction.options.getUser('user',true);
+    return require('../../utils/workLeases').withWorkLease(`warn:${interaction.guild.id}:${target.id}`,async()=>{
 
     try {
 
@@ -297,8 +280,10 @@ module.exports = {
       // ========================
       // 📊 FETCH PREVIOUS WARNS
       // ========================
+      require('../../utils/safetyPolicies').expireWarnings(interaction.guild.id);
       const previousWarningCount = Number(get('SELECT count FROM warns WHERE guildId=? AND userId=?',
         [interaction.guild.id,user.id])?.count) || 0;
+      await require('../../utils/moderationAuthorization').authorizeModeration(interaction,user.id,PermissionsBitField.Flags.ModerateMembers);
       const { caseId } = await performModerationAction(
         {
           guildId: interaction.guild.id,
@@ -326,8 +311,8 @@ module.exports = {
       let autoCaseId =
         null;
 
-      const punishment =
-        punishments[warnCount];
+      const duration = require('../../utils/safetyPolicies').warningTimeout(interaction.guild.id,warnCount);
+      const punishment = duration ? { type:'timeout',duration } : null;
 
       if (
 
@@ -347,6 +332,7 @@ module.exports = {
             'timeout'
           ) {
             const expiresAt = Date.now() + punishment.duration;
+            await require('../../utils/moderationAuthorization').authorizeModeration(interaction,user.id,PermissionsBitField.Flags.ModerateMembers);
             const autoResult = await performModerationAction(
               {
                 guildId: interaction.guild.id,
@@ -358,9 +344,9 @@ module.exports = {
                 expiresAt,
                 channelId: interaction.channelId
               },
-              () => member.timeout(
+              record => member.timeout(
                 punishment.duration,
-                `Auto punishment (${warnCount} warns)`
+                require('../../utils/moderationActions').moderationReason(`Auto punishment (${warnCount} warns)`,record)
               )
             );
             autoCaseId = autoResult.caseId;
@@ -448,7 +434,7 @@ module.exports = {
 
         dmEmbed.setTimestamp();
 
-        await user.send({
+        await require('../../utils/moderationNotifications').sendModerationDM(user,caseId,{
 
           embeds: [dmEmbed]
         });
@@ -698,5 +684,6 @@ module.exports = {
         flags: 64
       });
     }
+    });
   }
 };

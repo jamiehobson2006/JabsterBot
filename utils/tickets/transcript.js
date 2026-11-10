@@ -288,15 +288,19 @@ async function generateTranscript({
             embeds: [archiveEmbed],
             files: [attachment]
           });
+        } else if(savedTicket.transcriptBoundaryId !== document.boundaryId) {
+          const previous=archiveMessage;
+          archiveMessage=await sendTranscriptMessage({send:payload=>previous.edit({...payload,attachments:[]})},
+            {embeds:[archiveEmbed],files:[attachment]});
         }
 
         run(
           `UPDATE tickets
            SET transcriptMessageId = ?,
                transcriptArchiveChannelId = ?,
-               transcriptSentAt = COALESCE(transcriptSentAt, ?)
+               transcriptSentAt = COALESCE(transcriptSentAt, ?),transcriptBoundaryId=?
            WHERE channelId = ?`,
-          [archiveMessage.id, transcriptChannel.id, Date.now(), channel.id]
+          [archiveMessage.id, transcriptChannel.id, Date.now(), document.boundaryId, channel.id]
         );
 
         archived =
@@ -309,7 +313,8 @@ async function generateTranscript({
 
     return {
       attachment,
-      archived
+      archived,
+      boundaryId:document.boundaryId
     };
 
   } catch (err) {

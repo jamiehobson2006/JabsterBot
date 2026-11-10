@@ -13,6 +13,8 @@ const {
   getQuestions,
   listForms,
   removeQuestion,
+  editQuestion,
+  moveQuestion,
   updateForm
 } = require('../../utils/applications');
 
@@ -45,7 +47,7 @@ function formatQuestions(
 }
 
 function applicationEmbed(
-  form
+  form, page = 1
 ) {
   const questions =
     getQuestions(form.id);
@@ -86,9 +88,10 @@ function applicationEmbed(
       },
       {
         name: 'Question List',
-        value: formatQuestions(questions)
+        value: formatQuestions(questions.slice((page-1)*3,page*3))
       }
     )
+    .setFooter({text:`Questions page ${page}/${Math.max(1,Math.ceil(questions.length/3))}; use /application view for another page.`})
     .setTimestamp();
 }
 
@@ -165,7 +168,11 @@ module.exports = {
         subcommand
           .setName('list')
           .setDescription('List applications')
+          .addIntegerOption(option=>option.setName('page').setDescription('Page').setMinValue(1))
       )
+      .addSubcommand(subcommand=>subcommand.setName('view').setDescription('View every question without truncation.')
+        .addStringOption(option=>option.setName('name').setDescription('Application name').setRequired(true))
+        .addIntegerOption(option=>option.setName('page').setDescription('Questions page').setMinValue(1)))
       .addSubcommand(subcommand =>
         subcommand
           .setName('delete')
@@ -207,6 +214,17 @@ module.exports = {
         group
           .setName('edit')
           .setDescription('Edit an application')
+          .addSubcommand(command=>command.setName('question').setDescription('Edit a question in place; existing drafts keep their snapshot.')
+            .addStringOption(option=>option.setName('name').setDescription('Application name').setRequired(true))
+            .addIntegerOption(option=>option.setName('number').setDescription('Question number').setRequired(true).setMinValue(1).setMaxValue(MAX_APPLICATION_QUESTIONS))
+            .addStringOption(option=>option.setName('question').setDescription('New question text').setMaxLength(250).setMinLength(3))
+            .addBooleanOption(option=>option.setName('required').setDescription('Require an answer'))
+            .addStringOption(option=>option.setName('answer_type').setDescription('Answer validation').addChoices(...['TEXT','YES_NO','CHOICE','NUMBER'].map(value=>({name:value,value}))))
+            .addStringOption(option=>option.setName('choices').setDescription('Choice options separated by |').setMaxLength(809)))
+          .addSubcommand(command=>command.setName('move').setDescription('Reorder a question; existing drafts keep their snapshot.')
+            .addStringOption(option=>option.setName('name').setDescription('Application name').setRequired(true))
+            .addIntegerOption(option=>option.setName('from').setDescription('Current question number').setRequired(true).setMinValue(1).setMaxValue(MAX_APPLICATION_QUESTIONS))
+            .addIntegerOption(option=>option.setName('to').setDescription('New question number').setRequired(true).setMinValue(1).setMaxValue(MAX_APPLICATION_QUESTIONS)))
           .addSubcommand(subcommand =>
             subcommand
               .setName('add')
@@ -231,6 +249,9 @@ module.exports = {
                   .setDescription('Require an answer')
                   .setRequired(false)
               )
+              .addStringOption(option=>option.setName('answer_type').setDescription('How answers should be validated')
+                .addChoices(...['TEXT','YES_NO','CHOICE','NUMBER'].map(value=>({name:value,value}))))
+              .addStringOption(option=>option.setName('choices').setDescription('For CHOICE questions: separate 2-10 options with |').setMaxLength(809))
           )
           .addSubcommand(subcommand =>
             subcommand
@@ -498,7 +519,7 @@ module.exports = {
               .setDescription(
                 forms.length
                   ? forms
-                      .map(form => {
+                      .slice(((interaction.options.getInteger('page') || 1)-1)*15,(interaction.options.getInteger('page') || 1)*15).map(form => {
                         const questions =
                           getQuestions(form.id);
 
@@ -533,6 +554,12 @@ module.exports = {
           interaction.options.getString('name', true)
         );
 
+      if (subcommand === 'view') {
+        const page=interaction.options.getInteger('page') || 1;
+        if(page>Math.max(1,Math.ceil(getQuestions(form.id).length/3))) throw new Error('No questions on that page.');
+        return interaction.editReply({embeds:[applicationEmbed(form,page)],allowedMentions:{parse:[]}});
+      }
+
       if (subcommand === 'add') {
         addQuestion({
           guildId: interaction.guild.id,
@@ -540,9 +567,20 @@ module.exports = {
           question:
             interaction.options.getString('question', true),
           required:
-            interaction.options.getBoolean('required') ?? true
+            interaction.options.getBoolean('required') ?? true,
+          answerType:interaction.options.getString('answer_type') || 'TEXT',
+          choices:(interaction.options.getString('choices') || '').split('|')
         });
       }
+
+      if(subcommand==='question') {
+        const fields={};
+        for(const [option,key]of [['question','question'],['answer_type','answerType']]) if(interaction.options.getString(option)!==null)fields[key]=interaction.options.getString(option);
+        if(interaction.options.getBoolean('required')!==null)fields.required=interaction.options.getBoolean('required');
+        if(interaction.options.getString('choices')!==null)fields.choices=interaction.options.getString('choices').split('|');
+        editQuestion(form.id,interaction.options.getInteger('number',true),fields);
+      }
+      if(subcommand==='move') moveQuestion(form.id,interaction.options.getInteger('from',true),interaction.options.getInteger('to',true));
 
       if (subcommand === 'remove') {
         const removed =

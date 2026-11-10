@@ -41,7 +41,7 @@ test('moderation recovery creates one case and one warning across repeated recov
 test('failed Discord moderation creates no punishment case', async () => {
   await assert.rejects(actions.performModerationAction({
     guildId: 'failed-action', userId: 'member', moderatorId: 'staff', action: 'BAN'
-  }, async () => { throw new Error('Missing permissions'); }), /Missing permissions/);
+  }, async () => { throw Object.assign(new Error('Missing permissions'), { code:50013, status:403 }); }), /Missing permissions/);
   assert.equal(get('SELECT COUNT(*) AS count FROM cases WHERE guildId = ?', ['failed-action']).count, 0);
   assert.equal(get('SELECT status FROM moderation_actions WHERE guildId = ?', ['failed-action']).status, 'FAILED');
 });
@@ -84,7 +84,7 @@ test('delivery lock prevents overlapping sends even if a lease expires', async (
 });
 
 test('saved channel payloads are delivered by the worker after a fresh process starts', () => {
-  outbox.enqueueDelivery({ deliveryKey: 'restart', type: 'SOCIAL_YOUTUBE', channelId: 'sandbox',
+  outbox.enqueueDelivery({ deliveryKey: 'restart', type: 'TEST_CHANNEL', channelId: 'sandbox',
     payload: { message: { content: 'Saved announcement', allowedMentions: { parse: [] } } } });
   const script = `
     const assert = require('node:assert/strict');

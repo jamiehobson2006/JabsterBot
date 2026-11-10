@@ -77,11 +77,10 @@ function detectPhishing(content, { allowlist = [], blocklist = [] } = {}) {
   const blocked = blocklist.map(normalizeDomain).filter(Boolean);
 
   for (const url of extractUrls(content)) {
-    if ([...allowed].some(domain => domainMatches(url.hostname, domain))) continue;
-
     if (blocked.some(domain => domainMatches(url.hostname, domain))) {
       return { ...url, reason: 'Server blocklist match' };
     }
+    if ([...allowed].some(domain => domainMatches(url.hostname, domain))) continue;
     if (url.hasCredentials) return { ...url, reason: 'URL contains hidden login credentials' };
     if (url.hostname.includes('xn--')) return { ...url, reason: 'Internationalized lookalike domain' };
 

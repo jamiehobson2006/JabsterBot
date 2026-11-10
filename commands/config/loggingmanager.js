@@ -38,7 +38,7 @@ module.exports = {
         .addRoleOption(option =>
           option
             .setName('role')
-            .setDescription('Role allowed to use /logging')
+            .setDescription('Role allowed to use /logging dashboard')
             .setRequired(true)
         )
     )
@@ -104,7 +104,7 @@ module.exports = {
 
       return interaction.editReply({
         content: result.changes
-          ? `${role} can now configure logging with /logging.`
+          ? `${role} can now configure logging with /logging dashboard.`
           : `${role} is already a logging manager role.`,
         allowedMentions: { parse: [] }
       });

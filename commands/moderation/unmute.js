@@ -260,6 +260,7 @@ module.exports = {
             user.id
           ]
         );
+      await require('../../utils/moderationAuthorization').authorizeModeration(interaction, user.id, PermissionsBitField.Flags.ModerateMembers);
       const { caseId } = await performModerationAction(
         {
           guildId: interaction.guild.id,
@@ -269,9 +270,9 @@ module.exports = {
           reason,
           channelId: interaction.channelId
         },
-        () => member.timeout(
+        record => member.timeout(
           null,
-          `${reason} | Unmuted by ${interaction.user.tag}`
+          require('../../utils/moderationActions').moderationReason(reason, record)
         )
       );
 
@@ -328,7 +329,7 @@ module.exports = {
 
         dmEmbed.setTimestamp();
 
-        await user.send({
+        await require('../../utils/moderationNotifications').sendModerationDM(user,caseId,{
 
           embeds: [dmEmbed]
         });
