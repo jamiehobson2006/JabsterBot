@@ -19,8 +19,9 @@ function recoverStaleClosingTickets(now = Date.now()) {
          closeLastError = COALESCE(closeLastError, 'Recovered after an interrupted close')
      WHERE UPPER(status) = 'CLOSING'
        AND closePermissionsJson IS NULL
+       AND NOT EXISTS (SELECT 1 FROM work_leases WHERE resourceKey='ticket-close:'||tickets.channelId AND expiresAt>?)
        AND (closedAt IS NULL OR closedAt <= ?)`,
-    [now - CLOSING_TIMEOUT_MS]
+    [now, now - CLOSING_TIMEOUT_MS]
   ).changes;
 }
 
@@ -98,6 +99,7 @@ async function processClosedTicketDeletions(
 ) {
 
   recoverStaleClosingTickets(now);
+  await recoverSealedClosingTickets(client, now);
 
   const tickets =
     all(
@@ -121,6 +123,32 @@ async function processClosedTicketDeletions(
   }
 
   return deleted;
+}
+
+async function recoverSealedClosingTickets(client, now = Date.now()) {
+  const rows = all(`SELECT channelId FROM tickets WHERE UPPER(status)='CLOSING'
+    AND closePermissionsJson IS NOT NULL AND (closedAt IS NULL OR closedAt<=?) LIMIT 100`, [now - CLOSING_TIMEOUT_MS]);
+  let recovered = 0;
+  for (const row of rows) {
+    try {
+      await require('../workLeases').withWorkLease(`ticket-close:${row.channelId}`, async assertOwned => {
+        const current = get("SELECT status,closePermissionsJson FROM tickets WHERE channelId=?", [row.channelId]);
+        if (String(current?.status).toUpperCase() !== 'CLOSING' || !current.closePermissionsJson) return;
+        const channel = await client.channels.fetch(row.channelId);
+        if (!channel) return;
+        assertOwned();
+        await require('./sealTicket').unsealTicket(channel);
+        assertOwned();
+        recovered += run(`UPDATE tickets SET status='OPEN',closeNoticeSentAt=NULL,
+          closeLastError='Recovered interrupted closure; permissions restored. Staff can close and archive again.'
+          WHERE channelId=? AND UPPER(status)='CLOSING'`, [row.channelId]).changes;
+      });
+    } catch (error) {
+      if (!/already running/.test(error.message)) run('UPDATE tickets SET closeLastError=? WHERE channelId=? AND UPPER(status)=?',
+        [String(error.message).slice(0,1000), row.channelId, 'CLOSING']);
+    }
+  }
+  return recovered;
 }
 
 function startClosedTicketCleanup(client) {
@@ -151,5 +179,6 @@ module.exports = {
   deleteClosedTicketChannel,
   processClosedTicketDeletions,
   recoverStaleClosingTickets,
+  recoverSealedClosingTickets,
   startClosedTicketCleanup
 };

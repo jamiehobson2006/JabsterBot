@@ -17,6 +17,10 @@ test('setup wizard creates a canonical support configuration recognized by the r
   const role = { id: 'staff', position: 1, managed: false };
   const guild = { id: 'wizard', name: 'Wizard guild', members: { me: { id: 'bot', roles: { highest: { position: 100 } } } },
     channels: { cache: new Collection([['category',category]]) }, roles: { everyone: { id: 'wizard' }, cache: new Collection([['staff',role]]) } };
+  category.guildId = guild.id;
+  role.guild = guild;
+  guild.channels.fetch = async id => id ? guild.channels.cache.get(id) : guild.channels.cache;
+  guild.roles.fetch = async id => guild.roles.cache.get(id);
   const wizard = require('../events/setupWizardInteractions');
   guild.members.fetch=async()=>({permissions:administrator});
   const base = { inGuild: () => true, memberPermissions: administrator, guild, user: { id: 'admin' },

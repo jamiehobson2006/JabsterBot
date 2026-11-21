@@ -87,7 +87,7 @@ async function claimTicket({
     await canClaimTicket({
 
       member:
-        interaction.member,
+        await interaction.guild.members.fetch({ user: interaction.user.id, force: true }),
 
       guildId:
         interaction.guild.id,

@@ -126,7 +126,7 @@ async function closeTicketUnlocked({
 
   const allowed =
     canCloseTicket({
-      member: interaction.member,
+      member: await interaction.guild.members.fetch({ user: interaction.user.id, force: true }),
       guildId: interaction.guild.id,
       type: ticket.type,
       channelId: interaction.channel.id

@@ -90,6 +90,7 @@ module.exports = {
       // 🎟 BUILD OPTIONS
       // ==========================================
       const options = [];
+      const invalidTypes = [];
 
       for (const row of rows) {
 
@@ -97,6 +98,10 @@ module.exports = {
           ticketTypes[row.type];
 
         if (!type) continue;
+        const validation = require('../../utils/tickets/configuration');
+        const category = await validation.fetchCategory(interaction.guild, row.categoryId);
+        const role = await validation.fetchStaffRole(interaction.guild, row.roleId);
+        if (!category || !role) { invalidTypes.push(type.name); continue; }
 
         options.push({
 
@@ -242,7 +247,7 @@ module.exports = {
       return interaction.editReply({
 
         content:
-          '✅ Ticket panel created successfully.'
+          'Ticket panel created successfully.' + (invalidTypes.length ? ` Skipped invalid configurations: ${invalidTypes.join(', ')}. Run /ticket setup for these types.` : '')
       });
 
     } catch (err) {

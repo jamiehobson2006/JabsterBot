@@ -25,7 +25,7 @@ async function prepareChannel({ guild, fingerprint, userId, type, create }) {
     run("UPDATE ticket_creation_intents SET channelId=?,status='CREATED',updatedAt=? WHERE fingerprint=?",[channel.id,Date.now(),fingerprint]);
     return channel;
   } catch(error) {
-    const definitive=Number(error.status)>=400 && Number(error.status)<500 && Number(error.status)!==429;
+    const definitive=error.requestNotSent === true || Number(error.status)>=400 && Number(error.status)<500 && Number(error.status)!==429;
     run('UPDATE ticket_creation_intents SET status=?,updatedAt=? WHERE fingerprint=?',[definitive?'FAILED':'REVIEW',Date.now(),fingerprint]);
     throw error;
   }

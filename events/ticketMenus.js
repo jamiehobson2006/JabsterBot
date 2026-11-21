@@ -142,6 +142,14 @@ module.exports = {
 
           .slice(0, 30);
 
+      if (!interaction.guild || safeType !== type || !Object.hasOwn(require('../utils/tickets/ticketTypes'), safeType)) {
+        return safelyReply(interaction, { content: 'Invalid ticket type. Ask an administrator to refresh the ticket panel.' });
+      }
+      const configured = require('../database').get('SELECT enabled,categoryId,roleId FROM ticket_settings WHERE guildId=? AND type=?', [interaction.guild.id, safeType]);
+      if (!configured?.enabled || !configured.categoryId || !configured.roleId) {
+        return safelyReply(interaction, { content: 'This ticket type is no longer available. Ask an administrator to update its configuration and panel.' });
+      }
+
       if (safeType === 'application') {
 
         const forms =

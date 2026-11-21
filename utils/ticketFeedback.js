@@ -173,6 +173,13 @@ async function sendFeedbackPrompt({
     return true;
 
   } catch (err) {
+    if ([50007, 50278, 10013].includes(Number(err.code))) {
+      const message = `Feedback DM unavailable (${err.code}): ${String(err.message).slice(0, 800)}. Automatic retries stopped; an administrator can reset the request.`;
+      run("UPDATE delivery_outbox SET status='CANCELLED',leaseUntil=NULL,lastError=?,updatedAt=? WHERE deliveryKey=? AND status!='SENT'",
+        [message, Date.now(), deliveryKey]);
+      run('UPDATE ticket_feedback SET dmLastError=?,dmNextAttemptAt=0 WHERE id=?', [message, feedback.id]);
+      return false;
+    }
     const delivery=get('SELECT nextAttemptAt FROM delivery_outbox WHERE deliveryKey=?',[deliveryKey]);
     run('UPDATE ticket_feedback SET dmLastError=?,dmNextAttemptAt=? WHERE id=?',[String(err.message).slice(0,1000),delivery?.nextAttemptAt || Date.now()+60000,feedback.id]);
     console.warn(
@@ -186,7 +193,7 @@ async function sendFeedbackPrompt({
 
 async function retryFeedbackPrompts(client,limit=25) {
   const records=all(`SELECT f.* FROM ticket_feedback f JOIN tickets t ON t.channelId=f.channelId
-    WHERE f.dmSent=0 AND f.dmNextAttemptAt<=? AND t.transcriptMessageId IS NOT NULL
+    WHERE f.dmSent=0 AND f.status='PENDING' AND f.dmNextAttemptAt<=? AND t.transcriptMessageId IS NOT NULL
     AND NOT EXISTS(SELECT 1 FROM delivery_outbox d WHERE d.deliveryKey='ticket-feedback-dm:'||f.id AND
       (d.status IN ('UNCERTAIN','CANCELLED') OR d.nextAttemptAt>? OR COALESCE(d.leaseUntil,0)>?))
     AND UPPER(t.status) IN ('CLOSING','CLOSED','DELETED') ORDER BY f.dmNextAttemptAt,f.createdAt LIMIT ?`,[Date.now(),Date.now(),Date.now(),limit]);

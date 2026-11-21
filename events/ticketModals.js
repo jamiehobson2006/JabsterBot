@@ -180,7 +180,7 @@ module.exports = {
 
           .slice(0, 30);
 
-      if (!type.length) {
+      if (!interaction.guild || !type.length || rawType !== type || !Object.hasOwn(require('../utils/tickets/ticketTypes'), type) || type === 'application') {
 
         return safelyReply(
           interaction,

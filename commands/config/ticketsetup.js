@@ -96,6 +96,10 @@ module.exports = {
           .setRequired(false)
       )
 
+      .addStringOption(option => option.setName('category_id')
+        .setDescription('Alternative category ID if Discord rejects the category picker')
+        .setMinLength(16).setMaxLength(22))
+
       // ==========================================
       // ⚡ ENABLED
       // ==========================================
@@ -160,25 +164,24 @@ module.exports = {
           false
         );
 
-      const enabled =
-        enabledOption ?? true;
-
       const existing = get(
-        `SELECT categoryId, roleId FROM ticket_settings
+        `SELECT categoryId, roleId, enabled FROM ticket_settings
          WHERE guildId = ? AND type = ?`,
         [interaction.guild.id, type]
       );
 
-      const effectiveCategory = category || (
-        existing?.categoryId
-          ? interaction.guild.channels.cache.get(existing.categoryId)
-          : null
-      );
-      const effectiveRole = role || (
-        existing?.roleId
-          ? interaction.guild.roles.cache.get(existing.roleId)
-          : null
-      );
+      if (!Object.hasOwn(ticketTypes, type)) throw new Error('Unknown ticket type. Refresh Discord and select a ticket type again.');
+      const enabled = enabledOption ?? (existing ? Boolean(existing.enabled) : true);
+      const validation = require('../../utils/tickets/configuration');
+
+      const explicitCategoryId = interaction.options.getString('category_id');
+      if (explicitCategoryId && !/^\d{16,22}$/.test(explicitCategoryId)) throw new Error('Category ID must contain only the digits copied from a Discord category.');
+      if (category && explicitCategoryId && category.id !== explicitCategoryId) throw new Error('Choose category or category_id, not two different destinations.');
+      const categoryId = explicitCategoryId || category?.id || existing?.categoryId || null;
+      const roleId = role?.id || existing?.roleId || null;
+      const effectiveCategory = enabled || category || explicitCategoryId ? await validation.fetchCategory(interaction.guild, categoryId) : null;
+      if ((category || explicitCategoryId) && !effectiveCategory) throw new Error('That ID does not identify an accessible category in this server.');
+      const effectiveRole = enabled || role ? await validation.fetchStaffRole(interaction.guild, roleId) : null;
 
       if (enabled && (!effectiveCategory || !effectiveRole)) {
         return interaction.editReply({
@@ -198,8 +201,7 @@ module.exports = {
         });
       }
 
-      const botMember =
-        interaction.guild.members.me;
+      const botMember = await interaction.guild.members.fetchMe({ force: true });
 
       // ==========================================
       // 🛡 CATEGORY VALIDATION
@@ -251,6 +253,8 @@ module.exports = {
           'Manage Channels'
         );
       }
+
+      if (enabled && !perms?.has(PermissionsBitField.Flags.EmbedLinks)) missing.push('Embed Links');
 
       if (missing.length) {
 
@@ -327,9 +331,9 @@ module.exports = {
 
           enabled ? 1 : 0,
 
-          effectiveCategory?.id || null,
+          effectiveCategory?.id || categoryId,
 
-          effectiveRole?.id || null
+          effectiveRole?.id || roleId
         ]
       );
 
@@ -449,7 +453,8 @@ module.exports = {
       return interaction.editReply({
 
         content:
-          '❌ Failed to configure ticket system.'
+          `Failed to configure tickets: ${err.message || 'Unknown error.'}`,
+        allowedMentions: { parse: [] }
       });
     }
   }

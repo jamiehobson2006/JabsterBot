@@ -45,7 +45,7 @@ function getEmbedField(message, fieldName) {
 
 function getTicketTopicMetadata(topic) {
   const match = String(topic || '').match(
-    /^Jabster Studios ticket \| type:([a-z]+) \| owner:(\d+)(?: \| form:(\d+))?$/i
+    /^Jabster Studios ticket \| type:([a-z]+) \| owner:(\d+)(?: \| request:[a-f0-9]{64})?(?: \| form:(\d+))?$/i
   );
 
   if (!match || !ticketTypes[match[1].toLowerCase()]) {

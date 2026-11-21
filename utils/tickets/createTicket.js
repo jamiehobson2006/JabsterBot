@@ -124,6 +124,9 @@ async function createTicketUnlocked({
       'Invalid ticket type.'
     );
   }
+  if (safeType === 'application' && !application?.form?.id) {
+    throw new Error('Choose an application from the ticket panel and complete its questions first.');
+  }
 
   // ==========================================
   // 🔍 FETCH SETTINGS
@@ -196,15 +199,6 @@ async function createTicketUnlocked({
   // ==========================================
   // 📂 CATEGORY
   // ==========================================
-  const category =
-    settings.categoryId
-
-      ? interaction.guild.channels.cache.get(
-          settings.categoryId
-        )
-
-      : null;
-
   // ==========================================
   // 👮 STAFF ROLE
   // ==========================================
@@ -212,30 +206,10 @@ async function createTicketUnlocked({
     application?.form?.reviewerRoleId ||
     null;
 
-  const staffRole =
-    interaction.guild.roles.cache.get(
-      applicationReviewerRoleId ||
-      settings.roleId
-    ) ||
-    null;
-
-  if (!category || category.type !== ChannelType.GuildCategory) {
-    throw new Error('This ticket type has no valid category. Ask an administrator to run /ticket setup again.');
-  }
-
-  if (!staffRole || staffRole.id === interaction.guild.roles.everyone.id || staffRole.managed) {
-    throw new Error('This ticket type has no valid staff role. Ask an administrator to run /ticket setup again.');
-  }
-
-  const categoryPermissions = category.permissionsFor(interaction.guild.members.me);
-  if (!categoryPermissions?.has([
-    PermissionFlagsBits.ViewChannel,
-    PermissionFlagsBits.SendMessages,
-    PermissionFlagsBits.ManageChannels,
-    PermissionFlagsBits.EmbedLinks
-  ])) {
-    throw new Error('I am missing the required permissions in the configured ticket category.');
-  }
+  const validation = require('./configuration');
+  const { category, role: staffRole } = await validation.resolveConfiguration(interaction.guild, {
+    categoryId: settings.categoryId, roleId: applicationReviewerRoleId || settings.roleId
+  });
 
   // ==========================================
   // 🏷 CHANNEL NAME
@@ -314,6 +288,10 @@ async function createTicketUnlocked({
 
         PermissionFlagsBits.ManageMessages,
 
+        PermissionFlagsBits.EmbedLinks,
+
+        PermissionFlagsBits.AttachFiles,
+
         PermissionFlagsBits.ReadMessageHistory
       ]
     }
@@ -343,38 +321,37 @@ async function createTicketUnlocked({
   // ==========================================
   // 🎫 CREATE CHANNEL
   // ==========================================
-  const channel = await require('./creationIntent').prepareChannel({guild:interaction.guild,fingerprint,
-    userId:interaction.user.id,type:safeType,create:()=>{assertLease();return interaction.guild.channels.create({
-
-      name:
-        channelName,
-
-      type:
-        ChannelType.GuildText,
-
-      parent:
-        category.id,
-
-      permissionOverwrites:
-        overwrites,
-
-      topic:
-        [
-          'Jabster Studios ticket',
-          `type:${safeType}`,
-          `owner:${interaction.user.id}`,
-          `request:${fingerprint}`,
-          application?.form?.id
-            ? `form:${application.form.id}`
-            : null
-        ]
-          .filter(Boolean)
-          .join(' | '),
-
-      reason:
-
-        `Ticket created by ${interaction.user.tag}`
-    });}});
+  let channel;
+  try {
+    channel = await require('./creationIntent').prepareChannel({
+      guild: interaction.guild,
+      fingerprint,
+      userId: interaction.user.id,
+      type: safeType,
+      create: async () => {
+        assertLease();
+        try { await validation.assertCategoryCapacity(interaction.guild, category.id); }
+        catch (error) { error.requestNotSent = true; throw error; }
+        assertLease();
+        return interaction.guild.channels.create({
+          name: channelName,
+          type: ChannelType.GuildText,
+          parent: category.id,
+          permissionOverwrites: overwrites,
+          topic: [
+            'Jabster Studios ticket',
+            `type:${safeType}`,
+            `owner:${interaction.user.id}`,
+            `request:${fingerprint}`,
+            application?.form?.id ? `form:${application.form.id}` : null
+          ].filter(Boolean).join(' | '),
+          reason: `Ticket created by ${interaction.user.tag}`
+        });
+      }
+    });
+  } catch (error) {
+    throw validation.creationError(error);
+  }
 
   try {
 

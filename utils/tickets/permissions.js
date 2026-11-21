@@ -36,6 +36,8 @@ function getStaffRole(guildId, type, channelId = null) {
   const ticket =
     getTicket(channelId);
 
+  if (ticket?.guildId === guildId && ticket.responseRoleId) return safeString(ticket.responseRoleId);
+
   if (
     ticket?.applicationFormId &&
     ticket.guildId === guildId
@@ -116,6 +118,10 @@ function hasTicketAccess({
     if (!member) {
       return false;
     }
+
+    if (member.guild?.id && member.guild.id !== guildId) return false;
+    const scopedTicket = getTicket(channelId);
+    if (scopedTicket && (scopedTicket.guildId !== guildId || scopedTicket.type !== type)) return false;
 
     if (
       member.permissions?.has(

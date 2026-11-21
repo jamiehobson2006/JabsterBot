@@ -44,6 +44,11 @@ test('real ticket creation saves the configured application reviewer role and di
     send: async payload => { messages.push(payload); return { id: 'starter' }; } }) } };
   const interaction = { id: 'request', guild, user: { id: 'applicant', username: 'applicant', tag: 'Applicant', toString: () => '<@applicant>' },
     client: { user: { id: 'bot' } } };
+  category.guildId = guild.id;
+  for (const role of guild.roles.cache.values()) role.guild = guild;
+  guild.channels.fetch = async id => id ? guild.channels.cache.get(id) : guild.channels.cache;
+  guild.roles.fetch = async id => guild.roles.cache.get(id);
+  guild.members.fetchMe = async () => guild.members.me;
   await createTicket({ interaction, type: 'application', application: { form, answers: [] } });
   assert.equal(get("SELECT responseRoleId FROM tickets WHERE channelId='new-app'").responseRoleId, 'developers');
   const estimate = messages[0].embeds[0].data.fields.find(field => field.name === 'Average First Staff Response');
