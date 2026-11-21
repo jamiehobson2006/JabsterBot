@@ -107,8 +107,7 @@ module.exports = {
 
         !interaction.isStringSelectMenu() ||
 
-        interaction.customId !==
-        'ticket_create'
+        !/^ticket_create(?::[a-f0-9-]{36})?$/.test(interaction.customId || '')
       ) {
 
         return;
@@ -145,7 +144,10 @@ module.exports = {
       if (!interaction.guild || safeType !== type || !Object.hasOwn(require('../utils/tickets/ticketTypes'), safeType)) {
         return safelyReply(interaction, { content: 'Invalid ticket type. Ask an administrator to refresh the ticket panel.' });
       }
-      const configured = require('../database').get('SELECT enabled,categoryId,roleId FROM ticket_settings WHERE guildId=? AND type=?', [interaction.guild.id, safeType]);
+      const panelId = interaction.customId.split(':')[1] || null;
+      let configured;
+      try { configured = require('../utils/tickets/panels').routing(interaction.guild.id, safeType, panelId); }
+      catch (error) { return safelyReply(interaction, { content: error.message }); }
       if (!configured?.enabled || !configured.categoryId || !configured.roleId) {
         return safelyReply(interaction, { content: 'This ticket type is no longer available. Ask an administrator to update its configuration and panel.' });
       }
@@ -173,7 +175,7 @@ module.exports = {
 
         const menu =
           new StringSelectMenuBuilder()
-            .setCustomId('application_select')
+            .setCustomId(panelId ? `application_select:${panelId}` : 'application_select')
             .setPlaceholder('Choose an application')
             .addOptions(
               forms.slice(0, 25).map(form => ({
@@ -181,7 +183,7 @@ module.exports = {
                   form.name.slice(0, 100),
                 description:
                   `Average first reply: ${require('../utils/tickets/responseTimes').responseEstimate(
-                    interaction.guild.id, 'application', form.reviewerRoleId || require('../utils/tickets/permissions').getStaffRole(interaction.guild.id, 'application')).label}`,
+                    interaction.guild.id, 'application', form.reviewerRoleId || configured.roleId).label}`,
                 value:
                   String(form.id)
               }))
@@ -207,7 +209,7 @@ module.exports = {
         new ModalBuilder()
 
           .setCustomId(
-            `ticket_modal_${safeType}`
+            `ticket_modal_${safeType}${panelId ? ':' + panelId : ''}`
           )
 
           .setTitle(

@@ -43,7 +43,7 @@ function scenario(f,values={}){return training.saveScenario(f.guild.id,'trainer-
 
 test('new commands remain global and below Discord command and option budgets',()=>{
   const registry=require('../utils/commandRegistry').loadCommandRegistry();
-  assert.equal(registry.commands.size,61);assert.equal(registry.sources.size,106);
+  assert.equal(registry.commands.size,61);assert.equal(registry.sources.size,108);
   for(const name of ['training','knowledge','challenge','temprole','partner'])assert.ok(registry.commands.has(name));
   require('../utils/commandValidation').validateGlobalCommands(registry.definitions);
   assert.ok(registry.commands.get('social').data.toJSON().options.find(row=>row.name==='settings'));

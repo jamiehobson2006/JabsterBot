@@ -167,11 +167,9 @@ module.exports = {
       // ==============================================
       // 🎫 TYPE
       // ==============================================
-      const rawType =
-        interaction.customId.replace(
-          'ticket_modal_',
-          ''
-        );
+      const identity = interaction.customId.match(/^ticket_modal_([a-z]+)(?::([a-f0-9-]{36}))?$/);
+      const rawType = identity?.[1] || '';
+      const panelId = identity?.[2] || null;
 
       const type =
         rawType
@@ -250,6 +248,8 @@ module.exports = {
             interaction,
 
             type,
+
+            panelId,
 
             reason
           });

@@ -84,6 +84,7 @@ async function createTicketUnlocked({
   reason = null,
 
   application = null,
+  panelId = null,
   assertLease = () => {}
 }) {
 
@@ -107,9 +108,10 @@ async function createTicketUnlocked({
     safeString(type).toLowerCase();
 
   if (application?.draftId) {
-    const existing = get('SELECT id,channelId,userId,guildId FROM tickets WHERE applicationDraftId=?', [application.draftId]);
+    const existing = get('SELECT id,channelId,userId,guildId,ticketPanelId FROM tickets WHERE applicationDraftId=?', [application.draftId]);
     if (existing) {
       if (existing.guildId !== interaction.guild.id || existing.userId !== interaction.user.id) throw new Error('This application belongs to another member.');
+      if ((existing.ticketPanelId || null) !== panelId) throw new Error('This application belongs to another ticket panel.');
       const channel = await interaction.guild.channels.fetch(existing.channelId).catch(() => null);
       return { success: true, recovered: true, ticketId: existing.id, channel: channel || { id: existing.channelId, toString: () => `<#${existing.channelId}>` } };
     }
@@ -138,7 +140,8 @@ async function createTicketUnlocked({
     formId: application?.form?.id || null,
     answers: application?.answers || null,
     requestId: interaction.id,
-    reason
+    reason,
+    panelId
   });
 
   const duplicate = get(
@@ -167,21 +170,7 @@ async function createTicketUnlocked({
     if(remaining) throw new Error(`Please wait ${Math.ceil(remaining/1000)} seconds before creating another ticket.`);
   }
 
-  const settings =
-    get(
-
-      `SELECT *
-       FROM ticket_settings
-       WHERE guildId = ?
-       AND type = ?`,
-
-      [
-
-        interaction.guild.id,
-
-        safeType
-      ]
-    );
+  const settings = require('./panels').routing(interaction.guild.id, safeType, panelId);
 
   // ==========================================
   // 🚫 DISABLED
@@ -343,6 +332,8 @@ async function createTicketUnlocked({
             `type:${safeType}`,
             `owner:${interaction.user.id}`,
             `request:${fingerprint}`,
+            panelId ? `panel:${panelId}` : null,
+            panelId ? `staff:${staffRole.id}` : null,
             application?.form?.id ? `form:${application.form.id}` : null
           ].filter(Boolean).join(' | '),
           reason: `Ticket created by ${interaction.user.tag}`
@@ -556,6 +547,7 @@ async function createTicketUnlocked({
 
   embed.addFields({ name: 'Average First Staff Response', value: responseEstimate.label, inline: true });
   embed.addFields({ name: 'Waiting For', value: 'Staff', inline: true });
+  if (panelId) embed.addFields({ name: 'Panel', value: settings.panelName, inline: true });
 
   const msg =
     await require('./creationIntent').sendCreationMessage(channel,interaction.client,{
@@ -594,11 +586,12 @@ async function createTicketUnlocked({
          type,
          applicationFormId,
          applicationDraftId,
+         ticketPanelId,
          responseRoleId,
          fingerprint,
          createdAt,
          status
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         interaction.guild.id,
         channel.id,
@@ -607,6 +600,7 @@ async function createTicketUnlocked({
         safeType,
         application?.form?.id || null,
         application?.draftId || null,
+        panelId,
         staffRole.id,
         fingerprint,
         Date.now(),
@@ -656,7 +650,9 @@ async function createTicketUnlocked({
         ticketId: Number(ticketId),
         channelId: channel.id,
         type: safeType,
-        applicationFormId: application?.form?.id || null
+        applicationFormId: application?.form?.id || null,
+        ticketPanelId: panelId,
+        panelName: settings.panelName
       },
       embed: createAuditEmbed({
         action: 'Ticket Created',
@@ -664,7 +660,7 @@ async function createTicketUnlocked({
         channel: `${channel}`,
         extra:
           `Ticket: #${ticketId}\n` +
-          `Type: ${config.name}`,
+          `Type: ${config.name}` + (settings.panelName ? `\nPanel: ${settings.panelName}` : ''),
         color: 0x57F287
       })
     }

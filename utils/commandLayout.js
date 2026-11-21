@@ -9,7 +9,7 @@ const GROUPS = [
   } },
   { name: 'ticket', description: 'Ticket management, setup, archives, feedback and statistics.', category: 'config', entries: {
     manage: 'ticket', setup: 'ticketsetup', panel: 'ticketpanel', stats: 'ticketstats',
-    feedback: 'ticketfeedback', sla: 'ticketsla', targets: 'tickettargets', transcripts: 'settranscriptchannel'
+    feedback: 'ticketfeedback', sla: 'ticketsla', targets: 'tickettargets', transcripts: 'settranscriptchannel', panels: 'ticketpanels', dashboard: 'ticketdashboard'
   } },
   { name: 'leveling', description: 'Ranks, leaderboards, XP settings and reward roles.', category: 'leveling', entries: {
     config: 'leveling', admin: 'level', rewards: 'levelreward', rank: 'rank', leaderboard: 'leaderboard'

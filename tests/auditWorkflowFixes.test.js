@@ -21,6 +21,7 @@ test('setup wizard creates a canonical support configuration recognized by the r
   role.guild = guild;
   guild.channels.fetch = async id => id ? guild.channels.cache.get(id) : guild.channels.cache;
   guild.roles.fetch = async id => guild.roles.cache.get(id);
+  guild.members.fetchMe = async () => guild.members.me;
   const wizard = require('../events/setupWizardInteractions');
   guild.members.fetch=async()=>({permissions:administrator});
   const base = { inGuild: () => true, memberPermissions: administrator, guild, user: { id: 'admin' },
@@ -30,7 +31,7 @@ test('setup wizard creates a canonical support configuration recognized by the r
   assert.equal(get("SELECT type FROM ticket_settings WHERE guildId='wizard'").type, 'support');
   assert.equal(require('../utils/setupWizard').summary('wizard').ticketReady, true);
   let panel;
-  await require('../commands/config/ticketpanel').execute({ ...base, channel: { send: async payload => { panel = payload; return { id: 'panel' }; } },
+  await require('../commands/config/ticketpanel').execute({ ...base, channel: { guild, type: ChannelType.GuildText, permissionsFor: () => administrator, send: async payload => { panel = payload; return { id: 'panel' }; } },
     editReply: async payload => { if (payload.components?.length) panel = payload; } });
   assert.ok(panel?.components?.[0]);
 });

@@ -26,6 +26,7 @@ async function choices(interaction,commands){
   const source=resolved.sourceName,sub=options.getSubcommand(false),group=options.getSubcommandGroup(false);
   const text=String(focused.value || '').toLowerCase();let rows=[];
   if(focused.name==='command')rows=commandEntries(commands).map(entry=>({name:`/${entry.path}`,value:entry.path}));
+  else if(['ticketpanel','ticketpanels'].includes(source))rows=require('./tickets/panels').list(interaction.guild.id).map(row=>({name:`${row.name}${row.enabled?'':' (disabled)'}`,value:row.name}));
   else if(source==='application'){
     if(!require('./applicationAccess').canManageApplications(member,require('../database').get('SELECT applicationCreatorRoleId FROM guild_settings WHERE guildId=?',[interaction.guild.id])?.applicationCreatorRoleId))return [];
     rows=all('SELECT name FROM application_forms WHERE guildId=? ORDER BY name',[interaction.guild.id]).map(row=>({name:row.name,value:row.name}));

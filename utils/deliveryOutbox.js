@@ -113,26 +113,28 @@ function markDeliveryFailed(deliveryKey, error) {
   );
 }
 
-function pendingDeliveries(type = null, limit = 50) {
+function pendingDeliveries(type = null, limit = 50, excludedTypes = []) {
   const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 250);
   const now = Date.now();
+  const exclusions = [...new Set(excludedTypes.map(String))];
+  const excludeSql = exclusions.length ? ` AND type NOT IN (${exclusions.map(() => '?').join(',')})` : '';
 
   if (type) {
     return all(
       `SELECT * FROM delivery_outbox
        WHERE type = ? AND status IN ('PENDING', 'FAILED', 'PROCESSING') AND nextAttemptAt <= ?
-         AND (leaseUntil IS NULL OR leaseUntil < ?)
+         AND (leaseUntil IS NULL OR leaseUntil < ?)${excludeSql}
        ORDER BY createdAt ASC LIMIT ?`,
-      [String(type), now, now, safeLimit]
+      [String(type), now, now, ...exclusions, safeLimit]
     );
   }
 
   return all(
     `SELECT * FROM delivery_outbox
      WHERE status IN ('PENDING', 'FAILED', 'PROCESSING') AND nextAttemptAt <= ?
-       AND (leaseUntil IS NULL OR leaseUntil < ?)
+       AND (leaseUntil IS NULL OR leaseUntil < ?)${excludeSql}
      ORDER BY createdAt ASC LIMIT ?`,
-    [now, now, safeLimit]
+    [now, now, ...exclusions, safeLimit]
   );
 }
 
@@ -201,7 +203,7 @@ async function sendQueuedMessage(channel, delivery, payload, { beforeSend = null
 async function retryChannelDeliveries(client) {
   await require('./publicMessageCleanup').cleanupPublicReferences(client).catch(error => console.error('Public display cleanup:', error.message));
   let sent = 0;
-  for (const row of pendingDeliveries()) {
+  for (const row of pendingDeliveries(null, 50, ['TICKET_PANEL_POST'])) {
     if (['TRAINING_REVIEW','TRAINING_RESULT'].includes(row.type)) continue;
     if (row.type === 'SOCIAL_DIGEST') {
       try { const result=await require('./socialDigests').deliverDigest(client,row);if(result?.status==='SENT')sent++; }

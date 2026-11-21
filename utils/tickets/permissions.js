@@ -37,6 +37,10 @@ function getStaffRole(guildId, type, channelId = null) {
     getTicket(channelId);
 
   if (ticket?.guildId === guildId && ticket.responseRoleId) return safeString(ticket.responseRoleId);
+  if (ticket?.guildId === guildId && ticket.ticketPanelId) {
+    return safeString(get('SELECT roleId FROM ticket_panel_routes WHERE guildId=? AND panelId=? AND type=?',
+      [guildId, ticket.ticketPanelId, type])?.roleId);
+  }
 
   if (
     ticket?.applicationFormId &&

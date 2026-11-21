@@ -306,15 +306,17 @@ function parseDraftAnswers(
 function createDraft({
   guildId,
   formId,
-  userId
+  userId,
+  panelId = null
 }) {
   const existingRow = get(
     `SELECT id
      FROM application_drafts
      WHERE guildId = ? AND formId = ? AND userId = ?
+       AND ticketPanelId IS ?
      ORDER BY updatedAt DESC, createdAt DESC
      LIMIT 1`,
-    [guildId, formId, userId]
+    [guildId, formId, userId, panelId]
   );
 
   if (existingRow) {
@@ -345,18 +347,20 @@ function createDraft({
        guildId,
        formId,
        userId,
+       ticketPanelId,
        answersJson,
        questionsJson,
        nextQuestionIndex,
        createdAt,
        updatedAt,
        expiresAt
-     ) VALUES (?, ?, ?, ?, '[]', ?, 0, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, '[]', ?, 0, ?, ?, ?)`,
     [
       id,
       guildId,
       formId,
       userId,
+      panelId,
       JSON.stringify(getQuestions(formId)),
       now,
       now,

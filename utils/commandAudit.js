@@ -99,6 +99,7 @@ function getSubcommand(interaction) {
 }
 
 function shouldLogCommand(command, interaction) {
+  if (interaction.commandName === 'ticketpanels') return !['list','show'].includes(getSubcommand(interaction));
   if(['knowledge','challenge','partner','temprole','training','socialsettings'].includes(interaction.commandName)) {
     const sub=getSubcommand(interaction);
     return !['list','show','view','search','history','pending','approved','settings','next','start','answer','results','queue','ticket'].includes(sub);

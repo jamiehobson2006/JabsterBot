@@ -39,9 +39,10 @@ function fixture() {
   }
   const panelChannel = textChannel(String(800000000000000000n + BigInt(++sequence)));
   guild.channels.create = async payload => {
-    assert.equal(payload.parent, categoryId);
+    assert.equal(channels.get(payload.parent)?.type, ChannelType.GuildCategory);
     requests.push(payload);
     const channel = textChannel(String(900000000000000000n + BigInt(++sequence)));
+    channel.parentId = payload.parent;
     channel.topic = payload.topic;
     channels.set(channel.id, channel);
     return channel;
@@ -72,6 +73,7 @@ test('Support and Bug Report configure and create tickets in the same category w
   const bug = await createTicket({ interaction: f.interaction, type: 'bug', reason: 'The settings button is broken' });
   assert.notEqual(support.channel.id, bug.channel.id);
   assert.equal(f.requests.length, 2);
+  assert.ok(f.requests.every(request => request.parent === f.category.id));
   assert.equal(get('SELECT type FROM tickets WHERE channelId=?', [bug.channel.id]).type, 'bug');
   assert.ok(f.requests.every(request => request.permissionOverwrites.some(row => row.id === f.staff.id)));
 });
@@ -200,4 +202,173 @@ test('unknown-outcome creation failures keep a recovery hold while category erro
   await assert.rejects(require('../utils/tickets/createTicket').createTicket(options), /response lost/);
   await assert.rejects(require('../utils/tickets/createTicket').createTicket(options), /administrator review/);
   assert.equal(attempts, 1);
+});
+
+async function namedFixture() {
+  const f = fixture(), panels = require('../utils/tickets/panels');
+  await f.setup('support');
+  const secondCategory = { ...f.category, id: '300000000000000002' };
+  f.channels.set(secondCategory.id, secondCategory);
+  const secondStaff = { ...f.staff, id: '500000000000000002' };
+  f.roles.set(secondStaff.id, secondStaff);
+  const first = panels.create(f.guild.id, 'admin', { name: 'general-help', title: 'General Help' });
+  const second = panels.create(f.guild.id, 'admin', { name: 'rewards', title: 'Rewards Support' });
+  for (const type of ['support', 'bug']) await panels.setRoute(f.guild, first.name, type, { categoryId: f.category.id, roleId: f.staff.id });
+  for (const type of ['support', 'giveaway']) await panels.setRoute(f.guild, second.name, type, { categoryId: secondCategory.id, roleId: secondStaff.id });
+  return { ...f, panels, first, second, secondCategory, secondStaff };
+}
+
+test('named panels independently route the same ticket type to their own category and staff role', async () => {
+  const f = await namedFixture(), createTicket = require('../utils/tickets/createTicket').createTicket;
+  const first = await createTicket({ interaction: f.interaction, type: 'support', panelId: f.first.id, reason: 'The same question' });
+  const second = await createTicket({ interaction: f.interaction, type: 'support', panelId: f.second.id, reason: 'The same question' });
+  assert.equal(f.requests[0].parent, f.category.id); assert.equal(f.requests[1].parent, f.secondCategory.id);
+  assert.ok(f.requests[1].permissionOverwrites.some(row => row.id === f.secondStaff.id));
+  assert.equal(f.requests[1].permissionOverwrites.some(row => row.id === f.staff.id), false);
+  assert.equal(get('SELECT ticketPanelId FROM tickets WHERE channelId=?', [first.channel.id]).ticketPanelId, f.first.id);
+  assert.equal(get('SELECT responseRoleId FROM tickets WHERE channelId=?', [second.channel.id]).responseRoleId, f.secondStaff.id);
+  await assert.rejects(createTicket({ interaction: f.interaction, type: 'support', panelId: f.first.id, reason: 'The same question' }), /exact ticket already exists/);
+  assert.equal(get("SELECT categoryId FROM ticket_settings WHERE guildId=? AND type='support'", [f.guild.id]).categoryId, f.category.id);
+});
+
+test('posting two named panels shows only their own ticket choices with persistent distinct menu identities', async () => {
+  const f = await namedFixture(), command = require('../commands/config/ticketpanel');
+  for (const panel of [f.first, f.second]) await command.execute({ ...f.interaction,
+    options: { getString: () => panel.name, getChannel: () => null }, editReply: async () => {} });
+  const menus = f.sent.map(payload => payload.components[0].toJSON().components[0]);
+  assert.equal(menus[0].custom_id, `ticket_create:${f.first.id}`);
+  assert.equal(menus[1].custom_id, `ticket_create:${f.second.id}`);
+  assert.deepEqual(menus[0].options.map(row => row.value).sort(), ['bug', 'support']);
+  assert.deepEqual(menus[1].options.map(row => row.value).sort(), ['giveaway', 'support']);
+  assert.equal(f.sent[0].embeds[0].data.title, 'General Help');
+  assert.equal(f.sent[1].embeds[0].data.title, 'Rewards Support');
+});
+
+test('the selected panel survives the actual menu and modal event handlers', async () => {
+  const f = await namedFixture(); let modal, reply;
+  await require('../events/ticketMenus').execute({ ...f.interaction, customId: `ticket_create:${f.second.id}`, values: ['support'],
+    isStringSelectMenu: () => true, showModal: async value => { modal = value.toJSON(); }, reply: async value => { reply = value; } });
+  assert.equal(modal.custom_id, `ticket_modal_support:${f.second.id}`);
+  await require('../events/ticketModals').execute({ ...f.interaction, customId: modal.custom_id,
+    isModalSubmit: () => true, fields: { getTextInputValue: () => 'A rewards question' },
+    deferReply: async () => {}, reply: async value => { reply = value; }, editReply: async value => { reply = value; } });
+  assert.equal(f.requests[0].parent, f.secondCategory.id);
+  assert.ok(reply.content.includes('Ticket created'));
+});
+
+test('removed, disabled and foreign panel routes never silently fall back to global support', async () => {
+  const f = await namedFixture(), createTicket = require('../utils/tickets/createTicket').createTicket;
+  f.panels.removeRoute(f.guild.id, f.second.name, 'support');
+  await assert.rejects(createTicket({ interaction: f.interaction, type: 'support', panelId: f.second.id, reason: 'Removed route' }), /no longer available/);
+  f.panels.edit(f.guild.id, f.first.name, { enabled: false });
+  await assert.rejects(createTicket({ interaction: f.interaction, type: 'support', panelId: f.first.id, reason: 'Disabled panel' }), /disabled/);
+  assert.throws(() => f.panels.routing('another-server', 'support', f.second.id), /disabled|available/);
+  assert.equal(f.requests.length, 0);
+  assert.equal(f.panels.routing(f.guild.id, 'support').categoryId, f.category.id);
+});
+
+test('application drafts are isolated by panel and preserve routes and answers across a process restart', async () => {
+  const f = await namedFixture(), applications = require('../utils/applications');
+  const formId = Number(applications.createForm({ guildId: f.guild.id, name: 'Staff', createdBy: 'admin' }).lastInsertRowid);
+  applications.addQuestion({ guildId: f.guild.id, formId, question: 'Why do you want to help?' });
+  await f.panels.setRoute(f.guild, f.first.name, 'application', { categoryId: f.category.id, roleId: f.staff.id });
+  await f.panels.setRoute(f.guild, f.second.name, 'application', { categoryId: f.secondCategory.id, roleId: f.secondStaff.id });
+  const a = applications.createDraft({ guildId: f.guild.id, formId, userId: f.interaction.user.id, panelId: f.first.id });
+  const b = applications.createDraft({ guildId: f.guild.id, formId, userId: f.interaction.user.id, panelId: f.second.id });
+  assert.notEqual(a.id, b.id);
+  applications.saveDraft({ id: b.id, answers: [{ questionId: b.questions[0].id, question: b.questions[0].question, answer: 'To support the community.' }], nextQuestionIndex: 1 });
+  assert.equal(applications.createDraft({ guildId: f.guild.id, formId, userId: f.interaction.user.id, panelId: f.first.id }).id, a.id);
+  const script = `const d=require('./database');d.initDatabase();const p=require('./utils/tickets/panels');const a=require('./utils/applications');const draft=a.getDraft('${b.id}');if(draft.ticketPanelId!=='${f.second.id}'||draft.answers.length!==1||p.routing('${f.guild.id}','application',draft.ticketPanelId).categoryId!=='${f.secondCategory.id}')throw new Error('Panel context lost');d.db.close();`;
+  const child = require('node:child_process').spawnSync(process.execPath, ['-e', script], { cwd: path.join(__dirname, '..'), env: process.env, encoding: 'utf8' });
+  assert.equal(child.status, 0, child.stderr);
+  const result = await require('../utils/tickets/createTicket').createTicket({ interaction: f.interaction, type: 'application', panelId: b.ticketPanelId,
+    application: { form: applications.getFormById(f.guild.id, formId), answers: applications.getDraft(b.id).answers, draftId: b.id } });
+  assert.equal(result.channel.parentId, f.secondCategory.id);
+});
+
+test('application menus and DM starts preserve named-panel identity', async () => {
+  const f = await namedFixture(), applications = require('../utils/applications');
+  const formId = Number(applications.createForm({ guildId: f.guild.id, name: 'Moderator', createdBy: 'admin' }).lastInsertRowid);
+  applications.addQuestion({ guildId: f.guild.id, formId, question: 'What would you contribute?' });
+  await f.panels.setRoute(f.guild, f.second.name, 'application', { categoryId: f.secondCategory.id, roleId: f.secondStaff.id });
+  let menuReply, dm;
+  const base = { ...f.interaction, isStringSelectMenu: () => true, reply: async value => { menuReply = value; } };
+  await require('../events/ticketMenus').execute({ ...base, customId: `ticket_create:${f.second.id}`, values: ['application'] });
+  const customId = menuReply.components[0].toJSON().components[0].custom_id;
+  assert.equal(customId, `application_select:${f.second.id}`);
+  await require('../events/applicationTickets').execute({ ...base, user: { ...f.interaction.user, send: async value => { dm = value; return { id: 'dm' }; } },
+    customId, values: [String(formId)], isButton: () => false, isModalSubmit: () => false,
+    deferReply: async () => {}, editReply: async () => {} });
+  assert.ok(dm);
+  const draft = get('SELECT * FROM application_drafts WHERE guildId=?', [f.guild.id]);
+  assert.equal(draft.ticketPanelId, f.second.id);
+});
+
+test('named-panel recovery restores its identity and recorded role access after a route is changed', async () => {
+  const f = await namedFixture();
+  const result = await require('../utils/tickets/createTicket').createTicket({ interaction: f.interaction, type: 'support', panelId: f.second.id, reason: 'A panel ticket' });
+  const ticket = get('SELECT * FROM tickets WHERE channelId=?', [result.channel.id]);
+  await f.panels.setRoute(f.guild, f.second.name, 'support', { roleId: f.staff.id });
+  assert.equal(require('../utils/tickets/permissions').getStaffRole(f.guild.id, 'support', result.channel.id), f.secondStaff.id);
+  assert.equal(require('../utils/tickets/recoverTicket').getTicketTopicMetadata(result.channel.topic).ticketPanelId, f.second.id);
+  run('DELETE FROM tickets WHERE id=?', [ticket.id]);
+  const recovered = await require('../utils/tickets/recoverTicket').findOrRecoverOpenTicket({ guild: f.guild, channel: result.channel, client: f.client });
+  assert.equal(recovered.ticketPanelId, f.second.id);
+  assert.equal(recovered.responseRoleId, f.secondStaff.id);
+});
+
+test('panel configuration commands enforce fresh administrator permissions', async () => {
+  const f = fixture();
+  await assert.rejects(require('../commands/config/ticketpanels').execute({ ...f.interaction,
+    options: { getSubcommand: () => 'create' } }), /Administrator/);
+  assert.equal(require('../utils/tickets/panels').list(f.guild.id).length, 0);
+});
+
+test('DM application submission uses its saved panel and keeps answers when that panel is temporarily disabled', async () => {
+  const f = await namedFixture(), applications = require('../utils/applications');
+  const formId = Number(applications.createForm({ guildId: f.guild.id, name: 'Rewards staff', createdBy: 'admin' }).lastInsertRowid);
+  applications.addQuestion({ guildId: f.guild.id, formId, question: 'How would you help members?' });
+  await f.panels.setRoute(f.guild, f.second.name, 'application', { categoryId: f.secondCategory.id, roleId: f.secondStaff.id });
+  const draft = applications.createDraft({ guildId: f.guild.id, formId, userId: f.interaction.user.id, panelId: f.second.id });
+  applications.saveDraft({ id: draft.id, nextQuestionIndex: 1, answers: [{ questionId: draft.questions[0].id, answer: 'I would follow the policy and listen carefully.' }] });
+  const event = require('../events/applicationTickets');
+  let reply;
+  const interaction = () => ({ guild: null, user: f.interaction.user,
+    client: { ...f.client, guilds: { fetch: async () => f.guild } }, customId: `application_submit_${draft.id}`,
+    isButton: () => true, isStringSelectMenu: () => false, isModalSubmit: () => false,
+    async deferReply() { this.deferred = true; }, editReply: async value => { reply = value; }, reply: async value => { reply = value; } });
+  f.panels.edit(f.guild.id, f.second.name, { enabled: false });
+  await event.execute(interaction());
+  assert.equal(f.requests.length, 0);
+  assert.match(reply.content, /disabled/);
+  assert.equal(applications.getDraft(draft.id).answers.length, 1);
+  f.panels.edit(f.guild.id, f.second.name, { enabled: true });
+  await event.execute(interaction());
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.requests[0].parent, f.secondCategory.id);
+  assert.equal(applications.getDraft(draft.id).submissionStatus, 'SUBMITTED');
+  await event.execute(interaction());
+  assert.equal(f.requests.length, 1);
+});
+
+test('administrator panel commands save configuration and named routes do not depend on the legacy enabled switch', async () => {
+  const f = fixture(), command = require('../commands/config/ticketpanels');
+  const admin = { ...f.interaction.member, permissions: new PermissionsBitField(P.Administrator) };
+  f.members.set(f.interaction.user.id, admin);
+  let response;
+  const execute = async (action, values) => command.execute({ ...f.interaction, options: {
+    getSubcommand: () => action, getString: key => values[key] ?? null, getChannel: key => values[key] ?? null,
+    getRole: key => values[key] ?? null, getBoolean: key => values[key] ?? null, getInteger: key => values[key] ?? null
+  }, editReply: async value => { response = value; } });
+  await execute('create', { name: 'game-help', title: 'Game Help' });
+  await execute('set', { panel: 'game-help', type: 'support', category: f.category, staff_role: f.staff });
+  const panel = require('../utils/tickets/panels').byName(f.guild.id, 'game-help');
+  assert.ok(response.content.includes('Support'));
+  run("INSERT INTO ticket_settings(guildId,type,enabled,categoryId,roleId) VALUES(?,'support',0,?,?)", [f.guild.id, f.category.id, f.staff.id]);
+  const result = await require('../utils/tickets/createTicket').createTicket({ interaction: f.interaction, type: 'support', panelId: panel.id, reason: 'Help with this game' });
+  assert.equal(result.channel.parentId, f.category.id);
+  await execute('edit', { panel: 'game-help', enabled: false });
+  assert.equal(require('../utils/tickets/panels').byName(f.guild.id, 'game-help').enabled, 0);
+  await execute('remove', { panel: 'game-help', type: 'support' });
+  assert.equal(require('../utils/tickets/panels').routes(f.guild.id, panel.id).length, 0);
 });

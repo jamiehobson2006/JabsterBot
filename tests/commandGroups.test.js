@@ -40,14 +40,14 @@ class Interaction {
   acknowledgements() { return this.#acknowledgements; }
 }
 
-test('106 source handlers register exactly once through 61 global roots', () => {
-  assert.equal(registry.sources.size, 106);
+test('108 source handlers register exactly once through 61 global roots', () => {
+  assert.equal(registry.sources.size, 108);
   assert.equal(registry.commands.size, 61);
   require('../utils/commandValidation').validateGlobalCommands(registry.definitions);
   const covered = [...registry.commands].flatMap(([name, command]) =>
     command.routes ? [...command.routes.values()].map(route => route.sourceName) : [name]);
-  assert.equal(covered.length, 106);
-  assert.equal(new Set(covered).size, 106);
+  assert.equal(covered.length, 108);
+  assert.equal(new Set(covered).size, 108);
   assert.deepEqual([...new Set(covered)].sort(), [...registry.sources.keys()].sort());
   for (const [source] of Object.entries(LEGACY_PATHS)) {
     if (!GROUPS.some(group => group.name === source)) assert.equal(registry.commands.has(source), false);
@@ -286,7 +286,7 @@ test('fresh process loads the same global registry without editing ticket or giv
   const giveaway = get("SELECT * FROM giveaways WHERE messageId='active-giveaway'");
   const child = spawnSync(process.execPath, ['-e', `const d=require('./database');d.initDatabase();
     const r=require('./utils/commandRegistry').loadCommandRegistry();
-    if(r.commands.size!==61||r.sources.size!==106)process.exitCode=1;d.db.close();`],
+    if(r.commands.size!==61||r.sources.size!==108)process.exitCode=1;d.db.close();`],
   { cwd: path.join(__dirname, '..'), env: process.env, encoding: 'utf8' });
   assert.equal(child.status, 0, child.stderr);
   assert.deepEqual(get("SELECT * FROM tickets WHERE channelId='open-ticket'"), ticket);

@@ -108,7 +108,7 @@ async function submitApplication(interaction, draftId) {
       if (!member) throw new Error('You are no longer a member of that server.');
       const answers = questions.map(question => ({ ...answersById.get(question.id), question: question.question, required: Boolean(question.required) }));
       const result = await createTicket({ interaction: { client: interaction.client, guild, user: interaction.user },
-        type: 'application', reason: form.name, application: { form, answers, draftId: draft.id } });
+        type: 'application', panelId: draft.ticketPanelId || null, reason: form.name, application: { form, answers, draftId: draft.id } });
       run("UPDATE application_drafts SET submissionStatus='SUBMITTED',submissionChannelId=?,updatedAt=? WHERE id=?", [result.channel.id,Date.now(),draft.id]);
       return replyPrivate(interaction, `Your application has been submitted: ${result.channel}`);
     } catch (error) {
@@ -226,6 +226,10 @@ async function handleApplicationSelect(interaction) {
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+  const panelId = interaction.customId.split(':')[1] || null;
+  try { require('../utils/tickets/panels').routing(interaction.guild.id, 'application', panelId); }
+  catch (error) { return replyPrivate(interaction, error.message); }
+
   const formId = Number(interaction.values?.[0]);
   const form = getFormById(interaction.guild.id, formId);
 
@@ -241,7 +245,8 @@ async function handleApplicationSelect(interaction) {
   const draft = createDraft({
     guildId: interaction.guild.id,
     formId: form.id,
-    userId: interaction.user.id
+    userId: interaction.user.id,
+    panelId
   });
 
   const startButton = new ButtonBuilder()
@@ -401,7 +406,7 @@ module.exports = {
         if (!draftId) return replyPrivate(interaction, 'This application session is invalid.');
         return await submitApplication(interaction, draftId);
       }
-      if (interaction.isStringSelectMenu() && interaction.customId === 'application_select') {
+      if (interaction.isStringSelectMenu() && /^application_select(?::[a-f0-9-]{36})?$/.test(interaction.customId || '')) {
         return await handleApplicationSelect(interaction);
       }
 

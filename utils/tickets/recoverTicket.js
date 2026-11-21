@@ -45,7 +45,7 @@ function getEmbedField(message, fieldName) {
 
 function getTicketTopicMetadata(topic) {
   const match = String(topic || '').match(
-    /^Jabster Studios ticket \| type:([a-z]+) \| owner:(\d+)(?: \| request:[a-f0-9]{64})?(?: \| form:(\d+))?$/i
+    /^Jabster Studios ticket \| type:([a-z]+) \| owner:(\d+)(?: \| request:[a-f0-9]{64})?(?: \| panel:([a-f0-9-]{36}))?(?: \| staff:(\d+))?(?: \| form:(\d+))?$/i
   );
 
   if (!match || !ticketTypes[match[1].toLowerCase()]) {
@@ -55,7 +55,9 @@ function getTicketTopicMetadata(topic) {
   return {
     type: match[1].toLowerCase(),
     userId: match[2],
-    applicationFormId: match[3] ? Number(match[3]) : null
+    applicationFormId: match[5] ? Number(match[5]) : null,
+    ...(match[3] ? { ticketPanelId: match[3] } : {}),
+    ...(match[4] ? { responseRoleId: match[4] } : {})
   };
 }
 
@@ -176,10 +178,12 @@ async function findOrRecoverOpenTicket({
        userId,
        type,
        applicationFormId,
+       ticketPanelId,
+       responseRoleId,
        createdAt,
        status
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN')`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')`,
     [
       guild.id,
       channel.id,
@@ -187,6 +191,8 @@ async function findOrRecoverOpenTicket({
       userId,
       type,
       applicationFormId,
+      topicMetadata?.ticketPanelId || null,
+      topicMetadata?.responseRoleId || null,
       createdAt
     ]
   );

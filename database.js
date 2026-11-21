@@ -3845,19 +3845,21 @@ function createApplicationTables() {
      ON application_drafts(expiresAt)`
   );
 
-  rawRun(
+    ensureColumn('application_drafts', 'ticketPanelId', 'TEXT');
+    rawRun('DROP INDEX IF EXISTS idx_application_drafts_owner_form');
+    rawRun(
     `DELETE FROM application_drafts
      WHERE rowid NOT IN (
        SELECT MAX(rowid)
        FROM application_drafts
-       GROUP BY guildId, formId, userId
+       GROUP BY guildId, formId, userId, COALESCE(ticketPanelId,'')
      )`
   );
 
   createIndex(
-    'idx_application_drafts_owner_form',
-    `CREATE UNIQUE INDEX IF NOT EXISTS idx_application_drafts_owner_form
-     ON application_drafts(guildId, formId, userId)`
+    'idx_application_drafts_owner_form_panel',
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_application_drafts_owner_form_panel
+     ON application_drafts(guildId, formId, userId, COALESCE(ticketPanelId,''))`
   );
 }
 
@@ -4097,6 +4099,7 @@ require('./utils/communityFeaturesSchema').migrateCommunityFeatures(rawRun, ensu
 require('./utils/trapChannelSchema').migrateTrapChannel(rawRun);
 require('./utils/selectedImprovementsSchema').migrateSelectedImprovements(rawRun, ensureColumn);
 require('./utils/communityExpansionSchema').migrateCommunityExpansion(rawRun, ensureColumn);
+require('./utils/tickets/panels').migrateTicketPanels(rawRun, ensureColumn);
 require('./utils/configurationTables').installConfigurationHistory(db, rawAll);
 require('./utils/commandGroupMigration').migrateCommandGroups(rawRun, rawAll, rawGet);
 
